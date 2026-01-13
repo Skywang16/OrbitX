@@ -29,12 +29,16 @@ impl PermissionPattern {
             return None;
         }
 
-        let tool = raw[..open_idx].trim();
+        // 安全切片
+        let tool = raw.get(..open_idx).map(|s| s.trim()).unwrap_or("");
         if tool.is_empty() {
             return None;
         }
 
-        let param = raw[open_idx + 1..close_idx].trim();
+        let param = raw
+            .get(open_idx + 1..close_idx)
+            .map(|s| s.trim())
+            .unwrap_or("");
         let param = if param.is_empty() {
             None
         } else {
@@ -152,4 +156,3 @@ fn expand_placeholders(candidate: &str, workspace_root: &std::path::Path) -> Str
     out = out.replace("${workspace}", &ws);
     out
 }
-

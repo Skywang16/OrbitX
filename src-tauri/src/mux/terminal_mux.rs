@@ -2,7 +2,7 @@
 //!
 //! 提供统一的终端会话管理、事件通知和PTY I/O处理
 
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Sender};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -24,7 +24,6 @@ pub struct TerminalMuxStatus {
     pub subscriber_count: usize,
     pub next_pane_id: u32,
     pub next_subscriber_id: u32,
-    pub main_thread_id: thread::ThreadId,
 }
 
 pub struct TerminalMux {
@@ -32,9 +31,6 @@ pub struct TerminalMux {
 
     /// 事件订阅者 - 订阅ID -> 回调函数
     subscribers: RwLock<HashMap<usize, SubscriberCallback>>,
-
-    /// 主线程ID - 用于线程安全检查
-    main_thread_id: thread::ThreadId,
 
     /// 下一个面板ID生成器
     next_pane_id: AtomicU32,
@@ -45,8 +41,8 @@ pub struct TerminalMux {
     /// 跨线程通知发送器
     notification_sender: Sender<MuxNotification>,
 
-    /// 跨线程通知接收器
-    notification_receiver: Mutex<Option<Receiver<MuxNotification>>>,
+    /// 通知处理线程句柄（如果启用自动处理模式）
+    notification_thread: Mutex<Option<thread::JoinHandle<()>>>,
 
     /// I/O 处理器
     io_handler: IoHandler,
@@ -59,31 +55,56 @@ pub struct TerminalMux {
 }
 
 impl TerminalMux {
-    /// 创建新的TerminalMux实例
-    ///
-    /// - 验证配置和依赖关系
-    pub fn new() -> Self {
-        Self::new_with_shell_integration(Arc::new(ShellIntegrationManager::new()))
+    /// 创建并启动通知线程的共享实例（推荐）
+    pub fn new_shared() -> Arc<Self> {
+        Self::new_shared_with_shell_integration(Arc::new(ShellIntegrationManager::new()))
     }
 
-    /// 使用指定的 ShellIntegrationManager 创建 TerminalMux
-    /// 这允许共享同一个 ShellIntegrationManager 实例和其注册的回调
-    pub fn new_with_shell_integration(shell_integration: Arc<ShellIntegrationManager>) -> Self {
+    /// 创建并启动通知线程的共享实例（允许注入 ShellIntegrationManager）
+    pub fn new_shared_with_shell_integration(
+        shell_integration: Arc<ShellIntegrationManager>,
+    ) -> Arc<Self> {
         let (notification_sender, notification_receiver) = unbounded();
         let io_handler = IoHandler::new(notification_sender.clone(), shell_integration.clone());
 
-        Self {
+        let mux = Arc::new(Self {
             panes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
-            main_thread_id: thread::current().id(),
             next_pane_id: AtomicU32::new(1),
             next_subscriber_id: AtomicU32::new(1),
             notification_sender,
-            notification_receiver: Mutex::new(Some(notification_receiver)),
+            notification_thread: Mutex::new(None),
             io_handler,
             shell_integration,
             shutting_down: std::sync::atomic::AtomicBool::new(false),
+        });
+
+        // 通知线程拥有 receiver；TerminalMux 只保留 sender，避免“Option receiver”这种补丁式状态机。
+        let mux_for_thread = Arc::clone(&mux);
+        let handle = thread::spawn(move || loop {
+            if mux_for_thread
+                .shutting_down
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                break;
+            }
+
+            match notification_receiver.recv_timeout(Duration::from_millis(20)) {
+                Ok(notification) => mux_for_thread.notify_internal(&notification),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+            }
+        });
+
+        {
+            let mut guard = mux
+                .notification_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = Some(handle);
         }
+
+        mux
     }
 
     pub fn shell_integration(&self) -> &Arc<ShellIntegrationManager> {
@@ -105,7 +126,6 @@ impl TerminalMux {
             subscriber_count: subscribers.len(),
             next_pane_id: self.next_pane_id.load(Ordering::Relaxed),
             next_subscriber_id: self.next_subscriber_id.load(Ordering::Relaxed),
-            main_thread_id: self.main_thread_id,
         };
 
         Ok(status)
@@ -284,17 +304,12 @@ impl TerminalMux {
 
     /// 发送通知给所有订阅者
     pub fn notify(&self, notification: MuxNotification) {
-        if thread::current().id() == self.main_thread_id {
-            self.notify_internal(&notification);
-        } else {
-            // 从其他线程发送通知，使用通道发送到主线程
-            if let Err(e) = self.notification_sender.send(notification) {
-                error!("跨线程通知发送失败: {}", e);
-            }
+        if let Err(e) = self.notification_sender.send(notification) {
+            error!("跨线程通知发送失败: {}", e);
         }
     }
 
-    /// 内部通知实现
+    /// 内部通知实现（通知线程内串行执行）
     fn notify_internal(&self, notification: &MuxNotification) {
         let mut dead_subscribers = Vec::new();
 
@@ -329,66 +344,12 @@ impl TerminalMux {
         }
     }
 
-    /// 从任意线程发送通知到主线程
-    pub fn notify_from_any_thread(&self, notification: MuxNotification) {
-        if let Err(e) = self.notification_sender.send(notification) {
-            error!("跨线程通知发送失败: {}", e);
-        }
-    }
-
     /// 创建调试订阅者（用于测试和调试）
     pub fn create_debug_subscriber() -> impl Fn(&MuxNotification) -> bool + Send + Sync + 'static {
         move |notification: &MuxNotification| {
             tracing::debug!("MuxNotification: {:?}", notification);
             true
         }
-    }
-
-    /// 处理来自其他线程的通知（应该在主线程定期调用）
-    pub fn process_notifications(&self) {
-        if let Ok(receiver_guard) = self.notification_receiver.lock() {
-            if let Some(receiver) = receiver_guard.as_ref() {
-                while let Ok(notification) = receiver.try_recv() {
-                    self.notify_internal(&notification);
-                }
-            }
-        }
-    }
-
-    /// 启动通知处理线程（可选的自动处理模式）
-    pub fn start_notification_processor(self: Arc<Self>) -> thread::JoinHandle<()> {
-        let mux = Arc::clone(&self);
-        thread::spawn(move || {
-            // 取出接收器，避免重复访问
-            let receiver = {
-                if let Ok(mut receiver_guard) = mux.notification_receiver.lock() {
-                    receiver_guard.take()
-                } else {
-                    error!("无法获取通知接收器");
-                    return;
-                }
-            };
-
-            if let Some(receiver) = receiver {
-                loop {
-                    if mux.shutting_down.load(std::sync::atomic::Ordering::Relaxed) {
-                        break;
-                    }
-
-                    match receiver.recv_timeout(Duration::from_millis(20)) {
-                        Ok(notification) => {
-                            mux.notify_internal(&notification);
-                        }
-                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                            continue;
-                        }
-                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                            break;
-                        }
-                    }
-                }
-            }
-        })
     }
 
     /// 设置面板的Shell Integration
@@ -516,6 +477,12 @@ impl TerminalMux {
         self.shutting_down
             .store(true, std::sync::atomic::Ordering::Relaxed);
 
+        if let Ok(mut guard) = self.notification_thread.lock() {
+            if let Some(handle) = guard.take() {
+                let _ = handle.join();
+            }
+        }
+
         let pane_ids: Vec<PaneId> = self.list_panes();
 
         // 立即标记所有面板为死亡状态，加速关闭过程
@@ -563,12 +530,6 @@ impl TerminalMux {
         let _ = self.io_handler.shutdown();
 
         Ok(())
-    }
-}
-
-impl Default for TerminalMux {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -18,24 +18,32 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::warn;
 
+#[derive(Default)]
+struct ShortcutCache {
+    config: Option<ShortcutsConfig>,
+    validation: Option<ValidationResult>,
+    conflicts: Option<ConflictResult>,
+}
+
 pub struct ShortcutManager {
     config_manager: Arc<ConfigManager>,
     action_registry: Arc<RwLock<ActionRegistry>>,
-    cached_config: Arc<RwLock<Option<ShortcutsConfig>>>,
-    cached_validation: Arc<RwLock<Option<ValidationResult>>>,
-    cached_conflicts: Arc<RwLock<Option<ConflictResult>>>,
+    cache: Arc<RwLock<ShortcutCache>>,
 }
 
 impl ShortcutManager {
     pub async fn new(config_manager: Arc<ConfigManager>) -> ShortcutsResult<Self> {
         let action_registry = Arc::new(RwLock::new(ActionRegistry::new()));
 
+        {
+            let mut registry = action_registry.write().await;
+            registry.init_defaults().await;
+        }
+
         let manager = Self {
             config_manager,
             action_registry,
-            cached_config: Arc::new(RwLock::new(None)),
-            cached_validation: Arc::new(RwLock::new(None)),
-            cached_conflicts: Arc::new(RwLock::new(None)),
+            cache: Arc::new(RwLock::new(ShortcutCache::default())),
         };
 
         manager.reload_config().await?;
@@ -45,8 +53,8 @@ impl ShortcutManager {
 
     pub async fn config_get(&self) -> ShortcutsResult<ShortcutsConfig> {
         {
-            let cached = self.cached_config.read().await;
-            if let Some(config) = cached.as_ref() {
+            let cached = self.cache.read().await;
+            if let Some(config) = cached.config.as_ref() {
                 return Ok(config.clone());
             }
         }
@@ -84,8 +92,8 @@ impl ShortcutManager {
             .await?;
 
         {
-            let mut cached = self.cached_config.write().await;
-            *cached = Some(new_config);
+            let mut cached = self.cache.write().await;
+            cached.config = Some(new_config);
         }
 
         self.clear_cache().await;
@@ -183,8 +191,8 @@ impl ShortcutManager {
         };
 
         {
-            let mut cached = self.cached_validation.write().await;
-            *cached = Some(result.clone());
+            let mut cached = self.cache.write().await;
+            cached.validation = Some(result.clone());
         }
 
         Ok(result)
@@ -239,8 +247,8 @@ impl ShortcutManager {
         };
 
         {
-            let mut cached = self.cached_conflicts.write().await;
-            *cached = Some(result.clone());
+            let mut cached = self.cache.write().await;
+            cached.conflicts = Some(result.clone());
         }
 
         Ok(result)
@@ -377,8 +385,8 @@ impl ShortcutManager {
         let shortcuts_config = config.shortcuts;
 
         {
-            let mut cached = self.cached_config.write().await;
-            *cached = Some(shortcuts_config.clone());
+            let mut cached = self.cache.write().await;
+            cached.config = Some(shortcuts_config.clone());
         }
 
         Ok(shortcuts_config)
@@ -437,18 +445,9 @@ impl ShortcutManager {
     }
 
     async fn clear_cache(&self) {
-        {
-            let mut cached = self.cached_config.write().await;
-            *cached = None;
-        }
-        {
-            let mut cached = self.cached_validation.write().await;
-            *cached = None;
-        }
-        {
-            let mut cached = self.cached_conflicts.write().await;
-            *cached = None;
-        }
+        let mut cached = self.cache.write().await;
+        cached.validation = None;
+        cached.conflicts = None;
     }
 }
 

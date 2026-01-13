@@ -48,7 +48,7 @@ pub fn build_replay(pane_id: u32) -> ReplayResult<ProcessReplayEvent> {
     let size = mux
         .get_pane(PaneId::new(pane_id))
         .map(|pane| pane.get_size())
-        .unwrap_or_else(PtySize::default);
+        .unwrap_or_default();
 
     Ok(ProcessReplayEvent::from_buffer(text, size))
 }

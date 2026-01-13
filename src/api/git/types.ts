@@ -1,4 +1,13 @@
-export type FileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'untracked' | 'conflicted'
+export type FileChangeStatus =
+  | 'added'
+  | 'modified'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'typeChanged'
+  | 'untracked'
+  | 'conflicted'
+  | 'unknown'
 
 export interface FileChange {
   path: string
@@ -10,8 +19,9 @@ export interface CommitFileChange {
   path: string
   status: FileChangeStatus
   oldPath?: string | null
-  additions: number
-  deletions: number
+  additions?: number | null
+  deletions?: number | null
+  isBinary: boolean
 }
 
 export interface BranchInfo {

@@ -181,7 +181,7 @@ impl IndexManager {
         let file_meta = crate::vector_db::core::FileMetadata::new(
             file_path.to_path_buf(),
             blake3_hash_bytes(content.as_bytes()),
-            last_modified as u64,
+            last_modified,
             meta.len(),
         );
         self.store.save_file_metadata(&file_meta)?;
@@ -279,7 +279,12 @@ impl IndexManager {
 
     pub fn get_status_with_size_bytes(&self) -> IndexStatus {
         let mut status = self.get_status();
-        status.size_bytes = self.store.disk_usage_bytes().unwrap_or_else(|_| 0);
+        match self.store.disk_usage_bytes() {
+            Ok(bytes) => status.size_bytes = bytes,
+            Err(e) => {
+                tracing::warn!("Failed to get index disk usage: {}", e);
+            }
+        }
         status
     }
 

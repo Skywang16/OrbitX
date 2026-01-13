@@ -71,4 +71,3 @@ pub struct McpTestResult {
     pub tools_count: usize,
     pub error: Option<String>,
 }
-

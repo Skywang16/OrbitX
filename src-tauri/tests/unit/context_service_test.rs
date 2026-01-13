@@ -14,9 +14,7 @@ use terminal_lib::terminal::{ActiveTerminalContextRegistry, TerminalContextServi
 fn create_test_context_service() -> Arc<TerminalContextService> {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
     let shell_integration = Arc::new(ShellIntegrationManager::new());
-    let terminal_mux = Arc::new(TerminalMux::new_with_shell_integration(
-        shell_integration.clone(),
-    ));
+    let terminal_mux = TerminalMux::new_shared_with_shell_integration(shell_integration.clone());
     let cache = Arc::new(UnifiedCache::new());
 
     TerminalContextService::new_with_integration(registry, shell_integration, terminal_mux, cache)
@@ -146,9 +144,7 @@ async fn test_concurrent_cache_access() {
 async fn test_context_service_integration() {
     let registry = Arc::new(ActiveTerminalContextRegistry::new());
     let shell_integration = Arc::new(ShellIntegrationManager::new());
-    let terminal_mux = Arc::new(TerminalMux::new_with_shell_integration(
-        shell_integration.clone(),
-    ));
+    let terminal_mux = TerminalMux::new_shared_with_shell_integration(shell_integration.clone());
     let cache = Arc::new(UnifiedCache::new());
 
     let service = TerminalContextService::new_with_integration(

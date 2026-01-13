@@ -75,7 +75,12 @@ impl GitCompletionProvider {
         }
 
         let subcommand = parts[1].to_string();
-        let args = parts[2..].iter().map(|s| s.to_string()).collect();
+        let args = parts
+            .get(2..)
+            .unwrap_or(&[])
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         Some((subcommand, args))
     }
 
@@ -205,8 +210,9 @@ impl GitCompletionProvider {
 
         for line in status_output.lines() {
             if line.len() >= 3 {
-                let status = &line[0..2];
-                let filename = &line[3..];
+                // 安全切片
+                let status = line.get(0..2).unwrap_or("");
+                let filename = line.get(3..).unwrap_or("");
 
                 // 简单的前缀匹配
                 if !query.is_empty() && !filename.to_lowercase().starts_with(&query.to_lowercase())

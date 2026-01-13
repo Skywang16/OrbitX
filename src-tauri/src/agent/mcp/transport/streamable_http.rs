@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use reqwest::{Client, header};
+use reqwest::{header, Client};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 

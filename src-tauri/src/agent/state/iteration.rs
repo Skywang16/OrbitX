@@ -1,22 +1,20 @@
-use std::sync::Arc;
-
 use chrono::{DateTime, Utc};
-use tokio::sync::RwLock;
 
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::state::session::SessionContext;
 use crate::llm::anthropic_types::MessageParam;
+use std::sync::Arc;
 
 pub struct IterationContext {
     pub iteration_num: u32,
     pub started_at: DateTime<Utc>,
     session: Arc<SessionContext>,
-    current_messages: Arc<RwLock<Vec<MessageParam>>>,
-    pending_tools: Arc<RwLock<Vec<(String, String, serde_json::Value)>>>,
-    tool_results: Arc<RwLock<Vec<ToolCallResult>>>,
-    thinking_buffer: Arc<RwLock<String>>,
-    output_buffer: Arc<RwLock<String>>,
-    files_touched: Arc<RwLock<Vec<String>>>,
+    current_messages: Vec<MessageParam>,
+    pending_tools: Vec<(String, String, serde_json::Value)>,
+    tool_results: Vec<ToolCallResult>,
+    thinking: String,
+    output: String,
+    files_touched: Vec<String>,
 }
 
 impl IterationContext {
@@ -25,12 +23,12 @@ impl IterationContext {
             iteration_num,
             started_at: Utc::now(),
             session,
-            current_messages: Arc::new(RwLock::new(Vec::new())),
-            pending_tools: Arc::new(RwLock::new(Vec::new())),
-            tool_results: Arc::new(RwLock::new(Vec::new())),
-            thinking_buffer: Arc::new(RwLock::new(String::new())),
-            output_buffer: Arc::new(RwLock::new(String::new())),
-            files_touched: Arc::new(RwLock::new(Vec::new())),
+            current_messages: Vec::new(),
+            pending_tools: Vec::new(),
+            tool_results: Vec::new(),
+            thinking: String::new(),
+            output: String::new(),
+            files_touched: Vec::new(),
         }
     }
 
@@ -38,72 +36,64 @@ impl IterationContext {
         Arc::clone(&self.session)
     }
 
-    pub async fn add_message(&self, message: MessageParam) {
-        self.current_messages.write().await.push(message);
+    pub fn add_message(&mut self, message: MessageParam) {
+        self.current_messages.push(message);
     }
 
-    pub async fn add_tool_call(&self, id: String, name: String, arguments: serde_json::Value) {
-        self.pending_tools.write().await.push((id, name, arguments));
+    pub fn add_tool_call(&mut self, id: String, name: String, arguments: serde_json::Value) {
+        self.pending_tools.push((id, name, arguments));
     }
 
-    pub async fn add_tool_result(&self, result: ToolCallResult) {
-        self.tool_results.write().await.push(result);
+    pub fn add_tool_result(&mut self, result: ToolCallResult) {
+        self.tool_results.push(result);
     }
 
-    pub async fn append_thinking(&self, text: &str) {
-        self.thinking_buffer.write().await.push_str(text);
+    pub fn append_thinking(&mut self, text: &str) {
+        self.thinking.push_str(text);
     }
 
-    pub async fn append_output(&self, text: &str) {
-        self.output_buffer.write().await.push_str(text);
+    pub fn append_output(&mut self, text: &str) {
+        self.output.push_str(text);
     }
 
-    pub async fn track_file(&self, path: String) {
-        let mut guard = self.files_touched.write().await;
-        if !guard.contains(&path) {
-            guard.push(path);
+    pub fn track_file(&mut self, path: String) {
+        if !self.files_touched.contains(&path) {
+            self.files_touched.push(path);
         }
     }
 
-    pub async fn messages(&self) -> Vec<MessageParam> {
-        self.current_messages.read().await.clone()
+    pub fn messages(&self) -> &[MessageParam] {
+        &self.current_messages
     }
 
-    pub async fn tool_results(&self) -> Vec<ToolCallResult> {
-        self.tool_results.read().await.clone()
+    pub fn tool_results(&self) -> &[ToolCallResult] {
+        &self.tool_results
     }
 
-    pub async fn pending_tools(&self) -> Vec<(String, String, serde_json::Value)> {
-        self.pending_tools.read().await.clone()
+    pub fn pending_tools(&self) -> &[(String, String, serde_json::Value)] {
+        &self.pending_tools
     }
 
-    pub async fn finalize(self) -> IterationSnapshot {
-        let thinking = self.thinking_buffer.read().await.clone();
-        let output = self.output_buffer.read().await.clone();
-        let files_touched = self.files_touched.read().await.clone();
+    pub fn finalize(self) -> IterationSnapshot {
         let tools_used = self
             .pending_tools
-            .read()
-            .await
             .iter()
             .map(|(_, name, _)| name.clone())
-            .collect::<Vec<_>>();
-
+            .collect();
+        let had_errors = self
+            .tool_results
+            .iter()
+            .any(|result| result.status != crate::agent::tools::ToolResultStatus::Success);
         IterationSnapshot {
             iteration: self.iteration_num,
             started_at: self.started_at,
             completed_at: Utc::now(),
-            thinking,
-            output,
-            messages_count: self.current_messages.read().await.len(),
+            thinking: self.thinking,
+            output: self.output,
+            messages_count: self.current_messages.len(),
             tools_used,
-            files_touched,
-            had_errors: self
-                .tool_results
-                .read()
-                .await
-                .iter()
-                .any(|result| result.status != crate::agent::tools::ToolResultStatus::Success),
+            files_touched: self.files_touched,
+            had_errors,
         }
     }
 }

@@ -81,20 +81,26 @@ impl RunnableTool for SyntaxDiagnosticsTool {
             };
 
             let Some(language) = Language::from_path(&path) else {
-                skipped.push(json!({ "path": path.display().to_string(), "reason": "unknown language" }));
+                skipped.push(
+                    json!({ "path": path.display().to_string(), "reason": "unknown language" }),
+                );
                 continue;
             };
 
             let Ok(meta) = fs::metadata(&path).await else {
-                skipped.push(json!({ "path": path.display().to_string(), "reason": "missing file" }));
+                skipped
+                    .push(json!({ "path": path.display().to_string(), "reason": "missing file" }));
                 continue;
             };
             if meta.is_dir() {
-                skipped.push(json!({ "path": path.display().to_string(), "reason": "is a directory" }));
+                skipped.push(
+                    json!({ "path": path.display().to_string(), "reason": "is a directory" }),
+                );
                 continue;
             }
             if is_probably_binary(&path) {
-                skipped.push(json!({ "path": path.display().to_string(), "reason": "binary file" }));
+                skipped
+                    .push(json!({ "path": path.display().to_string(), "reason": "binary file" }));
                 continue;
             }
 
@@ -112,14 +118,19 @@ impl RunnableTool for SyntaxDiagnosticsTool {
                     all_diags.append(&mut diags);
                 }
                 Err(err) => {
-                    skipped.push(json!({ "path": path.display().to_string(), "reason": err.to_string() }));
+                    skipped.push(
+                        json!({ "path": path.display().to_string(), "reason": err.to_string() }),
+                    );
                 }
             }
         }
 
         all_diags.sort_by(|a, b| {
-            (a.file.as_str(), a.range.start.line, a.range.start.column)
-                .cmp(&(b.file.as_str(), b.range.start.line, b.range.start.column))
+            (a.file.as_str(), a.range.start.line, a.range.start.column).cmp(&(
+                b.file.as_str(),
+                b.range.start.line,
+                b.range.start.column,
+            ))
         });
 
         let summary = format_diagnostics_summary(&all_diags);

@@ -67,4 +67,3 @@ pub fn configure_parser_for_language(
 
     Ok(())
 }
-

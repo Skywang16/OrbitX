@@ -91,7 +91,7 @@ impl From<&PaneShellState> for FrontendPaneState {
             current_command: state
                 .current_command
                 .as_ref()
-                .map(|cmd| FrontendCommandInfo::from(&**cmd)),
+                .map(FrontendCommandInfo::from),
             command_history: state
                 .command_history
                 .iter()

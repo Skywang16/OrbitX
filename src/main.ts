@@ -8,6 +8,7 @@ import { useLayoutStore } from '@/stores/layout'
 
 import { useTerminalStore } from '@/stores/Terminal'
 import { useEditorStore } from '@/stores/Editor'
+import { useFileWatcherStore } from '@/stores/fileWatcher'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -32,6 +33,9 @@ const initializeStores = async () => {
 
     const terminalStore = useTerminalStore()
     await terminalStore.initializeTerminalStore()
+
+    const fileWatcherStore = useFileWatcherStore()
+    await fileWatcherStore.initialize()
 
     const editorStore = useEditorStore()
     await editorStore.initialize()

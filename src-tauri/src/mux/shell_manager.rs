@@ -1,7 +1,7 @@
 //! Shell detection and management
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
@@ -62,7 +62,7 @@ impl ShellCacheEntry {
     }
 }
 
-static SHELL_CACHE: OnceLock<Arc<Mutex<Option<ShellCacheEntry>>>> = OnceLock::new();
+static SHELL_CACHE: OnceLock<Mutex<Option<ShellCacheEntry>>> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct ShellManager {
@@ -103,13 +103,12 @@ impl ShellManager {
         &self.stats
     }
 
-    fn get_cache() -> &'static Arc<Mutex<Option<ShellCacheEntry>>> {
-        SHELL_CACHE.get_or_init(|| Arc::new(Mutex::new(None)))
+    fn get_cache() -> &'static Mutex<Option<ShellCacheEntry>> {
+        SHELL_CACHE.get_or_init(|| Mutex::new(None))
     }
 
     pub fn get_cached_shells() -> Vec<ShellInfo> {
-        let cache = Self::get_cache();
-        let mut cache_guard = cache.lock().unwrap();
+        let mut cache_guard = Self::get_cache().lock().unwrap();
 
         let config = ConfigManager::config_get();
         if let Some(entry) = cache_guard.as_mut() {

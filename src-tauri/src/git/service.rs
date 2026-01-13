@@ -5,6 +5,22 @@ use tokio::process::Command as AsyncCommand;
 pub struct GitService;
 
 impl GitService {
+    fn not_a_repo_status() -> RepositoryStatus {
+        RepositoryStatus {
+            is_repository: false,
+            root_path: None,
+            current_branch: None,
+            staged_files: vec![],
+            modified_files: vec![],
+            untracked_files: vec![],
+            conflicted_files: vec![],
+            ahead: None,
+            behind: None,
+            is_empty: false,
+            is_detached: false,
+        }
+    }
+
     async fn ensure_repo_root(path: &str) -> Result<String, GitError> {
         match Self::is_repository(path).await? {
             Some(root) => Ok(root),
@@ -53,6 +69,63 @@ impl GitService {
         Ok(String::from_utf8_lossy(&bytes).to_string())
     }
 
+    async fn execute_no_output(args: &[&str], cwd: &str) -> Result<(), GitError> {
+        let _ = Self::execute(args, cwd).await?;
+        Ok(())
+    }
+
+    async fn execute_with_paths(
+        args_prefix: &[&str],
+        paths: &[String],
+        cwd: &str,
+    ) -> Result<(), GitError> {
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(args_prefix);
+        cmd.args(paths);
+        if !cwd.trim().is_empty() {
+            cmd.current_dir(cwd);
+        }
+
+        let output = cmd.output().await.map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => GitError {
+                code: GitErrorCode::GitNotInstalled,
+                message: "git.not_installed".to_string(),
+            },
+            _ => GitError {
+                code: GitErrorCode::IoError,
+                message: e.to_string(),
+            },
+        })?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(GitError {
+                code: GitErrorCode::CommandFailed,
+                message: if stderr.is_empty() {
+                    "git.command_failed".to_string()
+                } else {
+                    stderr
+                },
+            })
+        }
+    }
+
+    /// 执行命令，如果不是 git 仓库则返回 Ok(None)
+    async fn execute_optional(args: &[&str], cwd: &str) -> Result<Option<Vec<u8>>, GitError> {
+        match Self::execute(args, cwd).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e)
+                if e.code == GitErrorCode::CommandFailed
+                    && Self::is_not_a_repository(&e.message) =>
+            {
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     fn is_not_a_repository(stderr_or_message: &str) -> bool {
         let msg = stderr_or_message.to_lowercase();
         msg.contains("not a git repository")
@@ -77,51 +150,18 @@ impl GitService {
     pub async fn get_status(path: &str) -> Result<RepositoryStatus, GitError> {
         let root = match Self::is_repository(path).await? {
             Some(root) => root,
-            None => {
-                return Ok(RepositoryStatus {
-                    is_repository: false,
-                    root_path: None,
-                    current_branch: None,
-                    staged_files: vec![],
-                    modified_files: vec![],
-                    untracked_files: vec![],
-                    conflicted_files: vec![],
-                    ahead: None,
-                    behind: None,
-                    is_empty: false,
-                    is_detached: false,
-                })
-            }
+            None => return Ok(Self::not_a_repo_status()),
         };
 
         let output =
-            match Self::execute(&["status", "--porcelain=v1", "--branch", "-z"], &root).await {
-                Ok(bytes) => bytes,
-                Err(e)
-                    if e.code == GitErrorCode::CommandFailed
-                        && Self::is_not_a_repository(&e.message) =>
-                {
-                    return Ok(RepositoryStatus {
-                        is_repository: false,
-                        root_path: None,
-                        current_branch: None,
-                        staged_files: vec![],
-                        modified_files: vec![],
-                        untracked_files: vec![],
-                        conflicted_files: vec![],
-                        ahead: None,
-                        behind: None,
-                        is_empty: false,
-                        is_detached: false,
-                    })
-                }
-                Err(e) => return Err(e),
+            match Self::execute_optional(&["status", "--porcelain=v1", "--branch", "-z"], &root)
+                .await?
+            {
+                Some(bytes) => bytes,
+                None => return Ok(Self::not_a_repo_status()),
             };
 
-        let parsed = Self::parse_status_porcelain_v1_z(&output).ok_or(GitError {
-            code: GitErrorCode::ParseError,
-            message: "git.parse_error".to_string(),
-        })?;
+        let parsed = Self::parse_status_porcelain_v1_z(&output)?;
 
         Ok(RepositoryStatus {
             is_repository: true,
@@ -166,26 +206,22 @@ impl GitService {
             }
 
             let mut parts = line.split('\t');
-            let name = parts.next().unwrap_or_default().trim().to_string();
+            let name = parts.next().unwrap_or_default().trim();
             if name.is_empty() {
                 continue;
             }
             let head = parts.next().unwrap_or_default().trim();
-            let upstream = parts.next().unwrap_or_default().trim().to_string();
+            let upstream = parts.next().unwrap_or_default().trim();
 
             let is_current = head == "*";
-            let upstream_opt = if upstream.is_empty() {
-                None
-            } else {
-                Some(upstream)
-            };
+            let upstream_opt = (!upstream.is_empty()).then(|| upstream.to_string());
 
             if is_current {
-                current_local = Some((name.clone(), upstream_opt.clone()));
+                current_local = Some((name.to_string(), upstream_opt.clone()));
             }
 
             branches.push(BranchInfo {
-                name,
+                name: name.to_string(),
                 is_current,
                 is_remote: false,
                 upstream: upstream_opt,
@@ -195,12 +231,12 @@ impl GitService {
         }
 
         for line in remotes.lines() {
-            let name = line.trim().to_string();
+            let name = line.trim();
             if name.is_empty() || name.ends_with("/HEAD") {
                 continue;
             }
             branches.push(BranchInfo {
-                name,
+                name: name.to_string(),
                 is_current: false,
                 is_remote: true,
                 upstream: None,
@@ -351,16 +387,19 @@ impl GitService {
         let mut files: Vec<CommitFileChange> = Vec::new();
 
         // Parse numstat for additions/deletions
-        let mut numstat_map: std::collections::HashMap<String, (u32, u32)> =
+        let mut numstat_map: std::collections::HashMap<String, (Option<u32>, Option<u32>)> =
             std::collections::HashMap::new();
         for line in output.lines() {
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() >= 3 {
-                let additions: u32 = parts[0].parse().unwrap_or(0);
-                let deletions: u32 = parts[1].parse().unwrap_or(0);
-                let file_path = parts[2].to_string();
-                numstat_map.insert(file_path, (additions, deletions));
+            let mut parts = line.splitn(3, '\t');
+            let additions = Self::parse_numstat_field(parts.next(), "additions")?;
+            let deletions = Self::parse_numstat_field(parts.next(), "deletions")?;
+            let Some(file_path) = parts.next() else {
+                continue;
+            };
+            if file_path.is_empty() {
+                continue;
             }
+            numstat_map.insert(file_path.to_string(), (additions, deletions));
         }
 
         // Parse name-status for file status
@@ -370,39 +409,60 @@ impl GitService {
                 continue;
             }
 
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.is_empty() {
-                continue;
-            }
-
-            let status_char = parts[0].chars().next().unwrap_or(' ');
+            let mut parts = line.split('\t');
+            let status_field = parts.next().unwrap_or_default();
+            let status_char = status_field.chars().next().unwrap_or(' ');
             let (status, file_path, old_path) = match status_char {
                 'A' => {
-                    let path = parts.get(1).unwrap_or(&"").to_string();
-                    (FileChangeStatus::Added, path, None)
+                    let path = parts.next().unwrap_or_default();
+                    if path.is_empty() {
+                        continue;
+                    }
+                    (FileChangeStatus::Added, path.to_string(), None)
                 }
                 'M' => {
-                    let path = parts.get(1).unwrap_or(&"").to_string();
-                    (FileChangeStatus::Modified, path, None)
+                    let path = parts.next().unwrap_or_default();
+                    if path.is_empty() {
+                        continue;
+                    }
+                    (FileChangeStatus::Modified, path.to_string(), None)
                 }
                 'D' => {
-                    let path = parts.get(1).unwrap_or(&"").to_string();
-                    (FileChangeStatus::Deleted, path, None)
+                    let path = parts.next().unwrap_or_default();
+                    if path.is_empty() {
+                        continue;
+                    }
+                    (FileChangeStatus::Deleted, path.to_string(), None)
                 }
                 'R' => {
-                    let old = parts.get(1).unwrap_or(&"").to_string();
-                    let new = parts.get(2).unwrap_or(&"").to_string();
-                    (FileChangeStatus::Renamed, new, Some(old))
+                    let old = parts.next().unwrap_or_default();
+                    let new = parts.next().unwrap_or_default();
+                    if old.is_empty() || new.is_empty() {
+                        continue;
+                    }
+                    (
+                        FileChangeStatus::Renamed,
+                        new.to_string(),
+                        Some(old.to_string()),
+                    )
                 }
                 'C' => {
-                    let old = parts.get(1).unwrap_or(&"").to_string();
-                    let new = parts.get(2).unwrap_or(&"").to_string();
-                    (FileChangeStatus::Copied, new, Some(old))
+                    let old = parts.next().unwrap_or_default();
+                    let new = parts.next().unwrap_or_default();
+                    if old.is_empty() || new.is_empty() {
+                        continue;
+                    }
+                    (
+                        FileChangeStatus::Copied,
+                        new.to_string(),
+                        Some(old.to_string()),
+                    )
                 }
                 _ => continue,
             };
 
-            let (additions, deletions) = numstat_map.get(&file_path).copied().unwrap_or((0, 0));
+            let (additions, deletions) =
+                numstat_map.get(&file_path).copied().unwrap_or((None, None));
 
             files.push(CommitFileChange {
                 path: file_path,
@@ -410,10 +470,80 @@ impl GitService {
                 old_path,
                 additions,
                 deletions,
+                is_binary: additions.is_none() && deletions.is_none(),
             });
         }
 
         Ok(files)
+    }
+
+    pub async fn stage_paths(path: &str, paths: &[String]) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_with_paths(&["add", "--"], paths, &root).await
+    }
+
+    pub async fn stage_all(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["add", "-A"], &root).await
+    }
+
+    pub async fn unstage_paths(path: &str, paths: &[String]) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_with_paths(&["reset", "--"], paths, &root).await
+    }
+
+    pub async fn unstage_all(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["reset"], &root).await
+    }
+
+    pub async fn discard_worktree_paths(path: &str, paths: &[String]) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_with_paths(&["checkout", "--"], paths, &root).await
+    }
+
+    pub async fn discard_worktree_all(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["checkout", "--", "."], &root).await
+    }
+
+    pub async fn clean_paths(path: &str, paths: &[String]) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_with_paths(&["clean", "-f", "--"], paths, &root).await
+    }
+
+    pub async fn clean_all(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["clean", "-fd"], &root).await
+    }
+
+    pub async fn commit(path: &str, message: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["commit", "-m", message], &root).await
+    }
+
+    pub async fn push(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["push"], &root).await
+    }
+
+    pub async fn pull(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["pull"], &root).await
+    }
+
+    pub async fn fetch(path: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["fetch"], &root).await
+    }
+
+    pub async fn checkout_branch(path: &str, branch: &str) -> Result<(), GitError> {
+        let root = Self::ensure_repo_root(path).await?;
+        Self::execute_no_output(&["checkout", branch], &root).await
+    }
+
+    pub async fn init_repo(path: &str) -> Result<(), GitError> {
+        Self::execute_no_output(&["init"], path).await
     }
 
     async fn get_ahead_behind(
@@ -425,39 +555,75 @@ impl GitService {
         let output =
             Self::execute_text(&["rev-list", "--left-right", "--count", &range], cwd).await?;
         let mut parts = output.split_whitespace();
-        let ahead: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let behind: u32 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+        let ahead = parts
+            .next()
+            .ok_or_else(|| GitError::parse_error("Missing ahead count"))?
+            .parse::<u32>()
+            .map_err(|e| GitError::parse_error(format!("Invalid ahead count: {e}")))?;
+        let behind = parts
+            .next()
+            .ok_or_else(|| GitError::parse_error("Missing behind count"))?
+            .parse::<u32>()
+            .map_err(|e| GitError::parse_error(format!("Invalid behind count: {e}")))?;
         Ok((ahead, behind))
     }
 
-    fn parse_status_porcelain_v1_z(bytes: &[u8]) -> Option<ParsedStatus> {
-        let entries: Vec<&[u8]> = bytes.split(|b| *b == 0).filter(|s| !s.is_empty()).collect();
-        if entries.is_empty() {
-            return Some(ParsedStatus::default());
+    fn parse_numstat_field(
+        field: Option<&str>,
+        name: &'static str,
+    ) -> Result<Option<u32>, GitError> {
+        let Some(field) = field else {
+            return Err(GitError::parse_error(format!(
+                "Missing numstat field: {name}"
+            )));
+        };
+        let field = field.trim();
+        if field == "-" {
+            return Ok(None);
         }
+        if field.is_empty() {
+            return Err(GitError::parse_error(format!(
+                "Empty numstat field: {name}"
+            )));
+        }
+        let value = field
+            .parse::<u32>()
+            .map_err(|e| GitError::parse_error(format!("Invalid numstat {name}: {e}")))?;
+        Ok(Some(value))
+    }
 
+    fn parse_status_porcelain_v1_z(bytes: &[u8]) -> Result<ParsedStatus, GitError> {
         let mut parsed = ParsedStatus::default();
 
-        // branch info is usually the first record, but don't rely on it.
-        let mut i = 0;
-        while i < entries.len() {
-            let entry = entries[i];
-            if entry.starts_with(b"## ") {
-                let line = String::from_utf8_lossy(&entry[3..]).trim().to_string();
-                Self::parse_branch_summary(&line, &mut parsed);
-                i += 1;
+        let mut entries = bytes
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .peekable();
+
+        while let Some(entry) = entries.next() {
+            // 安全检查：分支信息行至少需要 3 个字节 ("## ")
+            if entry.starts_with(b"## ") && entry.len() > 3 {
+                let line = String::from_utf8_lossy(&entry[3..]);
+                Self::parse_branch_summary(line.trim(), &mut parsed);
                 continue;
             }
 
+            // 状态行至少需要 3 个字节 (XY + 空格 + 路径)
             if entry.len() < 3 {
-                i += 1;
-                continue;
+                return Err(GitError::parse_error(
+                    "Invalid porcelain entry (too short)".to_string(),
+                ));
             }
 
             let x = entry[0] as char;
             let y = entry[1] as char;
 
             let path_part = String::from_utf8_lossy(&entry[2..]).trim().to_string();
+            if path_part.is_empty() {
+                return Err(GitError::parse_error(
+                    "Invalid porcelain entry (missing path)".to_string(),
+                ));
+            }
 
             if x == '?' && y == '?' {
                 parsed.untracked_files.push(FileChange {
@@ -465,7 +631,6 @@ impl GitService {
                     status: FileChangeStatus::Untracked,
                     old_path: None,
                 });
-                i += 1;
                 continue;
             }
 
@@ -486,65 +651,77 @@ impl GitService {
                     status: FileChangeStatus::Conflicted,
                     old_path: None,
                 });
-                i += 1;
                 continue;
             }
 
-            let mut old_path: Option<String> = None;
-            let mut new_path = path_part.clone();
             let is_rename_or_copy = x == 'R' || x == 'C' || y == 'R' || y == 'C';
-            if is_rename_or_copy {
-                old_path = Some(path_part);
-                if i + 1 < entries.len() {
-                    new_path = String::from_utf8_lossy(entries[i + 1]).to_string();
-                    i += 1;
+            let (old_path, new_path) = if is_rename_or_copy {
+                let old = path_part;
+                let Some(new) = entries.next() else {
+                    return Err(GitError::parse_error(
+                        "Invalid rename/copy porcelain entry (missing new path)".to_string(),
+                    ));
+                };
+                let new = String::from_utf8_lossy(new).to_string();
+                if new.trim().is_empty() {
+                    return Err(GitError::parse_error(
+                        "Invalid rename/copy porcelain entry (empty new path)".to_string(),
+                    ));
                 }
-            }
+                (Some(old), new.trim().to_string())
+            } else {
+                (None, path_part)
+            };
 
-            if x != ' ' {
-                if let Some(status) = Self::map_status_char(x, true) {
+            let staged_status = (x != ' ').then(|| Self::map_status_char(x)).flatten();
+            let modified_status = (y != ' ').then(|| Self::map_status_char(y)).flatten();
+
+            match (staged_status, modified_status) {
+                (Some(staged), Some(modified)) => {
                     parsed.staged_files.push(FileChange {
                         path: new_path.clone(),
-                        status,
+                        status: staged,
                         old_path: old_path.clone(),
                     });
-                }
-            }
-
-            if y != ' ' {
-                if let Some(status) = Self::map_status_char(y, false) {
                     parsed.modified_files.push(FileChange {
-                        path: new_path.clone(),
-                        status,
+                        path: new_path,
+                        status: modified,
                         old_path,
                     });
                 }
+                (Some(staged), None) => {
+                    parsed.staged_files.push(FileChange {
+                        path: new_path,
+                        status: staged,
+                        old_path,
+                    });
+                }
+                (None, Some(modified)) => {
+                    parsed.modified_files.push(FileChange {
+                        path: new_path,
+                        status: modified,
+                        old_path,
+                    });
+                }
+                (None, None) => {}
             }
-
-            i += 1;
         }
 
-        Some(parsed)
+        Ok(parsed)
     }
 
-    fn map_status_char(ch: char, is_index: bool) -> Option<FileChangeStatus> {
+    fn map_status_char(ch: char) -> Option<FileChangeStatus> {
         match ch {
             'A' => Some(FileChangeStatus::Added),
             'M' => Some(FileChangeStatus::Modified),
             'D' => Some(FileChangeStatus::Deleted),
             'R' => Some(FileChangeStatus::Renamed),
             'C' => Some(FileChangeStatus::Copied),
+            'T' => Some(FileChangeStatus::TypeChanged),
             '?' => Some(FileChangeStatus::Untracked),
             '!' => None,
             ' ' => None,
-            _ => {
-                // Treat unknown worktree status as Modified to avoid dropping changes.
-                if !is_index {
-                    Some(FileChangeStatus::Modified)
-                } else {
-                    None
-                }
-            }
+            _ => Some(FileChangeStatus::Unknown),
         }
     }
 
@@ -611,27 +788,48 @@ impl GitService {
             }
 
             // Split by Unit Separator (0x1f) for fields
-            let fields: Vec<&[u8]> = record.split(|b| *b == 0x1f).collect();
-            if fields.len() < 8 {
+            let mut fields = record.split(|b| *b == 0x1f);
+            let Some(hash) = fields.next() else {
                 continue;
-            }
+            };
+            let Some(short_hash) = fields.next() else {
+                continue;
+            };
+            let Some(author_name) = fields.next() else {
+                continue;
+            };
+            let Some(author_email) = fields.next() else {
+                continue;
+            };
+            let Some(date) = fields.next() else {
+                continue;
+            };
+            let Some(refs_field) = fields.next() else {
+                continue;
+            };
+            let Some(parents_field) = fields.next() else {
+                continue;
+            };
+            let Some(message) = fields.next() else {
+                continue;
+            };
 
-            let refs_str = String::from_utf8_lossy(fields[5]).to_string();
-            let refs = Self::parse_refs(&refs_str);
+            let refs_str = String::from_utf8_lossy(refs_field);
+            let refs = Self::parse_refs(refs_str.as_ref());
 
-            let parents_str = String::from_utf8_lossy(fields[6]).to_string();
+            let parents_str = String::from_utf8_lossy(parents_field);
             let parents: Vec<String> = parents_str
                 .split_whitespace()
                 .map(|s| s.to_string())
                 .collect();
 
             commits.push(CommitInfo {
-                hash: String::from_utf8_lossy(fields[0]).to_string(),
-                short_hash: String::from_utf8_lossy(fields[1]).to_string(),
-                author_name: String::from_utf8_lossy(fields[2]).to_string(),
-                author_email: String::from_utf8_lossy(fields[3]).to_string(),
-                date: String::from_utf8_lossy(fields[4]).to_string(),
-                message: String::from_utf8_lossy(fields[7]).to_string(),
+                hash: String::from_utf8_lossy(hash).to_string(),
+                short_hash: String::from_utf8_lossy(short_hash).to_string(),
+                author_name: String::from_utf8_lossy(author_name).to_string(),
+                author_email: String::from_utf8_lossy(author_email).to_string(),
+                date: String::from_utf8_lossy(date).to_string(),
+                message: String::from_utf8_lossy(message).to_string(),
                 refs,
                 parents,
             });
@@ -791,19 +989,23 @@ impl GitService {
         let mut old_start: Option<u32> = None;
         let mut new_start: Option<u32> = None;
 
-        let parts: Vec<&str> = header.split_whitespace().collect();
-        if parts.len() < 3 {
+        let mut parts = header.split_whitespace();
+        let _at = parts.next();
+        let Some(old) = parts.next() else {
             return (None, None);
-        }
+        };
+        let Some(new) = parts.next() else {
+            return (None, None);
+        };
 
-        if let Some(old_part) = parts[1].strip_prefix('-') {
+        if let Some(old_part) = old.strip_prefix('-') {
             old_start = old_part
                 .split(',')
                 .next()
                 .and_then(|s| s.parse::<u32>().ok());
         }
 
-        if let Some(new_part) = parts[2].strip_prefix('+') {
+        if let Some(new_part) = new.strip_prefix('+') {
             new_start = new_part
                 .split(',')
                 .next()

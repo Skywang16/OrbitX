@@ -52,7 +52,8 @@ impl TemplateEngine {
 
         let mut current = context.get(parts[0])?;
 
-        for part in &parts[1..] {
+        // 安全切片
+        for part in parts.get(1..).unwrap_or(&[]) {
             current = match current {
                 Value::Object(obj) => obj.get(*part)?,
                 _ => return None,

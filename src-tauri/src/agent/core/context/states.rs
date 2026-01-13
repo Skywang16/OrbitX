@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::ipc::Channel;
 use tokio::sync::{Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::core::status::AgentTaskStatus;
@@ -50,13 +51,14 @@ pub(crate) struct MessageState {
 }
 
 pub(crate) struct TaskStates {
-    pub execution: Arc<RwLock<ExecutionState>>,
-    pub chain: Arc<RwLock<Chain>>,
-    pub messages: Arc<Mutex<MessageState>>,
+    pub execution: RwLock<ExecutionState>,
+    pub chain: RwLock<Chain>,
+    pub messages: Mutex<MessageState>,
     pub react_runtime: Arc<RwLock<ReactRuntime>>,
-    pub progress_channel: Arc<Mutex<Option<Channel<TaskEvent>>>>,
+    pub progress_channel: Mutex<Option<Channel<TaskEvent>>>,
     /// 简化的取消标志 - 用 AtomicBool 替代 CancellationToken
     pub aborted: Arc<AtomicBool>,
+    pub abort_token: CancellationToken,
 }
 
 impl TaskStates {
@@ -66,12 +68,13 @@ impl TaskStates {
         progress_channel: Option<Channel<TaskEvent>>,
     ) -> Self {
         Self {
-            execution: Arc::new(RwLock::new(execution)),
-            chain: Arc::new(RwLock::new(Chain::new())),
-            messages: Arc::new(Mutex::new(MessageState::default())),
+            execution: RwLock::new(execution),
+            chain: RwLock::new(Chain::new()),
+            messages: Mutex::new(MessageState::default()),
             react_runtime: Arc::new(RwLock::new(react_runtime)),
-            progress_channel: Arc::new(Mutex::new(progress_channel)),
+            progress_channel: Mutex::new(progress_channel),
             aborted: Arc::new(AtomicBool::new(false)),
+            abort_token: CancellationToken::new(),
         }
     }
 }

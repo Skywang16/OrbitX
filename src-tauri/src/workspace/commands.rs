@@ -22,7 +22,7 @@ pub async fn workspace_get_recent(
     limit: Option<i64>,
     database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<Vec<WorkspaceRecord>> {
-    let limit = limit.unwrap_or(10).max(1).min(50);
+    let limit = limit.unwrap_or(10).clamp(1, 50);
     let service = WorkspaceService::new(Arc::clone(&database));
     match service.list_recent_workspaces(limit).await {
         Ok(workspaces) => Ok(api_success!(workspaces)),

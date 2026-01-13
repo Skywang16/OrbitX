@@ -56,5 +56,5 @@ pub async fn delete_workspace_index(
             }
         }
     }
-    Ok(api_success!(EmptyData::default()))
+    Ok(api_success!())
 }

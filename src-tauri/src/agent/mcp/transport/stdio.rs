@@ -204,7 +204,10 @@ pub fn expand_workspace(input: &str, workspace_root: &Path) -> String {
         .replace("${workspace}", &ws)
 }
 
-pub fn expand_env_map(env: &HashMap<String, String>, workspace_root: &Path) -> HashMap<String, String> {
+pub fn expand_env_map(
+    env: &HashMap<String, String>,
+    workspace_root: &Path,
+) -> HashMap<String, String> {
     env.iter()
         .map(|(k, v)| (k.clone(), expand_workspace(v, workspace_root)))
         .collect()

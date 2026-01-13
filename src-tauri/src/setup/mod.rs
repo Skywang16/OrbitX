@@ -239,74 +239,18 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         Arc::new(CheckpointService::with_config(storage, blob_store, config))
     };
 
-    // 初始化TaskExecutor状态（带有 Checkpoint 服务）
-    let task_executor_state = {
-        let database_manager = app
-            .state::<Arc<crate::storage::DatabaseManager>>()
-            .inner()
-            .clone();
-        let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
-            Arc::clone(&database_manager),
-        ));
-        let cache = app
-            .state::<Arc<crate::storage::UnifiedCache>>()
-            .inner()
-            .clone();
-        let settings_manager = app
-            .state::<Arc<crate::settings::SettingsManager>>()
-            .inner()
-            .clone();
-        let mcp_registry = app
-            .state::<Arc<crate::agent::mcp::McpRegistry>>()
-            .inner()
-            .clone();
+    // 初始化工作区变更账本（用于“用户/外部变更”注入 Agent 提示）
+    let workspace_changes =
+        std::sync::Arc::new(crate::agent::workspace_changes::WorkspaceChangeJournal::new());
+    app.manage(std::sync::Arc::clone(&workspace_changes));
 
-        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
-            Arc::clone(&database_manager),
-            Arc::clone(&cache),
-            Arc::clone(&agent_persistence),
-            settings_manager,
-            mcp_registry,
-            Arc::clone(&checkpoint_service),
-        ));
+    let watcher = std::sync::Arc::new(
+        crate::file_watcher::UnifiedFileWatcher::new().with_fs_sink(workspace_changes.fs_sender()),
+    );
+    app.manage(std::sync::Arc::clone(&watcher));
 
-        crate::agent::core::commands::TaskExecutorState::new(executor)
-    };
-    app.manage(task_executor_state);
-
-    let window_state = WindowState::new().map_err(SetupError::WindowState)?;
-    app.manage(window_state);
-
-    // 复用之前创建的 global_mux，不要再次调用 get_mux()
-    app.manage(global_mux);
-
-    // Manage Terminal Channel State for streaming bytes via Tauri Channel
-    let terminal_channel_state = TerminalChannelState::new();
-    app.manage(terminal_channel_state);
-
-    // Initialize Dock Manager for platform-specific dock/jump list menus
-    match crate::dock::DockManager::new(&app.handle()) {
-        Ok(dock_manager) => {
-            app.manage(dock_manager);
-        }
-        Err(e) => {
-            tracing::warn!("Failed to initialize dock manager: {}", e);
-        }
-    }
-
-    // 初始化 Checkpoint 状态（复用之前创建的 checkpoint_service）
-    let checkpoint_state = {
-        use crate::checkpoint::CheckpointState;
-        CheckpointState::new(checkpoint_service)
-    };
-    app.manage(checkpoint_state);
-
-    // 初始化 Git Watcher 状态
-    let git_watcher = crate::git::GitWatcher::new();
-    app.manage(git_watcher);
-
-    // 初始化向量数据库状态
-    {
+    // 初始化向量数据库状态（并把 search_engine 注入 TaskExecutor，用于 agent 的 semantic_search tool）
+    let vector_search_engine = {
         use crate::llm::types::LLMProviderConfig;
         use crate::storage::repositories::{AIModels, ModelType};
         use crate::vector_db::{
@@ -374,17 +318,87 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             warn!("Vector DB config validate failed: {}", e);
         }
 
-        if let Ok(state) = (|| -> Result<VectorDbState, crate::vector_db::core::VectorDbError> {
+        match (|| -> Result<VectorDbState, crate::vector_db::core::VectorDbError> {
             let embedder = crate::vector_db::embedding::create_embedder(&config.embedding)?;
             let search_engine = Arc::new(SemanticSearchEngine::new(embedder, config));
-            crate::vector_db::commands::set_global_state(search_engine.clone());
             Ok(VectorDbState::new(search_engine))
         })() {
-            app.manage(state);
-        } else {
-            warn!("Failed to initialize vector DB");
+            Ok(state) => {
+                let search_engine = Arc::clone(&state.search_engine);
+                app.manage(state);
+                Some(search_engine)
+            }
+            Err(_) => {
+                warn!("Failed to initialize vector DB");
+                None
+            }
+        }
+    };
+
+    // 初始化TaskExecutor状态（带有 Checkpoint 服务）
+    let task_executor_state = {
+        let database_manager = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
+            Arc::clone(&database_manager),
+        ));
+        let cache = app
+            .state::<Arc<crate::storage::UnifiedCache>>()
+            .inner()
+            .clone();
+        let settings_manager = app
+            .state::<Arc<crate::settings::SettingsManager>>()
+            .inner()
+            .clone();
+        let mcp_registry = app
+            .state::<Arc<crate::agent::mcp::McpRegistry>>()
+            .inner()
+            .clone();
+
+        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
+            Arc::clone(&database_manager),
+            Arc::clone(&cache),
+            Arc::clone(&agent_persistence),
+            settings_manager,
+            mcp_registry,
+            Arc::clone(&checkpoint_service),
+            std::sync::Arc::clone(&workspace_changes),
+            vector_search_engine,
+        ));
+
+        crate::agent::core::commands::TaskExecutorState::new(executor)
+    };
+    app.manage(task_executor_state);
+
+    let window_state = WindowState::new().map_err(SetupError::WindowState)?;
+    app.manage(window_state);
+
+    // 复用之前创建的 global_mux，不要再次调用 get_mux()
+    app.manage(global_mux);
+
+    // Manage Terminal Channel State for streaming bytes via Tauri Channel
+    let terminal_channel_state = TerminalChannelState::new();
+    app.manage(terminal_channel_state);
+
+    // Initialize Dock Manager for platform-specific dock/jump list menus
+    let app_handle = app.handle();
+    match crate::dock::DockManager::new(&app_handle) {
+        Ok(dock_manager) => {
+            app.manage(dock_manager);
+        }
+        Err(e) => {
+            tracing::warn!("Failed to initialize dock manager: {}", e);
         }
     }
+
+    // 初始化 Checkpoint 状态（复用之前创建的 checkpoint_service）
+    let checkpoint_state = {
+        use crate::checkpoint::CheckpointState;
+        CheckpointState::new(checkpoint_service)
+    };
+    app.manage(checkpoint_state);
 
     Ok(())
 }
@@ -549,15 +563,12 @@ fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle
 
     match create_terminal_event_handler(
         app_handle.clone(),
-        &mux,
+        mux,
         context_event_receiver,
         shell_event_receiver,
     ) {
         Ok(handler) => {
-            // Use Box::leak to prevent the handler from being dropped
-            // This ensures the event subscriptions remain active for the app lifetime
-            // The memory will be cleaned up when the process exits
-            Box::leak(Box::new(handler));
+            let _ = app_handle.manage(handler);
         }
         Err(e) => {
             tracing::error!("启动统一终端事件处理器失败: {}", e);

@@ -153,7 +153,10 @@ fn union(a: &[String], b: &[String]) -> Vec<String> {
     set.into_iter().collect()
 }
 
-fn merge_maps<V: Clone>(global: &HashMap<String, V>, workspace: &HashMap<String, V>) -> HashMap<String, V> {
+fn merge_maps<V: Clone>(
+    global: &HashMap<String, V>,
+    workspace: &HashMap<String, V>,
+) -> HashMap<String, V> {
     let mut merged = global.clone();
     for (key, value) in workspace {
         merged.insert(key.clone(), value.clone());

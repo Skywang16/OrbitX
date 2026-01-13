@@ -15,7 +15,11 @@ pub struct ToolAction {
 }
 
 impl ToolAction {
-    pub fn new(tool: impl Into<String>, workspace_root: PathBuf, param_variants: Vec<String>) -> Self {
+    pub fn new(
+        tool: impl Into<String>,
+        workspace_root: PathBuf,
+        param_variants: Vec<String>,
+    ) -> Self {
         Self {
             tool: tool.into(),
             param_variants,
@@ -23,4 +27,3 @@ impl ToolAction {
         }
     }
 }
-

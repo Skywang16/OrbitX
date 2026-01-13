@@ -7,7 +7,7 @@ use crate::completion::providers::CompletionProvider;
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
@@ -406,59 +406,5 @@ impl CompletionProvider for ContextAwareProvider {
 impl Default for ContextAwareProvider {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// 上下文感知提供者包装器
-/// 用于将 Arc<Mutex<ContextAwareProvider>> 适配为 Arc<dyn CompletionProvider>
-pub struct ContextAwareProviderWrapper {
-    provider: Arc<Mutex<ContextAwareProvider>>,
-}
-
-impl ContextAwareProviderWrapper {
-    pub fn new(provider: Arc<Mutex<ContextAwareProvider>>) -> Self {
-        Self { provider }
-    }
-}
-
-#[async_trait]
-impl CompletionProvider for ContextAwareProviderWrapper {
-    fn name(&self) -> &'static str {
-        "context_aware_wrapper"
-    }
-
-    fn should_provide(&self, context: &CompletionContext) -> bool {
-        if let Ok(provider) = self.provider.lock() {
-            provider.should_provide(context)
-        } else {
-            false
-        }
-    }
-
-    async fn provide_completions(
-        &self,
-        context: &CompletionContext,
-    ) -> CompletionProviderResult<Vec<CompletionItem>> {
-        // 克隆上下文以避免跨 await 边界的借用问题
-        let context_clone = context.clone();
-
-        let result = {
-            if let Ok(provider) = self.provider.lock() {
-                // 直接调用同步方法，避免异步调用
-                provider.get_contextual_completions(&context_clone)
-            } else {
-                Ok(Vec::new())
-            }
-        };
-
-        result
-    }
-
-    fn priority(&self) -> i32 {
-        20 // 最高优先级
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }

@@ -6,8 +6,8 @@
 
 use super::core::ShortcutManager;
 use super::types::*;
-use crate::config::manager::ConfigManager;
 use crate::config::error::ShortcutsResult;
+use crate::config::manager::ConfigManager;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};

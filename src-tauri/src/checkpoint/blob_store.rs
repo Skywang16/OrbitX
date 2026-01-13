@@ -239,6 +239,7 @@ pub struct BlobStoreStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::checkpoint::CheckpointError;
     use sqlx::SqlitePool;
 
     async fn setup_test_db() -> SqlitePool {
@@ -300,9 +301,6 @@ mod tests {
         let large_content = vec![0u8; 20]; // 20 bytes
         let result = store.store(&large_content).await;
 
-        assert!(matches!(
-            result,
-            Err(super::models::CheckpointError::FileTooLarge(_))
-        ));
+        assert!(matches!(result, Err(CheckpointError::FileTooLarge(_))));
     }
 }

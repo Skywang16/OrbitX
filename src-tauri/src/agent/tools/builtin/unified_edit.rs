@@ -351,6 +351,8 @@ impl MultiStrategyMatcher {
 
 /// 获取行的前导空白字符
 fn get_leading_whitespace(line: &str) -> &str {
+    // trim_start() 返回的切片保证在字符边界上
+    // 所以 line.len() - trimmed.len() 一定是有效的字节索引
     let trimmed = line.trim_start();
     &line[..line.len() - trimmed.len()]
 }
@@ -393,11 +395,11 @@ fn apply_replacement_with_indent(
             let final_indent = if relative_level < 0 {
                 // 相对缩进为负，减少缩进
                 let new_len = (matched_base_indent.len() as isize + relative_level).max(0) as usize;
-                &matched_base_indent[..new_len]
+                matched_base_indent.get(..new_len).unwrap_or("")
             } else {
                 // 相对缩进为正或零，保持或增加缩进
                 let extra = if current_level > search_base_level {
-                    &current_indent[search_base_level..]
+                    current_indent.get(search_base_level..).unwrap_or("")
                 } else {
                     ""
                 };
@@ -633,6 +635,7 @@ Examples:
                     let updated =
                         format!("{}{}{}", before, indented_replace.join(line_ending), after);
 
+                    context.note_agent_write_intent(path.as_path()).await;
                     snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                     if let Err(err) = fs::write(&path, &updated).await {
@@ -696,6 +699,7 @@ Examples:
 
                     let updated = result_lines.join(line_ending);
 
+                    context.note_agent_write_intent(path.as_path()).await;
                     snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                     if let Err(err) = fs::write(&path, &updated).await {
@@ -787,12 +791,11 @@ Examples:
                 let position = after_line.min(lines.len() as u32) as usize;
                 lines.splice(position..position, insert_lines.into_iter());
                 let mut updated = lines.join("\n");
-                if trailing_newline || content.ends_with('\n') {
-                    if !updated.ends_with('\n') {
-                        updated.push('\n');
-                    }
+                if (trailing_newline || content.ends_with('\n')) && !updated.ends_with('\n') {
+                    updated.push('\n');
                 }
 
+                context.note_agent_write_intent(path.as_path()).await;
                 snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                 if let Err(err) = fs::write(&path, &updated).await {
@@ -838,6 +841,7 @@ Examples:
                     }
                 };
 
+                context.note_agent_write_intent(path.as_path()).await;
                 snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
                 if let Err(err) = fs::write(&path, &updated).await {

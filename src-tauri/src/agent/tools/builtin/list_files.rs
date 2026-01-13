@@ -50,11 +50,11 @@ Directory Exploration Strategy:
 1. Use list_files to see what's available in a directory
 2. Use read_file with mode="outline" to understand file structure
 3. Use read_file with mode="symbol" to read specific functions/classes
-4. Use orbit_search to find specific patterns across multiple files
+4. Use grep to find specific patterns across multiple files
 
 When to Use vs Other Tools:
 - Use list_files for exploring directory structure and finding files
-- Use orbit_search if you know what code patterns to search for
+- Use grep if you know what code patterns to search for
 - Use read_file after identifying interesting files to examine
 
 Examples:

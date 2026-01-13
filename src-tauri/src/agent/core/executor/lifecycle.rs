@@ -137,8 +137,8 @@ impl TaskExecutor {
                     if repair_round > MAX_SYNTAX_REPAIR_ROUNDS {
                         let error_block = ErrorBlock {
                             code: "task.syntax_diagnostics_failed".to_string(),
-                            message:
-                                "Agent introduced syntax errors and failed to repair them".to_string(),
+                            message: "Agent introduced syntax errors and failed to repair them"
+                                .to_string(),
                             details: Some(
                                 "syntax_diagnostics reported errors after max repair rounds"
                                     .to_string(),
@@ -199,7 +199,12 @@ impl TaskExecutor {
 
         let abs_paths: Vec<String> = edited
             .into_iter()
-            .map(|p| std::path::PathBuf::from(ctx.cwd.as_ref()).join(p).display().to_string())
+            .map(|p| {
+                std::path::PathBuf::from(ctx.cwd.as_ref())
+                    .join(p)
+                    .display()
+                    .to_string()
+            })
             .collect();
 
         let tool_args = serde_json::json!({ "paths": abs_paths });

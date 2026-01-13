@@ -17,6 +17,7 @@ pub mod shell; // Shell 执行模块
 pub mod state; // 任务上下文与错误
 pub mod tools; // 工具接口与内置工具
 pub mod utils; // 工具函数
+pub mod workspace_changes; // 工作区变更账本（用户/外部变更注入）
 pub use config::*;
 pub use error::*;
 pub use types::*;

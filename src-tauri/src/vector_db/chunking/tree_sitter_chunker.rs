@@ -1,7 +1,7 @@
+use crate::code_intel::tree_sitter::configure_parser_for_language;
 use crate::vector_db::core::{Chunk, ChunkType, Language, Result, Span, VectorDbError};
 use std::path::Path;
 use tree_sitter::{Parser, TreeCursor};
-use crate::code_intel::tree_sitter::configure_parser_for_language;
 
 /// Tree-sitter 智能分块器
 pub struct TreeSitterChunker {

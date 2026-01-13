@@ -8,13 +8,11 @@ use crate::completion::command_line::normalize_command_line;
 use crate::completion::error::OutputAnalyzerResult;
 use crate::completion::providers::ContextAwareProvider;
 use crate::completion::smart_extractor::SmartExtractor;
+use crate::completion::CompletionRuntime;
 use crate::mux::ConfigManager;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
-use tracing::warn;
-
-static GLOBAL_OUTPUT_ANALYZER: OnceLock<Arc<OutputAnalyzer>> = OnceLock::new();
 
 struct HistoryBufferEntry {
     content: String,
@@ -40,54 +38,49 @@ impl HistoryBufferEntry {
             let keep_size = max_size / 2;
             let start = self.content.len().saturating_sub(keep_size);
 
-            let byte_start = self.content[start..]
-                .char_indices()
-                .find(|(i, _)| i > &0)
-                .map(|(i, _)| start + i)
-                .unwrap_or(start);
+            // 高效地找到 UTF-8 字符边界：从 start 位置向后扫描
+            // UTF-8 字符的首字节不会是 10xxxxxx (0x80-0xBF)
+            let byte_start = self.content.as_bytes()[start..]
+                .iter()
+                .position(|&b| (b & 0xC0) != 0x80)
+                .map(|offset| start + offset)
+                .unwrap_or(self.content.len());
 
-            self.content = self.content[byte_start..].to_string();
+            // 使用 drain 避免额外分配
+            self.content.drain(..byte_start);
         }
     }
 }
 
+struct OutputAnalyzerInner {
+    history_buffer: HashMap<u32, HistoryBufferEntry>,
+    active_command_ids: HashMap<u32, u64>,
+}
+
 pub struct OutputAnalyzer {
-    context_provider: Arc<Mutex<ContextAwareProvider>>,
-    history_buffer: Arc<Mutex<HashMap<u32, HistoryBufferEntry>>>,
-    active_command_ids: Arc<Mutex<HashMap<u32, u64>>>,
+    context_provider: Arc<ContextAwareProvider>,
+    inner: Mutex<OutputAnalyzerInner>,
 }
 
 impl OutputAnalyzer {
     pub fn new() -> Self {
         Self {
-            context_provider: Arc::new(Mutex::new(ContextAwareProvider::new())),
-            history_buffer: Arc::new(Mutex::new(HashMap::new())),
-            active_command_ids: Arc::new(Mutex::new(HashMap::new())),
+            context_provider: Arc::new(ContextAwareProvider::new()),
+            inner: Mutex::new(OutputAnalyzerInner {
+                history_buffer: HashMap::new(),
+                active_command_ids: HashMap::new(),
+            }),
         }
     }
 
     pub fn global() -> &'static Arc<OutputAnalyzer> {
-        GLOBAL_OUTPUT_ANALYZER.get_or_init(|| Arc::new(OutputAnalyzer::new()))
+        CompletionRuntime::global().output_analyzer()
     }
 
-    fn get_history_buffer_lock(
-        &self,
-    ) -> OutputAnalyzerResult<MutexGuard<'_, HashMap<u32, HistoryBufferEntry>>> {
-        match self.history_buffer.lock() {
+    fn lock_inner(&self) -> OutputAnalyzerResult<MutexGuard<'_, OutputAnalyzerInner>> {
+        match self.inner.lock() {
             Ok(guard) => Ok(guard),
             Err(poisoned) => Ok(poisoned.into_inner()),
-        }
-    }
-
-    fn get_context_provider_lock(
-        &self,
-    ) -> OutputAnalyzerResult<MutexGuard<'_, ContextAwareProvider>> {
-        match self.context_provider.lock() {
-            Ok(guard) => Ok(guard),
-            Err(poisoned) => {
-                warn!("上下文提供者锁被中毒，尝试恢复数据");
-                Ok(poisoned.into_inner())
-            }
         }
     }
 
@@ -100,17 +93,17 @@ impl OutputAnalyzer {
         let config = ConfigManager::config_get();
 
         let should_process = {
-            let mut history_buffer = self.get_history_buffer_lock()?;
-            let entry = history_buffer
+            let mut inner = self.lock_inner()?;
+            let entry = inner
+                .history_buffer
                 .entry(pane_id)
                 .or_insert_with(HistoryBufferEntry::new);
 
-            let before_len = entry.content.len();
+            // 直接检查新数据中是否有命令完成标志
+            // 避免在 append 后使用可能失效的索引
+            let has_prompt = self.has_complete_command(data);
             entry.append(data, config.buffer.max_size);
-
-            // 只检查新内容
-            let new_content = &entry.content[before_len..];
-            self.has_complete_command(new_content)
+            has_prompt
         };
 
         if should_process {
@@ -156,29 +149,19 @@ impl OutputAnalyzer {
             self.record_completed_command(pane_id, command_line.to_string(), output, cwd)?;
             self.clear_pane_buffer(pane_id)?;
 
-            if let Ok(mut active) = self.active_command_ids.lock() {
-                active.remove(&pane_id);
-            }
+            let mut inner = self.lock_inner()?;
+            inner.active_command_ids.remove(&pane_id);
             return Ok(());
         }
 
         // Running：只在 command id 切换时清空一次，避免重复清空导致丢输出
-        let should_clear = match self.active_command_ids.lock() {
-            Ok(mut active) => match active.get(&pane_id).copied() {
+        let should_clear = {
+            let mut inner = self.lock_inner()?;
+            match inner.active_command_ids.get(&pane_id).copied() {
                 Some(id) if id == command.id => false,
                 _ => {
-                    active.insert(pane_id, command.id);
+                    inner.active_command_ids.insert(pane_id, command.id);
                     true
-                }
-            },
-            Err(poisoned) => {
-                let mut active = poisoned.into_inner();
-                match active.get(&pane_id).copied() {
-                    Some(id) if id == command.id => false,
-                    _ => {
-                        active.insert(pane_id, command.id);
-                        true
-                    }
                 }
             }
         };
@@ -197,9 +180,9 @@ impl OutputAnalyzer {
     }
 
     pub fn get_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<String> {
-        let history_buffer = self.get_history_buffer_lock()?;
+        let inner = self.lock_inner()?;
 
-        if let Some(entry) = history_buffer.get(&pane_id) {
+        if let Some(entry) = inner.history_buffer.get(&pane_id) {
             Ok(entry.content.clone())
         } else {
             Ok(String::new())
@@ -207,8 +190,8 @@ impl OutputAnalyzer {
     }
 
     pub fn is_pane_buffer_too_new(&self, pane_id: u32) -> bool {
-        if let Ok(history_buffer) = self.get_history_buffer_lock() {
-            if let Some(entry) = history_buffer.get(&pane_id) {
+        if let Ok(inner) = self.lock_inner() {
+            if let Some(entry) = inner.history_buffer.get(&pane_id) {
                 return entry.is_too_new();
             }
         }
@@ -216,19 +199,19 @@ impl OutputAnalyzer {
     }
 
     pub fn clear_pane_buffer(&self, pane_id: u32) -> OutputAnalyzerResult<()> {
-        let mut history_buffer = self.get_history_buffer_lock()?;
-        history_buffer.remove(&pane_id);
+        let mut inner = self.lock_inner()?;
+        inner.history_buffer.remove(&pane_id);
         Ok(())
     }
 
     pub fn get_buffer_stats(&self) -> OutputAnalyzerResult<HashMap<String, usize>> {
-        let history_buffer = self.get_history_buffer_lock()?;
+        let inner = self.lock_inner()?;
 
         let mut stats = HashMap::new();
-        stats.insert("total_panes".to_string(), history_buffer.len());
+        stats.insert("total_panes".to_string(), inner.history_buffer.len());
         stats.insert(
             "history_buffer_size".to_string(),
-            history_buffer.values().map(|e| e.content.len()).sum(),
+            inner.history_buffer.values().map(|e| e.content.len()).sum(),
         );
 
         Ok(stats)
@@ -241,7 +224,11 @@ impl OutputAnalyzer {
             let line = lines[i];
 
             if let Some(command_start) = self.find_command_in_line(line) {
-                let command = line[command_start..].trim().to_string();
+                // 安全切片：find_command_in_line 返回的是字节索引
+                let command = line
+                    .get(command_start..)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
 
                 let mut command_output = String::new();
                 for output_line in lines.iter().skip(i + 1) {
@@ -297,8 +284,7 @@ impl OutputAnalyzer {
                 .push(result.value);
         }
 
-        let provider = self.get_context_provider_lock()?;
-        provider.record_command_output_with_entities(
+        self.context_provider.record_command_output_with_entities(
             command,
             output,
             working_directory,
@@ -312,7 +298,7 @@ impl OutputAnalyzer {
         Ok(())
     }
 
-    pub fn get_context_provider(&self) -> Arc<Mutex<ContextAwareProvider>> {
+    pub fn context_provider(&self) -> Arc<ContextAwareProvider> {
         Arc::clone(&self.context_provider)
     }
 }
@@ -354,9 +340,8 @@ mod tests {
         cmd.status = CommandStatus::Finished { exit_code: Some(0) };
         analyzer.on_shell_command_event(pane_id, &cmd).unwrap();
 
-        let provider = analyzer.get_context_provider();
-        let guard = provider.lock().unwrap();
-        let (last_cmd, last_output) = guard.get_last_command().unwrap();
+        let provider = analyzer.context_provider();
+        let (last_cmd, last_output) = provider.get_last_command().unwrap();
 
         assert_eq!(last_cmd, "git status");
         assert!(last_output.contains("On branch main"));

@@ -208,10 +208,8 @@ impl TerminalContextService {
         let mut removed = 0u64;
 
         for key in keys {
-            if key.starts_with(CONTEXT_CACHE_PREFIX) {
-                if self.cache.remove(&key).await.is_some() {
-                    removed += 1;
-                }
+            if key.starts_with(CONTEXT_CACHE_PREFIX) && self.cache.remove(&key).await.is_some() {
+                removed += 1;
             }
         }
 
@@ -518,7 +516,7 @@ mod tests {
         TerminalContextService::new(
             Arc::new(ActiveTerminalContextRegistry::new()),
             Arc::new(ShellIntegrationManager::new()),
-            Arc::new(TerminalMux::new()),
+            TerminalMux::new_shared(),
             Arc::new(UnifiedCache::new()),
         )
     }

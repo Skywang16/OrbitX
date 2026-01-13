@@ -5,14 +5,13 @@ use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::ipc::Channel;
+use tokio::sync::Notify;
 use tokio::sync::RwLock;
-use tokio::time::sleep;
 
 use self::chain::Chain;
 use self::states::{ExecutionState, TaskStates};
@@ -24,9 +23,7 @@ use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::persistence::{AgentExecution, AgentPersistence, ExecutionStatus, MessageRole};
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
-use crate::agent::state::manager::{
-    StateEventEmitter, StateManager, TaskState, TaskStatus, TaskThresholds,
-};
+use crate::agent::state::manager::{StateManager, TaskState, TaskStatus, TaskThresholds};
 use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::{
@@ -34,6 +31,7 @@ use crate::agent::types::{
     ToolStatus, UserImageBlock, UserTextBlock,
 };
 use crate::agent::utils::tokenizer::count_text_tokens;
+use crate::agent::workspace_changes::WorkspaceChangeJournal;
 use crate::checkpoint::CheckpointService;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
@@ -54,10 +52,13 @@ pub struct TaskContext {
     state_manager: Arc<StateManager>,
     checkpoint_service: Option<Arc<CheckpointService>>,
     active_checkpoint: Arc<RwLock<Option<ActiveCheckpoint>>>,
+    workspace_changes: Arc<WorkspaceChangeJournal>,
+    workspace_key: Arc<str>,
 
     pub(crate) states: TaskStates,
 
     pause_status: AtomicU8,
+    pause_notify: Arc<Notify>,
 }
 
 impl TaskContext {
@@ -71,6 +72,7 @@ impl TaskContext {
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
         checkpoint_service: Option<Arc<CheckpointService>>,
+        workspace_changes: Arc<WorkspaceChangeJournal>,
     ) -> TaskExecutorResult<Self> {
         let agent_config = AgentConfig::default();
         let runtime_config = ReactRuntimeConfig {
@@ -97,11 +99,13 @@ impl TaskContext {
         task_state.task_status = map_status(&task_status);
 
         let normalized_workspace = workspace_path;
+        let workspace_root = PathBuf::from(&normalized_workspace);
+        let workspace_key: Arc<str> = Arc::from(normalized_workspace.as_str());
 
         let session = Arc::new(SessionContext::new(
             task_id.clone(),
             session_id,
-            PathBuf::from(&normalized_workspace),
+            workspace_root.clone(),
             user_prompt.clone(),
             config,
             Arc::clone(&repositories),
@@ -121,12 +125,27 @@ impl TaskContext {
             config,
             session,
             tool_registry,
-            state_manager: Arc::new(StateManager::new(task_state, StateEventEmitter::new())),
+            state_manager: Arc::new(StateManager::new(task_state)),
             checkpoint_service,
             active_checkpoint: Arc::new(RwLock::new(None)),
+            workspace_changes,
+            workspace_key,
             states,
             pause_status: AtomicU8::new(0),
+            pause_notify: Arc::new(Notify::new()),
         })
+    }
+
+    pub async fn note_agent_write_intent(&self, path: &Path) {
+        self.workspace_changes
+            .begin_agent_write(Arc::clone(&self.workspace_key), path.to_path_buf())
+            .await;
+    }
+
+    pub async fn note_agent_read_snapshot(&self, path: &Path, content: &str) {
+        self.workspace_changes
+            .update_snapshot_from_read(Arc::clone(&self.workspace_key), path.to_path_buf(), content)
+            .await;
     }
 
     pub async fn set_progress_channel(&self, channel: Option<Channel<TaskEvent>>) {
@@ -372,21 +391,19 @@ impl TaskContext {
 
     /// 异步检查任务是否被中止（带暂停等待）
     pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
-        if self.states.aborted.load(Ordering::SeqCst) {
+        if self.states.aborted.load(Ordering::SeqCst) || self.states.abort_token.is_cancelled() {
             return Err(TaskExecutorError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
         }
-        loop {
-            if self.states.aborted.load(Ordering::SeqCst) {
-                return Err(TaskExecutorError::TaskInterrupted);
+        while self.pause_status.load(Ordering::SeqCst) != 0 {
+            tokio::select! {
+                _ = self.states.abort_token.cancelled() => {
+                    return Err(TaskExecutorError::TaskInterrupted);
+                }
+                _ = self.pause_notify.notified() => {}
             }
-            let status = self.pause_status.load(Ordering::SeqCst);
-            if status == 0 {
-                break;
-            }
-            sleep(Duration::from_millis(500)).await;
         }
         Ok(())
     }
@@ -395,6 +412,7 @@ impl TaskContext {
     /// 简化版：只需设置 aborted 标志
     pub fn abort(&self) {
         self.states.aborted.store(true, Ordering::SeqCst);
+        self.states.abort_token.cancel();
 
         // 标记 react 运行时为中止状态
         let react_runtime = Arc::clone(&self.states.react_runtime);
@@ -406,33 +424,19 @@ impl TaskContext {
 
     /// 检查是否已中止
     pub fn is_aborted(&self) -> bool {
-        self.states.aborted.load(Ordering::SeqCst)
+        self.states.aborted.load(Ordering::SeqCst) || self.states.abort_token.is_cancelled()
     }
 
     pub fn set_pause(&self, paused: bool, _abort_current_step: bool) {
         let new_status = if paused { 1 } else { 0 };
         self.pause_status.store(new_status, Ordering::SeqCst);
+        self.pause_notify.notify_waiters();
     }
 
     /// 为 LLM 流创建取消令牌
     /// 这个 token 会在任务 aborted 时自动取消
     pub fn create_stream_cancel_token(&self) -> CancellationToken {
-        let token = CancellationToken::new();
-        let aborted = Arc::clone(&self.states.aborted);
-        let child_token = token.clone();
-
-        // 监控 aborted 标志，如果被设置则取消 token
-        tokio::spawn(async move {
-            loop {
-                if aborted.load(Ordering::SeqCst) {
-                    child_token.cancel();
-                    break;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        });
-
-        token
+        self.states.abort_token.child_token()
     }
 
     /// Add assistant message using Anthropic-native types (text and/or tool uses).

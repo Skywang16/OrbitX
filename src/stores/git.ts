@@ -1,16 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { debounce } from 'lodash-es'
-import { gitApi, shellApi } from '@/api'
-import { createMessage } from '@/ui'
+import { gitApi } from '@/api'
 import { useTerminalStore } from '@/stores/Terminal'
 import { useEditorStore } from '@/stores/Editor'
+import { useFileWatcherStore } from '@/stores/fileWatcher'
 import { getWorkspacePathFromContext } from '@/tabs/context'
 import type { BranchInfo, CommitInfo, FileChange, RepositoryStatus } from '@/api/git/types'
 
 export const useGitStore = defineStore('git', () => {
   const terminalStore = useTerminalStore()
   const editorStore = useEditorStore()
+  const fileWatcherStore = useFileWatcherStore()
 
   const status = ref<RepositoryStatus | null>(null)
   const branches = ref<BranchInfo[]>([])
@@ -44,43 +45,6 @@ export const useGitStore = defineStore('git', () => {
     return getWorkspacePathFromContext(active.context, { terminals: terminalStore.terminals })
   })
 
-  let watchingRoot: string | null = null
-  let watchStartInFlight: Promise<void> | null = null
-  const ensureGitWatch = async (root: string | null) => {
-    if (!root) {
-      if (watchingRoot) {
-        try {
-          await gitApi.watchStop()
-        } catch (e) {
-          console.warn('Failed to stop git watcher:', e)
-        } finally {
-          watchingRoot = null
-        }
-      }
-      return
-    }
-
-    if (watchingRoot === root) return
-
-    if (watchStartInFlight) {
-      await watchStartInFlight
-      if (watchingRoot === root) return
-    }
-
-    watchStartInFlight = (async () => {
-      try {
-        await gitApi.watchStart(root)
-        watchingRoot = root
-      } catch (e) {
-        console.warn('Failed to start git watcher:', e)
-      } finally {
-        watchStartInFlight = null
-      }
-    })()
-
-    await watchStartInFlight
-  }
-
   let pendingRefresh = false
   const refreshStatus = async () => {
     const path = currentPath.value
@@ -89,7 +53,6 @@ export const useGitStore = defineStore('git', () => {
       branches.value = []
       commits.value = []
       selectedFile.value = null
-      await ensureGitWatch(null)
       return
     }
 
@@ -108,19 +71,15 @@ export const useGitStore = defineStore('git', () => {
         branches.value = []
         commits.value = []
         selectedFile.value = null
-        await ensureGitWatch(null)
-      } else {
-        await ensureGitWatch(status.value.rootPath ?? null)
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
       status.value = null
-      await ensureGitWatch(null)
     } finally {
       isLoading.value = false
       if (pendingRefresh) {
         pendingRefresh = false
-        refreshStatus()
+        void refreshStatus()
       }
     }
   }
@@ -132,7 +91,7 @@ export const useGitStore = defineStore('git', () => {
     try {
       branches.value = await gitApi.getBranches(path)
     } catch (e) {
-      console.error('Failed to load branches:', e)
+      error.value = e instanceof Error ? e.message : String(e)
     }
   }
 
@@ -164,7 +123,7 @@ export const useGitStore = defineStore('git', () => {
     try {
       return await task
     } catch (e) {
-      console.error('Failed to load commits:', e)
+      error.value = e instanceof Error ? e.message : String(e)
       return 0
     } finally {
       commitsInFlight = null
@@ -216,7 +175,7 @@ export const useGitStore = defineStore('git', () => {
     try {
       return await task
     } catch (e) {
-      console.error('Failed to load commits:', e)
+      error.value = e instanceof Error ? e.message : String(e)
       return { loaded: 0, hasMore: false }
     } finally {
       commitsInFlight = null
@@ -226,7 +185,7 @@ export const useGitStore = defineStore('git', () => {
   const togglePanel = () => {
     isVisible.value = !isVisible.value
     if (isVisible.value) {
-      refreshStatus()
+      void refreshStatus()
     }
   }
 
@@ -238,60 +197,6 @@ export const useGitStore = defineStore('git', () => {
     const path = currentPath.value
     if (!path || path === '~') return null
     return path
-  }
-
-  let resolvedGitRoot: string | null = null
-  const resolveGitRoot = async (): Promise<string | null> => {
-    if (repositoryRoot.value) {
-      resolvedGitRoot = null
-      return repositoryRoot.value
-    }
-
-    if (resolvedGitRoot) {
-      return resolvedGitRoot
-    }
-
-    const path = requireRepoPath()
-    if (!path) return null
-
-    try {
-      const detectedRoot = await gitApi.checkRepository(path)
-      if (detectedRoot) {
-        resolvedGitRoot = detectedRoot
-        return detectedRoot
-      }
-    } catch (error) {
-      console.warn('Failed to resolve git root:', error)
-    }
-
-    return null
-  }
-
-  const ensureGitRoot = async (): Promise<string | null> => {
-    const cwd = await resolveGitRoot()
-    if (!cwd) {
-      createMessage.error('当前路径不是 Git 仓库')
-    }
-    return cwd
-  }
-
-  const handleGitError = (args: string[], error: unknown) => {
-    console.error('Git command failed:', args.join(' '), error)
-    const message = error instanceof Error ? error.message : String(error)
-    createMessage.error(message || 'Git 命令执行失败')
-  }
-
-  const runGit = async (args: string[], cwdOverride?: string): Promise<boolean> => {
-    const cwd = cwdOverride ?? (await ensureGitRoot())
-    if (!cwd) return false
-
-    try {
-      await shellApi.executeBackgroundProgram('git', args, cwd)
-      return true
-    } catch (error) {
-      handleGitError(args, error)
-      return false
-    }
   }
 
   const toRootPathSpec = (filePath: string) => {
@@ -308,61 +213,65 @@ export const useGitStore = defineStore('git', () => {
 
   const stageFile = async (file: FileChange, repoPathOverride?: string) => {
     const pathSpec = toRootPathSpec(file.path)
-    if (await runGit(['add', '--', pathSpec], repoPathOverride)) {
-      await refreshStatus()
-    }
+    const path = repoPathOverride ?? requireRepoPath()
+    if (!path) return
+    await gitApi.stagePaths(path, [pathSpec])
+    await refreshStatus()
   }
 
   const stageFiles = async (files: FileChange[]) => {
     if (files.length === 0) return
+    const path = requireRepoPath()
+    if (!path) return
     const pathSpecs = files.map(f => toRootPathSpec(f.path))
-    if (await runGit(['add', '--', ...pathSpecs])) {
-      await refreshStatus()
-    }
+    await gitApi.stagePaths(path, pathSpecs)
+    await refreshStatus()
   }
 
   const stageAllFiles = async () => {
-    if (await runGit(['add', '-A'])) {
-      await refreshStatus()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.stageAll(path)
+    await refreshStatus()
   }
 
   const unstageFile = async (file: FileChange, repoPathOverride?: string) => {
     // git reset -- <path> 取消暂存单个文件
     const pathSpec = toRootPathSpec(file.path)
-    if (await runGit(['reset', '--', pathSpec], repoPathOverride)) {
-      await refreshStatus()
-    }
+    const path = repoPathOverride ?? requireRepoPath()
+    if (!path) return
+    await gitApi.unstagePaths(path, [pathSpec])
+    await refreshStatus()
   }
 
   const unstageFiles = async (files: FileChange[]) => {
     if (files.length === 0) return
+    const path = requireRepoPath()
+    if (!path) return
     const pathSpecs = files.map(f => toRootPathSpec(f.path))
-    if (await runGit(['reset', '--', ...pathSpecs])) {
-      await refreshStatus()
-    }
+    await gitApi.unstagePaths(path, pathSpecs)
+    await refreshStatus()
   }
 
   const unstageAllFiles = async () => {
     // git reset 取消所有暂存
-    if (await runGit(['reset'])) {
-      await refreshStatus()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.unstageAll(path)
+    await refreshStatus()
   }
 
   const discardFile = async (file: FileChange) => {
+    const path = requireRepoPath()
+    if (!path) return
     if (file.status === 'untracked') {
       // 未跟踪文件直接删除
       const pathSpec = toRootPathSpec(file.path)
-      if (!(await runGit(['clean', '-f', '--', pathSpec]))) {
-        return
-      }
+      await gitApi.cleanPaths(path, [pathSpec])
     } else {
       // 已跟踪文件：仅丢弃 worktree 变更，保留 index（避免吞掉已暂存内容）
       const pathSpec = toWorktreePathSpec(file.path)
-      if (!(await runGit(['checkout', '--', pathSpec]))) {
-        return
-      }
+      await gitApi.discardWorktreePaths(path, [pathSpec])
     }
     await refreshStatus()
   }
@@ -370,8 +279,8 @@ export const useGitStore = defineStore('git', () => {
   const discardFiles = async (files: FileChange[]) => {
     if (files.length === 0) return
 
-    const cwd = await ensureGitRoot()
-    if (!cwd) return
+    const path = requireRepoPath()
+    if (!path) return
 
     // 分开处理 untracked 和 tracked 文件
     const untracked = files.filter(f => f.status === 'untracked')
@@ -380,17 +289,13 @@ export const useGitStore = defineStore('git', () => {
     // 恢复 tracked 文件
     if (tracked.length > 0) {
       const pathSpecs = tracked.map(f => toWorktreePathSpec(f.path))
-      if (!(await runGit(['checkout', '--', ...pathSpecs], cwd))) {
-        return
-      }
+      await gitApi.discardWorktreePaths(path, pathSpecs)
     }
 
     // 删除 untracked 文件
     if (untracked.length > 0) {
       const pathSpecs = untracked.map(f => toRootPathSpec(f.path))
-      if (!(await runGit(['clean', '-f', '--', ...pathSpecs], cwd))) {
-        return
-      }
+      await gitApi.cleanPaths(path, pathSpecs)
     }
 
     await refreshStatus()
@@ -398,60 +303,65 @@ export const useGitStore = defineStore('git', () => {
 
   const discardAllChanges = async () => {
     // 恢复所有已跟踪文件的 worktree 变更（保留 index）
-    const cwd = await ensureGitRoot()
-    if (!cwd) return
+    const path = requireRepoPath()
+    if (!path) return
 
-    const resetTracked = await runGit(['checkout', '--', '.'], cwd)
-    if (!resetTracked) return
-    // 删除所有未跟踪文件和目录
-    if (!(await runGit(['clean', '-fd'], cwd))) return
+    await gitApi.discardWorktreeAll(path)
+    await gitApi.cleanAll(path)
     await refreshStatus()
   }
 
   const commit = async (message: string) => {
-    if (await runGit(['commit', '-m', message])) {
-      await refreshStatus()
-      await loadCommits()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.commit(path, message)
+    await refreshStatus()
+    await loadCommits()
   }
 
   const push = async () => {
-    if (await runGit(['push'])) {
-      await refreshStatus()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.push(path)
+    await refreshStatus()
   }
 
   const pull = async () => {
-    if (await runGit(['pull'])) {
-      await refreshStatus()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.pull(path)
+    await refreshStatus()
   }
 
   const fetch = async () => {
-    if (await runGit(['fetch'])) {
-      await refreshStatus()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.fetch(path)
+    await refreshStatus()
   }
 
   const sync = async () => {
-    if (!(await runGit(['pull']))) return
-    if (!(await runGit(['push']))) return
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.pull(path)
+    await gitApi.push(path)
     await refreshStatus()
   }
 
   const checkoutBranch = async (branchName: string) => {
-    if (await runGit(['checkout', branchName])) {
-      await refreshStatus()
-      await loadBranches()
-      await loadCommits()
-    }
+    const path = requireRepoPath()
+    if (!path) return
+    await gitApi.checkoutBranch(path, branchName)
+    await refreshStatus()
+    await loadBranches()
+    await loadCommits()
   }
 
   const initRepository = async () => {
     const path = currentPath.value
     if (!path || path === '~') return
 
-    await shellApi.executeBackgroundProgram('git', ['init'], path)
+    await gitApi.initRepo(path)
     await refreshStatus()
   }
 
@@ -459,7 +369,9 @@ export const useGitStore = defineStore('git', () => {
     selectedFile.value = file
     selectedFileIsStaged.value = staged
 
-    const repoPath = await ensureGitRoot()
+    const path = requireRepoPath()
+    if (!path) return
+    const repoPath = repositoryRoot.value ?? (await gitApi.checkRepository(path))
     if (!repoPath) return
 
     await editorStore.openDiffTab({
@@ -472,7 +384,9 @@ export const useGitStore = defineStore('git', () => {
   }
 
   const showCommitFileDiff = async (hash: string, filePath: string) => {
-    const repoPath = await ensureGitRoot()
+    const path = requireRepoPath()
+    if (!path) return
+    const repoPath = repositoryRoot.value ?? (await gitApi.checkRepository(path))
     if (!repoPath) return
 
     await editorStore.openDiffTab({
@@ -488,37 +402,33 @@ export const useGitStore = defineStore('git', () => {
   watch(
     currentPath,
     () => {
-      resolvedGitRoot = null
-      refreshStatus()
+      void refreshStatus()
       selectedFile.value = null
       selectedFileIsStaged.value = false
     },
     { immediate: true }
   )
 
-  watch(repositoryRoot, () => {
-    resolvedGitRoot = null
-  })
-
   let isGitChangedListenerSetup = false
   const debouncedRefreshStatus = debounce(() => {
     void refreshStatus()
   }, 150)
 
-  const setupGitChangedListener = async () => {
+  const setupGitChangedListener = () => {
     if (isGitChangedListenerSetup) return
     isGitChangedListenerSetup = true
 
-    try {
-      await gitApi.onChanged(payload => {
-        const root = repositoryRoot.value
-        if (!root) return
-        if (payload?.path && payload.path !== root) return
+    fileWatcherStore.subscribe(batch => {
+      const root = repositoryRoot.value
+      if (!root) return
+
+      for (const evt of batch.events) {
+        if (evt.type !== 'git_changed') continue
+        if (evt.repoRoot !== root) continue
         debouncedRefreshStatus()
-      })
-    } catch (e) {
-      console.warn('Failed to setup git:changed listener:', e)
-    }
+        break
+      }
+    })
   }
 
   setupGitChangedListener()

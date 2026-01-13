@@ -2,8 +2,8 @@
 
 use crate::completion::error::{CompletionEngineResult, CompletionProviderError};
 use crate::completion::providers::{
-    CompletionProvider, ContextAwareProviderWrapper, FilesystemProvider, GitCompletionProvider,
-    HistoryProvider, NpmCompletionProvider, SystemCommandsProvider,
+    CompletionProvider, FilesystemProvider, GitCompletionProvider, HistoryProvider,
+    NpmCompletionProvider, SystemCommandsProvider,
 };
 use crate::completion::scoring::MIN_SCORE;
 use crate::completion::smart_provider::SmartCompletionProvider;
@@ -105,8 +105,8 @@ impl CompletionEngine {
         let context_aware_provider = {
             use crate::completion::output_analyzer::OutputAnalyzer;
             let analyzer = OutputAnalyzer::global();
-            let provider_mutex = analyzer.get_context_provider();
-            Arc::new(ContextAwareProviderWrapper::new(provider_mutex))
+            let provider = analyzer.context_provider();
+            provider as Arc<dyn CompletionProvider>
         };
 
         let smart_provider = Arc::new(SmartCompletionProvider::new(

@@ -9,21 +9,11 @@ use crate::agent::prompt::components::{
 };
 
 /// Builder options for prompt building.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PromptBuildOptions {
     pub components: Vec<PromptComponent>,
     pub template_overrides: HashMap<PromptComponent, String>,
     pub additional_context: HashMap<String, Value>,
-}
-
-impl Default for PromptBuildOptions {
-    fn default() -> Self {
-        Self {
-            components: Vec::new(),
-            template_overrides: HashMap::new(),
-            additional_context: HashMap::new(),
-        }
-    }
 }
 
 /// Core prompt builder coordinating component assembly.
@@ -101,5 +91,11 @@ impl PromptBuilder {
             }
         }
         Ok(sections.join("\n\n").trim().to_string())
+    }
+}
+
+impl Default for PromptBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

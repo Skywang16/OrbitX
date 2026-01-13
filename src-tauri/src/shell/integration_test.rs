@@ -18,7 +18,7 @@ mod tests {
     async fn test_complete_integration_flow() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new());
-        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_mux = TerminalMux::new_shared();
 
         let context_service = TerminalContextService::new_with_integration(
             registry.clone(),
@@ -61,7 +61,7 @@ mod tests {
     async fn test_shell_integration_events() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new());
-        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_mux = TerminalMux::new_shared();
 
         let _context_service = TerminalContextService::new_with_integration(
             registry.clone(),

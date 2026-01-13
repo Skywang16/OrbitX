@@ -63,7 +63,12 @@ impl LoopDetector {
             return None;
         }
 
-        let all_identical = tool_sequences[1..].iter().all(|seq| seq == first);
+        // 安全切片
+        let all_identical = tool_sequences
+            .get(1..)
+            .unwrap_or(&[])
+            .iter()
+            .all(|seq| seq == first);
 
         if all_identical {
             let tools_list = first.join(", ");

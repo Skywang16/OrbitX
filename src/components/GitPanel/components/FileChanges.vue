@@ -119,6 +119,8 @@
         return 'A'
       case 'modified':
         return 'M'
+      case 'typeChanged':
+        return 'T'
       case 'deleted':
         return 'D'
       case 'renamed':
@@ -129,6 +131,8 @@
         return 'U'
       case 'conflicted':
         return '!'
+      case 'unknown':
+        return '?'
       default:
         return '?'
     }
@@ -140,6 +144,8 @@
         return 'badge--added'
       case 'modified':
         return 'badge--modified'
+      case 'typeChanged':
+        return 'badge--type-changed'
       case 'deleted':
         return 'badge--deleted'
       case 'renamed':
@@ -150,6 +156,8 @@
         return 'badge--untracked'
       case 'conflicted':
         return 'badge--conflicted'
+      case 'unknown':
+        return 'badge--unknown'
       default:
         return ''
     }
@@ -499,6 +507,11 @@
     color: var(--color-warning);
   }
 
+  .badge--type-changed {
+    background: color-mix(in srgb, var(--color-warning) 25%, transparent);
+    color: var(--color-warning);
+  }
+
   .badge--deleted {
     background: color-mix(in srgb, var(--color-error) 25%, transparent);
     color: var(--color-error);
@@ -522,6 +535,11 @@
   .badge--conflicted {
     background: color-mix(in srgb, var(--color-error) 35%, transparent);
     color: var(--color-error);
+  }
+
+  .badge--unknown {
+    background: color-mix(in srgb, var(--text-300) 18%, transparent);
+    color: var(--text-300);
   }
 
   .file-name {

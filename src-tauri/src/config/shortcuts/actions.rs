@@ -31,23 +31,20 @@ pub struct ActionMetadata {
 pub struct ActionRegistry {
     handlers: Arc<RwLock<HashMap<String, ActionHandler>>>,
     metadata: Arc<RwLock<HashMap<String, ActionMetadata>>>,
-    event_listeners: Arc<RwLock<Vec<Box<dyn Fn(&ShortcutEvent) + Send + Sync>>>>,
+    event_listeners: Arc<RwLock<Vec<Arc<dyn Fn(&ShortcutEvent) + Send + Sync>>>>,
 }
 
 impl ActionRegistry {
     pub fn new() -> Self {
-        let registry = Self {
+        Self {
             handlers: Arc::new(RwLock::new(HashMap::new())),
             metadata: Arc::new(RwLock::new(HashMap::new())),
             event_listeners: Arc::new(RwLock::new(Vec::new())),
-        };
+        }
+    }
 
-        let mut registry_instance = registry.clone();
-        tokio::spawn(async move {
-            registry_instance.register_default_actions().await;
-        });
-
-        registry
+    pub async fn init_defaults(&mut self) {
+        self.register_default_actions().await;
     }
 
     pub async fn register_action<F>(
@@ -186,12 +183,12 @@ impl ActionRegistry {
         F: Fn(&ShortcutEvent) + Send + Sync + 'static,
     {
         let mut listeners = self.event_listeners.write().await;
-        listeners.push(Box::new(listener));
+        listeners.push(Arc::new(listener));
     }
 
     async fn emit_event(&self, event: ShortcutEvent) {
-        let listeners = self.event_listeners.read().await;
-        for listener in listeners.iter() {
+        let listeners = self.event_listeners.read().await.clone();
+        for listener in &listeners {
             listener(&event);
         }
     }

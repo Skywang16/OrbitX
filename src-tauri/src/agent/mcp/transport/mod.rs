@@ -14,4 +14,3 @@ pub trait McpTransport: Send + Sync {
     async fn close(&self) -> McpResult<()>;
     fn is_connected(&self) -> bool;
 }
-

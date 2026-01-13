@@ -10,44 +10,38 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use std::collections::HashSet;
 use std::env;
 use std::path::Path;
-use std::sync::Arc;
 use tokio::fs;
-use tokio::sync::RwLock;
+use tokio::sync::OnceCell;
 
 /// 系统命令补全提供者
 pub struct SystemCommandsProvider {
     /// 缓存的命令列表
-    commands: Arc<RwLock<HashSet<String>>>,
+    commands: OnceCell<HashSet<String>>,
     /// 模糊匹配器
     matcher: SkimMatcherV2,
-    /// 是否已初始化
-    initialized: Arc<RwLock<bool>>,
 }
 
 impl SystemCommandsProvider {
     /// 创建新的系统命令提供者
     pub fn new() -> Self {
         Self {
-            commands: Arc::new(RwLock::new(HashSet::new())),
+            commands: OnceCell::new(),
             matcher: SkimMatcherV2::default(),
-            initialized: Arc::new(RwLock::new(false)),
         }
     }
 
-    /// 初始化命令列表（扫描PATH）
-    pub async fn initialize(&self) -> CompletionProviderResult<()> {
-        let mut initialized = self.initialized.write().await;
+    async fn get_commands(&self) -> CompletionProviderResult<&HashSet<String>> {
+        Ok(self
+            .commands
+            .get_or_init(|| async { Self::scan_commands().await })
+            .await)
+    }
 
-        if *initialized {
-            return Ok(());
-        }
-
-        let mut commands = self.commands.write().await;
+    async fn scan_commands() -> HashSet<String> {
+        let mut commands = HashSet::new();
 
         let path_var = env::var("PATH").unwrap_or_default();
-        let paths: Vec<&str> = path_var
-            .split(if cfg!(windows) { ';' } else { ':' })
-            .collect();
+        let paths = path_var.split(if cfg!(windows) { ';' } else { ':' });
 
         for path_str in paths {
             if path_str.is_empty() {
@@ -59,29 +53,24 @@ impl SystemCommandsProvider {
                 continue;
             }
 
-            // 读取目录中的可执行文件
             if let Ok(mut entries) = fs::read_dir(path).await {
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     let entry_path = entry.path();
 
                     if let Some(file_name) = entry_path.file_name() {
-                        let name = file_name.to_string_lossy().to_string();
-
-                        if self.is_executable(&entry_path).await {
-                            commands.insert(name);
+                        if Self::is_executable(&entry_path).await {
+                            commands.insert(file_name.to_string_lossy().to_string());
                         }
                     }
                 }
             }
         }
 
-        *initialized = true;
-
-        Ok(())
+        commands
     }
 
     /// 检查文件是否可执行
-    async fn is_executable(&self, path: &Path) -> bool {
+    async fn is_executable(path: &Path) -> bool {
         if let Ok(metadata) = fs::metadata(path).await {
             if metadata.is_file() {
                 #[cfg(unix)]
@@ -115,7 +104,7 @@ impl SystemCommandsProvider {
         &self,
         pattern: &str,
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
-        let commands = self.commands.read().await;
+        let commands = self.get_commands().await?;
 
         let mut matches = Vec::new();
 
@@ -141,23 +130,13 @@ impl SystemCommandsProvider {
     }
 
     /// 检查命令是否存在
-    pub async fn has_command(&self, command: &str) -> bool {
-        let commands = self.commands.read().await;
-        commands.contains(command)
+    pub async fn has_command(&self, command: &str) -> CompletionProviderResult<bool> {
+        Ok(self.get_commands().await?.contains(command))
     }
 
     /// 获取所有命令的数量
-    pub async fn command_count(&self) -> usize {
-        let commands = self.commands.read().await;
-        commands.len()
-    }
-
-    /// 手动添加命令（用于测试或特殊情况）
-    pub async fn add_command(&self, command: String) -> CompletionProviderResult<()> {
-        let mut commands = self.commands.write().await;
-
-        commands.insert(command);
-        Ok(())
+    pub async fn command_count(&self) -> CompletionProviderResult<usize> {
+        Ok(self.get_commands().await?.len())
     }
 }
 
@@ -187,9 +166,6 @@ impl CompletionProvider for SystemCommandsProvider {
         &self,
         context: &CompletionContext,
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
-        // 确保已初始化
-        self.initialize().await?;
-
         if context.current_word.is_empty() {
             return Ok(Vec::new());
         }

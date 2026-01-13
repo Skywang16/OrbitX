@@ -32,4 +32,3 @@ impl McpTransport for SseTransport {
         false
     }
 }
-

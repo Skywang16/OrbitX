@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
@@ -17,8 +16,7 @@ use tokio::sync::Mutex;
 // Window state management container
 pub struct WindowState {
     pub cache: crate::storage::cache::UnifiedCache,
-    pub config_manager: Arc<Mutex<WindowConfigManager>>,
-    pub state_manager: Arc<Mutex<WindowStateManager>>,
+    inner: Mutex<WindowStateInner>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +66,12 @@ impl Default for WindowStateManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Debug)]
+struct WindowStateInner {
+    config: WindowConfigManager,
+    state: WindowStateManager,
 }
 
 impl WindowStateManager {
@@ -178,47 +182,44 @@ impl Default for WindowConfigManager {
 
 impl WindowState {
     pub fn new() -> WindowStateResult<Self> {
-        let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
-        let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
-
-        let state = Self {
+        Ok(Self {
             cache: crate::storage::cache::UnifiedCache::new(),
-            config_manager,
-            state_manager,
-        };
-
-        Ok(state)
+            inner: Mutex::new(WindowStateInner {
+                config: WindowConfigManager::new(),
+                state: WindowStateManager::new(),
+            }),
+        })
     }
 
     pub async fn with_config_manager<F, R>(&self, f: F) -> WindowStateResult<R>
     where
         F: FnOnce(&WindowConfigManager) -> WindowStateResult<R>,
     {
-        let config_manager = self.config_manager.lock().await;
-        f(&*config_manager)
+        let inner = self.inner.lock().await;
+        f(&inner.config)
     }
 
     pub async fn with_config_manager_mut<F, R>(&self, f: F) -> WindowStateResult<R>
     where
         F: FnOnce(&mut WindowConfigManager) -> WindowStateResult<R>,
     {
-        let mut config_manager = self.config_manager.lock().await;
-        f(&mut *config_manager)
+        let mut inner = self.inner.lock().await;
+        f(&mut inner.config)
     }
 
     pub async fn with_state_manager<F, R>(&self, f: F) -> WindowStateResult<R>
     where
         F: FnOnce(&WindowStateManager) -> WindowStateResult<R>,
     {
-        let state_manager = self.state_manager.lock().await;
-        f(&*state_manager)
+        let inner = self.inner.lock().await;
+        f(&inner.state)
     }
 
     pub async fn with_state_manager_mut<F, R>(&self, f: F) -> WindowStateResult<R>
     where
         F: FnOnce(&mut WindowStateManager) -> WindowStateResult<R>,
     {
-        let mut state_manager = self.state_manager.lock().await;
-        f(&mut *state_manager)
+        let mut inner = self.inner.lock().await;
+        f(&mut inner.state)
     }
 }

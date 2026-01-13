@@ -77,10 +77,12 @@ impl SettingsManager {
     ) -> SettingsResult<()> {
         let path = Self::workspace_settings_path(workspace_root);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await.map_err(|source| SettingsError::CreateDir {
-                path: parent.to_path_buf(),
-                source,
-            })?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|source| SettingsError::CreateDir {
+                    path: parent.to_path_buf(),
+                    source,
+                })?;
         }
         self.write_json(&path, settings).await
     }
@@ -99,10 +101,12 @@ impl SettingsManager {
     }
 
     async fn read_json<T: serde::de::DeserializeOwned>(&self, path: &Path) -> SettingsResult<T> {
-        let raw = fs::read_to_string(path).await.map_err(|source| SettingsError::ReadFile {
-            path: path.to_path_buf(),
-            source,
-        })?;
+        let raw = fs::read_to_string(path)
+            .await
+            .map_err(|source| SettingsError::ReadFile {
+                path: path.to_path_buf(),
+                source,
+            })?;
 
         serde_json::from_str::<T>(&raw).map_err(|source| SettingsError::ParseJson {
             path: path.to_path_buf(),

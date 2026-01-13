@@ -1,15 +1,18 @@
 <script setup lang="ts">
-  import { ref, computed, watch, onMounted } from 'vue'
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import { debounce } from 'lodash-es'
   import { useTerminalStore } from '@/stores/Terminal'
   import { useEditorStore } from '@/stores/Editor'
   import { useLayoutStore } from '@/stores/layout'
+  import { useFileWatcherStore } from '@/stores/fileWatcher'
   import { filesystemApi } from '@/api'
 
   const { t } = useI18n()
   const terminalStore = useTerminalStore()
   const editorStore = useEditorStore()
   const layoutStore = useLayoutStore()
+  const fileWatcherStore = useFileWatcherStore()
 
   type FsEntry = {
     name: string
@@ -78,6 +81,15 @@
     return basePath + name
   }
 
+  const getParentPath = (path: string): string | null => {
+    const separator = getPathSeparator(path)
+    if (isRootPath(path)) return null
+    const normalized = path.endsWith(separator) ? path.slice(0, -1) : path
+    const idx = normalized.lastIndexOf(separator)
+    if (idx <= 0) return normalized.startsWith(separator) ? separator : null
+    return normalized.slice(0, idx)
+  }
+
   const sortEntries = (entries: FsEntry[]): FsEntry[] => {
     return [...entries].sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
@@ -103,6 +115,14 @@
     } finally {
       loadingDirs.value.delete(path)
     }
+  }
+
+  const reloadChildren = async (path: string) => {
+    if (!path || path === '~') return
+    if (loadingDirs.value.has(path)) return
+    childrenCache.value.delete(path)
+    childrenCache.value = new Map(childrenCache.value)
+    await loadChildren(path)
   }
 
   const resetTreeState = () => {
@@ -219,6 +239,24 @@
     setTimeout(() => layoutStore.setDragPath(null), 100)
   }
 
+  let unsubscribeWatcher: (() => void) | null = null
+  const pendingReloadDirs = new Set<string>()
+  const flushReloadDirs = debounce(async () => {
+    const dirs = Array.from(pendingReloadDirs)
+    pendingReloadDirs.clear()
+
+    await Promise.allSettled(
+      dirs.map(async dir => {
+        if (!expandedDirs.value.has(dir)) {
+          childrenCache.value.delete(dir)
+          childrenCache.value = new Map(childrenCache.value)
+          return
+        }
+        await reloadChildren(dir)
+      })
+    )
+  }, 200)
+
   watch(terminalCwd, () => {
     if (!sidebarPath.value) {
       ensureRootLoaded()
@@ -227,6 +265,28 @@
 
   onMounted(() => {
     ensureRootLoaded()
+
+    unsubscribeWatcher = fileWatcherStore.subscribe(batch => {
+      for (const evt of batch.events) {
+        if (evt.type !== 'fs_changed') continue
+        const paths = [evt.path]
+        if (evt.oldPath) paths.push(evt.oldPath)
+
+        for (const p of paths) {
+          const parent = getParentPath(p)
+          if (!parent) continue
+          if (!childrenCache.value.has(parent) && !expandedDirs.value.has(parent)) continue
+          pendingReloadDirs.add(parent)
+        }
+      }
+
+      flushReloadDirs()
+    })
+  })
+
+  onUnmounted(() => {
+    unsubscribeWatcher?.()
+    flushReloadDirs.cancel()
   })
 </script>
 

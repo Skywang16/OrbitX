@@ -34,7 +34,10 @@ impl PromptOrchestrator {
         }
     }
 
-    async fn load_rules(&self, workspace_path: &str) -> TaskExecutorResult<(Option<String>, Option<String>)> {
+    async fn load_rules(
+        &self,
+        workspace_path: &str,
+    ) -> TaskExecutorResult<(Option<String>, Option<String>)> {
         let effective = self
             .settings_manager
             .get_effective_settings(Some(std::path::PathBuf::from(workspace_path)))

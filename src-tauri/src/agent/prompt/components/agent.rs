@@ -179,12 +179,12 @@ IMPORTANT: DO NOT ADD ***ANY*** COMMENTS unless asked.
 
 # Doing Tasks
 
-For software engineering tasks (bugs, features, refactoring, etc.):
-- Use search tools extensively (parallel + sequential) to understand codebase
-- Implement using all available tools
-- Verify with tests. NEVER assume test framework. Check README or search codebase.
-- Before finishing, ALWAYS run `syntax_diagnostics` on files you edited. If it reports syntax errors, fix the files and re-run until it reports no errors.
-- VERY IMPORTANT: Run lint/typecheck commands when done. If not found, ask user and suggest writing to CLAUDE.md.
+For software engineering tasks (bugs, features, refactoring, etc.), follow this workflow:
+1. Search → Understand codebase context before making changes
+2. Read → Examine relevant files to learn patterns and conventions
+3. Implement → Write code following the codebase style
+4. Verify → Run `syntax_diagnostics` on edited files, fix errors until clean
+5. Validate → Run lint/typecheck/build commands. If not found, ask user.
 - NEVER commit unless user explicitly asks.
 
 # Tool Usage Policy

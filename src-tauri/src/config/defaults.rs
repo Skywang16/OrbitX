@@ -230,8 +230,8 @@ mod tests {
         assert!(json_string.contains("\"terminal\""));
         assert!(json_string.contains("\"shortcuts\""));
 
-        let _deserialized: AppConfig = serde_json::from_str(&json_string)
-            .expect("Failed to deserialize JSON back to config");
+        let _deserialized: AppConfig =
+            serde_json::from_str(&json_string).expect("Failed to deserialize JSON back to config");
     }
 
     #[test]

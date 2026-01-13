@@ -11,17 +11,16 @@ pub fn collect_source_files(root: &Path, max_size: u64) -> Vec<PathBuf> {
         .git_exclude(true)
         .parents(true)
         .max_depth(None)
-        .filter_entry(|e| filter_dirs(e));
+        .filter_entry(filter_dirs);
 
-    for result in builder.build() {
-        if let Ok(entry) = result {
-            let path = entry.path();
-            if path.is_file() {
-                if let Ok(meta) = std::fs::metadata(path) {
-                    if meta.len() <= max_size {
-                        files.push(path.to_path_buf());
-                    }
-                }
+    for entry in builder.build().flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if let Ok(meta) = std::fs::metadata(path) {
+            if meta.len() <= max_size {
+                files.push(path.to_path_buf());
             }
         }
     }

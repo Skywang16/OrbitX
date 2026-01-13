@@ -54,4 +54,3 @@ pub struct JsonRpcResponse {
     #[serde(default)]
     pub error: Option<JsonRpcErrorObject>,
 }
-

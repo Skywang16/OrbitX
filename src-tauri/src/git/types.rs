@@ -8,8 +8,10 @@ pub enum FileChangeStatus {
     Deleted,
     Renamed,
     Copied,
+    TypeChanged,
     Untracked,
     Conflicted,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,6 +129,15 @@ pub struct GitError {
     pub message: String,
 }
 
+impl GitError {
+    pub fn parse_error(message: impl Into<String>) -> Self {
+        Self {
+            code: GitErrorCode::ParseError,
+            message: message.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitDetail {
@@ -146,8 +157,12 @@ pub struct CommitFileChange {
     pub status: FileChangeStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub old_path: Option<String>,
-    pub additions: u32,
-    pub deletions: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub additions: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deletions: Option<u32>,
+    #[serde(default)]
+    pub is_binary: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

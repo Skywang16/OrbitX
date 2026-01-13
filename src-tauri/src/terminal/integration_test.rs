@@ -108,7 +108,7 @@ mod tests {
         let notification = MuxNotification::PaneAdded(pane_id);
 
         let (event_name, payload) =
-            TerminalEventHandler::<tauri::Wry>::mux_notification_to_tauri_event(&notification);
+            TerminalEventHandler::mux_notification_to_tauri_event(&notification);
 
         assert_eq!(event_name, "terminal_created");
         assert_eq!(payload["paneId"], 1);
@@ -120,7 +120,7 @@ mod tests {
         };
 
         let (event_name, payload) =
-            TerminalEventHandler::<tauri::Wry>::context_event_to_tauri_event(&context_event);
+            TerminalEventHandler::context_event_to_tauri_event(&context_event);
 
         assert_eq!(event_name, "active_pane_changed");
         assert_eq!(payload["oldPaneId"], serde_json::Value::Null);

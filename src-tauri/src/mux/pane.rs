@@ -3,7 +3,7 @@
 use std::io::{Read, Write};
 use std::process;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use crate::mux::error::{PaneError, PaneResult};
 use crate::mux::shell_manager::ShellInfo;
@@ -37,9 +37,9 @@ pub struct LocalPane {
     pixel_height: AtomicU16,
     dead: AtomicBool,
     shell_info: ShellInfo,
-    master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
+    _slave: Mutex<Box<dyn SlavePty + Send>>,
 }
 
 impl LocalPane {
@@ -214,9 +214,9 @@ impl LocalPane {
         pty_pair: portable_pty::PtyPair,
         cmd: CommandBuilder,
     ) -> PaneResult<(
-        Arc<Mutex<Box<dyn MasterPty + Send>>>,
-        Arc<Mutex<Box<dyn Write + Send>>>,
-        Arc<Mutex<Box<dyn SlavePty + Send>>>,
+        Mutex<Box<dyn MasterPty + Send>>,
+        Mutex<Box<dyn Write + Send>>,
+        Mutex<Box<dyn SlavePty + Send>>,
     )> {
         pty_pair
             .slave
@@ -232,9 +232,9 @@ impl LocalPane {
             ))
         })?;
 
-        let master = Arc::new(Mutex::new(pty_pair.master));
-        let writer = Arc::new(Mutex::new(writer));
-        let slave = Arc::new(Mutex::new(pty_pair.slave));
+        let master = Mutex::new(pty_pair.master);
+        let writer = Mutex::new(writer);
+        let slave = Mutex::new(pty_pair.slave);
 
         Ok((master, writer, slave))
     }

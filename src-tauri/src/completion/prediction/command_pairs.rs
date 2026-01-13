@@ -77,7 +77,11 @@ pub fn matches_command_pattern(executed_cmd: &str, pattern: &str) -> bool {
         return false;
     }
 
-    let head = cmd_tokens[..pattern_tokens.len()].join(" ");
+    // 安全切片
+    let head = cmd_tokens
+        .get(..pattern_tokens.len())
+        .map(|tokens| tokens.join(" "))
+        .unwrap_or_default();
     head == pattern
 }
 

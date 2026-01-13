@@ -492,17 +492,17 @@ impl LLMProvider for OpenAIProvider {
                                         }
 
                                         if let Some(arguments) = args_opt {
-                                            if !arguments.is_empty() {
-                                                if state.tool_use_started.contains(&event_index) {
-                                                    state.pending_events.push_back(
-                                                        StreamEvent::ContentBlockDelta {
-                                                            index: event_index,
-                                                            delta: ContentDelta::InputJsonDelta {
-                                                                partial_json: arguments.to_string(),
-                                                            },
+                                            if !arguments.is_empty()
+                                                && state.tool_use_started.contains(&event_index)
+                                            {
+                                                state.pending_events.push_back(
+                                                    StreamEvent::ContentBlockDelta {
+                                                        index: event_index,
+                                                        delta: ContentDelta::InputJsonDelta {
+                                                            partial_json: arguments.to_string(),
                                                         },
-                                                    );
-                                                }
+                                                    },
+                                                );
                                             }
                                         }
                                     }

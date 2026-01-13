@@ -1,6 +1,5 @@
 use crate::vector_db::core::{ChunkId, Result, VectorDbConfig, VectorDbError};
 use crate::vector_db::storage::{ChunkMetadata, IndexManager};
-use dashmap::DashMap;
 use hnsw_rs::prelude::*;
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -32,13 +31,13 @@ impl IndexSignature {
 
 pub struct WorkspaceIndexCache {
     inner: Mutex<CacheInner>,
-    build_locks: DashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>,
     max_bytes: usize,
 }
 
 struct CacheInner {
     lru: LruCache<PathBuf, Arc<CachedWorkspaceIndex>>,
     bytes: usize,
+    in_flight: HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>,
 }
 
 impl WorkspaceIndexCache {
@@ -48,8 +47,8 @@ impl WorkspaceIndexCache {
             inner: Mutex::new(CacheInner {
                 lru: LruCache::new(cap),
                 bytes: 0,
+                in_flight: HashMap::new(),
             }),
-            build_locks: DashMap::new(),
             max_bytes,
         }
     }
@@ -67,22 +66,28 @@ impl WorkspaceIndexCache {
         config: &VectorDbConfig,
     ) -> Result<Arc<CachedWorkspaceIndex>> {
         let workspace_root = workspace_root.to_path_buf();
+        let lock_key = workspace_root.clone();
 
         // Fast path: check cache with current signature.
         if let Some(entry) = self.try_get_if_fresh(&workspace_root, config)? {
             return Ok(entry);
         }
 
-        let lock = self
-            .build_locks
-            .entry(workspace_root.clone())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-            .clone();
+        let lock = {
+            let mut inner = self.inner.lock();
+            inner
+                .in_flight
+                .entry(lock_key.clone())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                .clone()
+        };
 
         let _guard = lock.lock().await;
 
         // Re-check after acquiring build lock.
         if let Some(entry) = self.try_get_if_fresh(&workspace_root, config)? {
+            let mut inner = self.inner.lock();
+            inner.in_flight.remove(&lock_key);
             return Ok(entry);
         }
 
@@ -96,6 +101,8 @@ impl WorkspaceIndexCache {
 
         let built = Arc::new(built);
         self.insert(workspace_root, built.clone());
+        let mut inner = self.inner.lock();
+        inner.in_flight.remove(&lock_key);
         Ok(built)
     }
 
@@ -189,7 +196,7 @@ impl CachedWorkspaceIndex {
         let mut results: Vec<(usize, f32)> = neighbors
             .into_iter()
             .filter_map(|n| {
-                let idx = n.d_id as usize;
+                let idx = n.d_id;
                 let dist = n.distance;
                 if dist <= max_dist && idx < self.ids.len() {
                     Some((idx, 1.0f32 - dist))

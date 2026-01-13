@@ -1,13 +1,10 @@
 //! 智能实体提取器
 
 use crate::completion::error::{SmartExtractorError, SmartExtractorResult};
+use crate::completion::CompletionRuntime;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::OnceLock;
-
-/// 全局智能提取器实例
-static GLOBAL_SMART_EXTRACTOR: OnceLock<SmartExtractor> = OnceLock::new();
 
 /// 智能实体提取器
 pub struct SmartExtractor {
@@ -91,7 +88,7 @@ impl SmartExtractor {
 
     /// 获取全局实例
     pub fn global() -> &'static SmartExtractor {
-        GLOBAL_SMART_EXTRACTOR.get_or_init(SmartExtractor::new)
+        CompletionRuntime::global().extractor()
     }
 
     /// 加载默认规则

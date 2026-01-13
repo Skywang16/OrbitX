@@ -1,4 +1,3 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@/utils/request'
 import type { BranchInfo, CommitFileChange, CommitInfo, DiffContent, RepositoryStatus } from './types'
 
@@ -7,11 +6,6 @@ export interface GetDiffOptions {
   filePath: string
   staged?: boolean
   commitHash?: string
-}
-
-export interface GitChangedPayload {
-  path: string
-  changeType: 'index' | 'head' | 'refs' | 'worktree'
 }
 
 export class GitApi {
@@ -44,22 +38,60 @@ export class GitApi {
     })
   }
 
-  watchStart = async (path: string): Promise<void> => {
-    return invoke<void>('git_watch_start', { path })
+  stagePaths = async (path: string, paths: string[]): Promise<void> => {
+    await invoke<void>('git_stage_paths', { path, paths })
   }
 
-  watchStop = async (): Promise<void> => {
-    return invoke<void>('git_watch_stop')
+  stageAll = async (path: string): Promise<void> => {
+    await invoke<void>('git_stage_all', { path })
   }
 
-  watchStatus = async (): Promise<string | null> => {
-    return invoke<string | null>('git_watch_status')
+  unstagePaths = async (path: string, paths: string[]): Promise<void> => {
+    await invoke<void>('git_unstage_paths', { path, paths })
   }
 
-  onChanged = async (callback: (payload: GitChangedPayload) => void): Promise<UnlistenFn> => {
-    return await listen<GitChangedPayload>('git:changed', event => {
-      callback(event.payload)
-    })
+  unstageAll = async (path: string): Promise<void> => {
+    await invoke<void>('git_unstage_all', { path })
+  }
+
+  discardWorktreePaths = async (path: string, paths: string[]): Promise<void> => {
+    await invoke<void>('git_discard_worktree_paths', { path, paths })
+  }
+
+  discardWorktreeAll = async (path: string): Promise<void> => {
+    await invoke<void>('git_discard_worktree_all', { path })
+  }
+
+  cleanPaths = async (path: string, paths: string[]): Promise<void> => {
+    await invoke<void>('git_clean_paths', { path, paths })
+  }
+
+  cleanAll = async (path: string): Promise<void> => {
+    await invoke<void>('git_clean_all', { path })
+  }
+
+  commit = async (path: string, message: string): Promise<void> => {
+    await invoke<void>('git_commit', { path, message })
+  }
+
+  push = async (path: string): Promise<void> => {
+    await invoke<void>('git_push', { path })
+  }
+
+  pull = async (path: string): Promise<void> => {
+    await invoke<void>('git_pull', { path })
+  }
+
+  fetch = async (path: string): Promise<void> => {
+    await invoke<void>('git_fetch', { path })
+  }
+
+  checkoutBranch = async (path: string, branch: string): Promise<void> => {
+    await invoke<void>('git_checkout_branch', { path, branch })
+  }
+
+  initRepo = async (path: string): Promise<void> => {
+    await invoke<void>('git_init_repo', { path })
   }
 }
 

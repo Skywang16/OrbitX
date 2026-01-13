@@ -77,7 +77,7 @@ impl ReactOrchestrator {
                 react.start_iteration()
             };
 
-            let iter_ctx = IterationContext::new(iteration, context.session());
+            let mut iter_ctx = IterationContext::new(iteration, context.session());
 
             // ===== Phase 2: 准备消息上下文（从 messages 表加载，Summary 作为断点） =====
 
@@ -92,7 +92,11 @@ impl ReactOrchestrator {
             let context_window =
                 crate::agent::utils::get_model_context_window(&self.database, model_id)
                     .await
-                    .unwrap_or(128_000);
+                    .ok_or_else(|| {
+                        TaskExecutorError::ConfigurationError(
+                            "Missing model option `maxContextTokens` for compaction".to_string(),
+                        )
+                    })?;
             self.maybe_compact_session(context, model_id, context_window)
                 .await?;
 
@@ -187,7 +191,7 @@ impl ReactOrchestrator {
                                             context.assistant_append_block(block).await?;
                                             text_created = true;
                                         }
-                                        iter_ctx.append_output(&text).await;
+                                        iter_ctx.append_output(&text);
                                     }
                                 }
                                 ContentDelta::InputJsonDelta { partial_json } => {
@@ -213,7 +217,7 @@ impl ReactOrchestrator {
                                             context.assistant_append_block(block).await?;
                                             thinking_created = true;
                                         }
-                                        iter_ctx.append_thinking(&thinking).await;
+                                        iter_ctx.append_thinking(&thinking);
                                     }
                                 }
                             }
@@ -242,9 +246,12 @@ impl ReactOrchestrator {
                                     name,
                                     input_json,
                                 } => {
-                                    let input: Value = serde_json::from_str(&input_json).unwrap_or(
-                                        serde_json::json!({"_streaming_args": input_json}),
-                                    );
+                                    let input: Value =
+                                        serde_json::from_str(&input_json).map_err(|err| {
+                                            TaskExecutorError::InternalError(format!(
+                                                "Invalid tool input JSON from stream: {err}"
+                                            ))
+                                        })?;
                                     tool_use_blocks.push(ContentBlock::ToolUse {
                                         id: id.clone(),
                                         name: name.clone(),
@@ -256,9 +263,7 @@ impl ReactOrchestrator {
                                         name.clone(),
                                         input.clone(),
                                     );
-                                    iter_ctx
-                                        .add_tool_call(id.clone(), name.clone(), input.clone())
-                                        .await;
+                                    iter_ctx.add_tool_call(id.clone(), name.clone(), input.clone());
                                     pending_tool_calls.push((id, name, input));
                                 }
                                 BlockAccumulator::Thinking(thinking) => {
@@ -307,11 +312,7 @@ impl ReactOrchestrator {
                 IterationOutcome::ContinueWithTools {
                     tool_calls: pending_tool_calls.clone(),
                 }
-            } else if final_text
-                .as_ref()
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
-            {
+            } else if matches!(final_text.as_deref(), Some(s) if !s.trim().is_empty()) {
                 IterationOutcome::Complete {
                     thinking: None,
                     output: final_text.clone(),
@@ -348,13 +349,15 @@ impl ReactOrchestrator {
                         .await?;
 
                     for result in results {
-                        iter_ctx.add_tool_result(result.clone()).await;
-
                         let outcome =
                             crate::agent::core::utils::tool_call_result_to_outcome(&result);
+                        let call_id = result.call_id.clone();
+                        let tool_name = result.tool_name.clone();
+                        let status = result.status;
+                        iter_ctx.add_tool_result(result);
+
                         context
                             .with_chain_mut({
-                                let call_id = result.call_id.clone();
                                 let outcome_for_chain = outcome.clone();
                                 move |chain| {
                                     chain.update_tool_result(&call_id, outcome_for_chain);
@@ -366,14 +369,14 @@ impl ReactOrchestrator {
                             let mut react = context.states.react_runtime.write().await;
                             react.record_observation(
                                 react_iteration_index,
-                                result.tool_name.clone(),
+                                tool_name.clone(),
                                 outcome,
                             );
 
-                            if result.status != crate::agent::tools::ToolResultStatus::Success {
+                            if status != crate::agent::tools::ToolResultStatus::Success {
                                 react.fail_iteration(
                                     react_iteration_index,
-                                    format!("Tool {} failed", result.tool_name),
+                                    format!("Tool {} failed", tool_name),
                                 );
                             } else {
                                 react.reset_error_counter();
@@ -389,7 +392,7 @@ impl ReactOrchestrator {
                         let _ = context.set_system_prompt(loop_warning).await;
                     }
 
-                    let snapshot = iter_ctx.finalize().await;
+                    let snapshot = iter_ctx.finalize();
                     Self::update_session_stats(context, &snapshot).await;
                     continue;
                 }
@@ -405,7 +408,7 @@ impl ReactOrchestrator {
                         .await
                         .complete_iteration(react_iteration_index, output.clone(), None);
 
-                    let snapshot = iter_ctx.finalize().await;
+                    let snapshot = iter_ctx.finalize();
                     Self::update_session_stats(context, &snapshot).await;
                     break;
                 }
@@ -416,7 +419,7 @@ impl ReactOrchestrator {
                         iteration
                     );
 
-                    let snapshot = iter_ctx.finalize().await;
+                    let snapshot = iter_ctx.finalize();
                     Self::update_session_stats(context, &snapshot).await;
                     break;
                 }

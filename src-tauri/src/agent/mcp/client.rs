@@ -39,9 +39,7 @@ impl McpClient {
                 let workspace_root = ensure_abs_workspace(workspace_root)?;
                 let args = expand_args(args, &workspace_root);
                 let env = expand_env_map(env, &workspace_root);
-                Arc::new(
-                    StdioTransport::spawn(command, &args, &env, Some(&workspace_root)).await?,
-                )
+                Arc::new(StdioTransport::spawn(command, &args, &env, Some(&workspace_root)).await?)
             }
             McpServerConfig::Sse { disabled, .. } => {
                 if *disabled {
@@ -161,4 +159,3 @@ fn parse_result(resp: JsonRpcResponse, method: &str) -> McpResult<ToolCallResult
     let call: ToolCallResult = serde_json::from_value(result)?;
     Ok(call)
 }
-

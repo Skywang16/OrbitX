@@ -70,7 +70,7 @@ mod tests {
     pub(crate) fn create_test_state() -> TerminalContextState {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new());
-        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_mux = TerminalMux::new_shared();
         let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
             registry.clone(),
@@ -86,7 +86,7 @@ mod tests {
     async fn test_state_creation_and_access() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
         let shell_integration = Arc::new(ShellIntegrationManager::new());
-        let terminal_mux = Arc::new(TerminalMux::new());
+        let terminal_mux = TerminalMux::new_shared();
         let cache = Arc::new(UnifiedCache::new());
         let context_service = Arc::new(TerminalContextService::new(
             registry.clone(),

@@ -38,4 +38,3 @@ pub enum SettingsError {
 }
 
 pub type SettingsResult<T> = Result<T, SettingsError>;
-

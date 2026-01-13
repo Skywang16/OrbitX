@@ -7,7 +7,6 @@
  * - 应用重启也不会丢失上下文
  */
 
-
 use chrono::Utc;
 use tauri::ipc::Channel;
 
@@ -17,7 +16,6 @@ use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::persistence::{AgentExecution, ExecutionStatus};
 use crate::agent::types::TaskEvent;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 impl TaskExecutor {
@@ -142,15 +140,19 @@ impl TaskExecutor {
             TaskExecutionConfig::default()
         };
 
-        let cwd = workspace_path;
+        let requested_workspace = workspace_path;
+        let workspace_root =
+            tokio::fs::canonicalize(std::path::PathBuf::from(&requested_workspace))
+                .await
+                .unwrap_or_else(|_| std::path::PathBuf::from(&requested_workspace));
+        let cwd = workspace_root.to_string_lossy().to_string();
 
         let effective = self
             .settings_manager()
-            .get_effective_settings(Some(PathBuf::from(&cwd)))
+            .get_effective_settings(Some(workspace_root.clone()))
             .await
             .map_err(|e| TaskExecutorError::ConfigurationError(e.to_string()))?;
 
-        let workspace_root = PathBuf::from(&cwd);
         let workspace_settings = self
             .settings_manager()
             .get_workspace_settings(&workspace_root)
@@ -163,14 +165,18 @@ impl TaskExecutor {
 
         let mcp_tools = self
             .mcp_registry()
-            .get_tools_for_workspace(&workspace_root)
+            .get_tools_for_workspace(&cwd)
             .into_iter()
             .map(|t| Arc::new(t) as Arc<dyn crate::agent::tools::RunnableTool>)
             .collect::<Vec<_>>();
 
-        let tool_registry =
-            crate::agent::tools::create_tool_registry("agent", effective.permissions, mcp_tools)
-                .await;
+        let tool_registry = crate::agent::tools::create_tool_registry(
+            "agent",
+            effective.permissions,
+            mcp_tools,
+            self.vector_search_engine(),
+        )
+        .await;
 
         TaskContext::new(
             execution,
@@ -181,6 +187,7 @@ impl TaskExecutor {
             Arc::clone(&self.database()),
             Arc::clone(&self.agent_persistence()),
             self.checkpoint_service(),
+            self.workspace_changes(),
         )
         .await
     }

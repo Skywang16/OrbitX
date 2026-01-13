@@ -9,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
 /// 支持的语言类型
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Language {
     /// 简体中文
+    #[default]
     ZhCN,
     /// 美式英文
     EnUS,
@@ -25,7 +26,7 @@ impl Language {
     ///
     /// # Returns
     /// 对应的语言类型，无法识别时默认为中文
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_tag_lossy(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "zh-cn" | "zh" | "chinese" | "中文" => Language::ZhCN,
             "en-us" | "en" | "english" | "英文" => Language::EnUS,
@@ -33,11 +34,11 @@ impl Language {
         }
     }
 
-    /// 转换为字符串表示
-    pub fn to_string(&self) -> String {
+    /// 获取语言标识（BCP-47 tag）
+    pub fn tag(&self) -> &'static str {
         match self {
-            Language::ZhCN => "zh-CN".to_string(),
-            Language::EnUS => "en-US".to_string(),
+            Language::ZhCN => "zh-CN",
+            Language::EnUS => "en-US",
         }
     }
 
@@ -55,15 +56,9 @@ impl Language {
     }
 }
 
-impl Default for Language {
-    fn default() -> Self {
-        Language::ZhCN
-    }
-}
-
 impl std::fmt::Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.tag())
     }
 }
 
@@ -112,14 +107,14 @@ impl LanguageManager {
     ///
     /// # Returns
     /// 设置成功返回true，失败返回false
-    pub fn set_language_from_str(lang_str: &str) -> bool {
-        let lang = Language::from_str(lang_str);
+    pub fn set_language_from_tag_lossy(lang_str: &str) -> bool {
+        let lang = Language::from_tag_lossy(lang_str);
         Self::set_language(lang)
     }
 
     /// 获取当前语言的字符串表示
     pub fn get_language_string() -> String {
-        Self::get_language().to_string()
+        Self::get_language().tag().to_string()
     }
 
     /// 检查当前语言是否为中文
@@ -139,23 +134,23 @@ mod tests {
 
     #[test]
     fn test_language_from_str() {
-        assert_eq!(Language::from_str("zh-CN"), Language::ZhCN);
-        assert_eq!(Language::from_str("zh"), Language::ZhCN);
-        assert_eq!(Language::from_str("chinese"), Language::ZhCN);
-        assert_eq!(Language::from_str("中文"), Language::ZhCN);
+        assert_eq!(Language::from_tag_lossy("zh-CN"), Language::ZhCN);
+        assert_eq!(Language::from_tag_lossy("zh"), Language::ZhCN);
+        assert_eq!(Language::from_tag_lossy("chinese"), Language::ZhCN);
+        assert_eq!(Language::from_tag_lossy("中文"), Language::ZhCN);
 
-        assert_eq!(Language::from_str("en-US"), Language::EnUS);
-        assert_eq!(Language::from_str("en"), Language::EnUS);
-        assert_eq!(Language::from_str("english"), Language::EnUS);
+        assert_eq!(Language::from_tag_lossy("en-US"), Language::EnUS);
+        assert_eq!(Language::from_tag_lossy("en"), Language::EnUS);
+        assert_eq!(Language::from_tag_lossy("english"), Language::EnUS);
 
         // 默认情况
-        assert_eq!(Language::from_str("unknown"), Language::ZhCN);
+        assert_eq!(Language::from_tag_lossy("unknown"), Language::ZhCN);
     }
 
     #[test]
     fn test_language_to_string() {
-        assert_eq!(Language::ZhCN.to_string(), "zh-CN");
-        assert_eq!(Language::EnUS.to_string(), "en-US");
+        assert_eq!(Language::ZhCN.tag(), "zh-CN");
+        assert_eq!(Language::EnUS.tag(), "en-US");
     }
 
     #[test]
@@ -175,10 +170,10 @@ mod tests {
 
     #[test]
     fn test_language_manager_from_str() {
-        assert!(LanguageManager::set_language_from_str("en-US"));
+        assert!(LanguageManager::set_language_from_tag_lossy("en-US"));
         assert_eq!(LanguageManager::get_language(), Language::EnUS);
 
-        assert!(LanguageManager::set_language_from_str("zh-CN"));
+        assert!(LanguageManager::set_language_from_tag_lossy("zh-CN"));
         assert_eq!(LanguageManager::get_language(), Language::ZhCN);
     }
 

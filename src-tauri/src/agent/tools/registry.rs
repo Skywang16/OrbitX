@@ -3,14 +3,15 @@ use std::time::{Duration, Instant};
 use std::{path::Path, path::PathBuf};
 
 use dashmap::{mapref::entry::Entry, DashMap};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 use uuid::Uuid;
 
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{
-    RunnableTool, ToolDescriptionContext, ToolResult, ToolResultContent, ToolResultStatus,
-    ToolSchema,
+    RunnableTool, ToolAvailabilityContext, ToolDescriptionContext, ToolResult, ToolResultContent,
+    ToolResultStatus, ToolSchema,
 };
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
@@ -55,14 +56,32 @@ impl RateLimiter {
     }
 }
 
+struct ToolEntry {
+    tool: Arc<dyn RunnableTool>,
+    metadata: ToolMetadata,
+    rate_limiter: Option<Mutex<RateLimiter>>,
+    stats: Mutex<ToolExecutionStats>,
+}
+
+impl ToolEntry {
+    fn new(tool: Arc<dyn RunnableTool>, metadata: ToolMetadata) -> Self {
+        let rate_limiter = metadata
+            .rate_limit
+            .clone()
+            .map(|cfg| Mutex::new(RateLimiter::new(cfg)));
+        Self {
+            tool,
+            metadata,
+            rate_limiter,
+            stats: Mutex::new(ToolExecutionStats::default()),
+        }
+    }
+}
+
 pub struct ToolRegistry {
-    tools: DashMap<String, Arc<dyn RunnableTool>>,
-    metadata_index: DashMap<String, ToolMetadata>,
-    category_index: DashMap<ToolCategory, Vec<String>>,
-    rate_limiters: DashMap<String, RateLimiter>,
     aliases: DashMap<String, String>,
+    entries: DashMap<String, ToolEntry>,
     permission_checker: Option<Arc<PermissionChecker>>,
-    execution_stats: DashMap<String, ToolExecutionStats>,
     pending_confirmations: DashMap<String, tokio::sync::oneshot::Sender<ToolConfirmationDecision>>,
 }
 
@@ -80,13 +99,9 @@ impl ToolRegistry {
     /// 唯一的构造函数 - 显式传递权限
     pub fn new(permission_checker: Option<Arc<PermissionChecker>>) -> Self {
         Self {
-            tools: DashMap::new(),
-            metadata_index: DashMap::new(),
-            category_index: DashMap::new(),
-            rate_limiters: DashMap::new(),
             aliases: DashMap::new(),
+            entries: DashMap::new(),
             permission_checker,
-            execution_stats: DashMap::new(),
             pending_confirmations: DashMap::new(),
         }
     }
@@ -110,8 +125,14 @@ impl ToolRegistry {
         &self,
         name: &str,
         tool: Arc<dyn RunnableTool>,
-        is_chat_mode: bool, // 新增参数
+        is_chat_mode: bool,
+        availability_ctx: &ToolAvailabilityContext,
     ) -> ToolExecutorResult<()> {
+        // Check tool availability first
+        if !tool.is_available(availability_ctx) {
+            return Ok(()); // Skip unavailable tools silently
+        }
+
         let key = name.to_string();
         let metadata = tool.metadata();
 
@@ -135,7 +156,7 @@ impl ToolRegistry {
             // Agent 模式: permissions are enforced at runtime via settings.json (allow/deny/ask)
         }
 
-        match self.tools.entry(key.clone()) {
+        match self.entries.entry(key) {
             Entry::Occupied(_) => {
                 return Err(ToolExecutorError::ConfigurationError(format!(
                     "Tool already registered: {}",
@@ -143,54 +164,19 @@ impl ToolRegistry {
                 )));
             }
             Entry::Vacant(entry) => {
-                entry.insert(tool);
+                entry.insert(ToolEntry::new(tool, metadata));
             }
         }
-
-        self.metadata_index.insert(key.clone(), metadata.clone());
-
-        self.category_index
-            .entry(metadata.category)
-            .or_insert_with(Vec::new)
-            .push(key.clone());
-
-        if let Some(rate_config) = metadata.rate_limit.clone() {
-            self.rate_limiters
-                .insert(key.clone(), RateLimiter::new(rate_config));
-        }
-
-        self.execution_stats
-            .insert(key.clone(), ToolExecutionStats::default());
 
         Ok(())
     }
 
     pub async fn unregister(&self, name: &str) -> ToolExecutorResult<()> {
-        if self.tools.remove(name).is_none() {
+        if self.entries.remove(name).is_none() {
             return Err(ToolExecutorError::ToolNotFound(name.to_string()));
         }
 
         self.aliases.retain(|_, v| v != name);
-        self.execution_stats.remove(name);
-        self.rate_limiters.remove(name);
-
-        let category = self
-            .metadata_index
-            .remove(name)
-            .map(|(_, meta)| meta.category);
-
-        if let Some(category) = category {
-            let mut remove_category = false;
-
-            if let Some(mut list) = self.category_index.get_mut(&category) {
-                list.retain(|entry| entry != name);
-                remove_category = list.is_empty();
-            }
-
-            if remove_category {
-                self.category_index.remove(&category);
-            }
-        }
 
         Ok(())
     }
@@ -206,7 +192,7 @@ impl ToolRegistry {
     }
 
     async fn resolve_name(&self, name: &str) -> Option<String> {
-        if self.tools.contains_key(name) {
+        if self.entries.contains_key(name) {
             return Some(name.to_string());
         }
 
@@ -215,9 +201,16 @@ impl ToolRegistry {
 
     pub async fn get_tool(&self, name: &str) -> Option<Arc<dyn RunnableTool>> {
         let resolved = self.resolve_name(name).await?;
-        self.tools
+        self.entries
             .get(&resolved)
-            .map(|entry| Arc::clone(entry.value()))
+            .map(|entry| Arc::clone(&entry.value().tool))
+    }
+
+    pub async fn get_tool_metadata(&self, name: &str) -> Option<ToolMetadata> {
+        let resolved = self.resolve_name(name).await?;
+        self.entries
+            .get(&resolved)
+            .map(|entry| entry.value().metadata.clone())
     }
 
     pub async fn execute_tool(
@@ -250,7 +243,7 @@ impl ToolRegistry {
                 return self
                     .make_error_result(
                         &resolved,
-                        "Tool metadata not configured".to_string(),
+                        "Tool not found".to_string(),
                         None,
                         ToolResultStatus::Error,
                         None,
@@ -260,13 +253,10 @@ impl ToolRegistry {
             }
         };
 
-        let permission_decision = self
-            .permission_checker
-            .as_ref()
-            .map(|checker| {
-                let action = build_tool_action(&resolved, &metadata, context, &args);
-                (checker.check(&action), action)
-            });
+        let permission_decision = self.permission_checker.as_ref().map(|checker| {
+            let action = build_tool_action(&resolved, &metadata, context, &args);
+            (checker.check(&action), action)
+        });
 
         if let Some((PermissionDecision::Deny, action)) = &permission_decision {
             return self
@@ -352,8 +342,10 @@ impl ToolRegistry {
     }
 
     async fn check_rate_limit(&self, tool_name: &str) -> ToolExecutorResult<()> {
-        if let Some(mut limiter) = self.rate_limiters.get_mut(tool_name) {
-            limiter.check_and_record(tool_name)?;
+        if let Some(entry) = self.entries.get(tool_name) {
+            if let Some(limiter) = &entry.value().rate_limiter {
+                limiter.lock().check_and_record(tool_name)?;
+            }
         }
         Ok(())
     }
@@ -522,11 +514,7 @@ impl ToolRegistry {
                     }),
                 }
             }
-            _ = async {
-                while !context.is_aborted() {
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            } => Err(ToolExecutorError::ExecutionFailed {
+            _ = context.states.abort_token.cancelled() => Err(ToolExecutorError::ExecutionFailed {
                 tool_name: tool_name.to_string(),
                 error: "Task aborted; confirmation cancelled".to_string(),
             })
@@ -646,7 +634,8 @@ impl ToolRegistry {
     }
 
     async fn update_stats(&self, tool_name: &str, success: bool, execution_time_ms: u64) {
-        if let Some(mut stats) = self.execution_stats.get_mut(tool_name) {
+        if let Some(entry) = self.entries.get(tool_name) {
+            let mut stats = entry.value().stats.lock();
             stats.total_calls += 1;
             if success {
                 stats.success_count += 1;
@@ -660,9 +649,9 @@ impl ToolRegistry {
     }
 
     pub async fn get_tool_schemas(&self) -> Vec<ToolSchema> {
-        self.tools
+        self.entries
             .iter()
-            .map(|entry| entry.value().schema())
+            .map(|entry| entry.value().tool.schema())
             .collect()
     }
 
@@ -671,10 +660,10 @@ impl ToolRegistry {
         &self,
         context: &ToolDescriptionContext,
     ) -> Vec<ToolSchema> {
-        self.tools
+        self.entries
             .iter()
             .map(|entry| {
-                let tool = entry.value();
+                let tool = &entry.value().tool;
                 let description = tool
                     .description_with_context(context)
                     .unwrap_or_else(|| tool.description().to_string());
@@ -689,29 +678,29 @@ impl ToolRegistry {
     }
 
     pub async fn list_tools(&self) -> Vec<String> {
-        let mut names: Vec<String> = self.tools.iter().map(|entry| entry.key().clone()).collect();
+        let mut names: Vec<String> = self
+            .entries
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
         names.sort();
         names
     }
 
-    pub async fn get_tool_metadata(&self, name: &str) -> Option<ToolMetadata> {
-        if let Some(meta) = self.metadata_index.get(name) {
-            return Some(meta.clone());
-        }
-
-        if let Some(alias) = self.aliases.get(name) {
-            let actual = alias.clone();
-            return self.metadata_index.get(&actual).map(|entry| entry.clone());
-        }
-
-        None
-    }
-
     pub async fn list_tools_by_category(&self, category: ToolCategory) -> Vec<String> {
-        self.category_index
-            .get(&category)
-            .map(|entry| entry.clone())
-            .unwrap_or_default()
+        let mut out: Vec<String> = self
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                if entry.value().metadata.category == category {
+                    Some(entry.key().clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        out.sort();
+        out
     }
 }
 
@@ -735,12 +724,26 @@ fn build_tool_action(
                 .unwrap_or_default();
             ToolAction::new("Bash", workspace_root, bash_param_variants(command))
         }
-        "read_file" => ToolAction::new("Read", workspace_root, path_variants(args, metadata, context)),
-        "write_file" => ToolAction::new("Write", workspace_root, path_variants(args, metadata, context)),
-        "edit_file" => ToolAction::new("Edit", workspace_root, path_variants(args, metadata, context)),
-        "list_files" | "orbit_search" => {
-            ToolAction::new("Read", workspace_root, path_variants(args, metadata, context))
-        }
+        "read_file" => ToolAction::new(
+            "Read",
+            workspace_root,
+            path_variants(args, metadata, context),
+        ),
+        "write_file" => ToolAction::new(
+            "Write",
+            workspace_root,
+            path_variants(args, metadata, context),
+        ),
+        "edit_file" => ToolAction::new(
+            "Edit",
+            workspace_root,
+            path_variants(args, metadata, context),
+        ),
+        "list_files" | "grep" | "semantic_search" => ToolAction::new(
+            "Read",
+            workspace_root,
+            path_variants(args, metadata, context),
+        ),
         "web_fetch" => {
             let url = args.get("url").and_then(|v| v.as_str()).unwrap_or_default();
             ToolAction::new("WebFetch", workspace_root, web_fetch_variants(url))
@@ -754,13 +757,21 @@ fn build_tool_action(
                 .unwrap_or_default()
                 .to_string();
 
-            let variants = if summary.is_empty() { vec![] } else { vec![summary] };
+            let variants = if summary.is_empty() {
+                vec![]
+            } else {
+                vec![summary]
+            };
             ToolAction::new(tool_name, workspace_root, variants)
         }
     }
 }
 
-fn path_variants(args: &serde_json::Value, metadata: &ToolMetadata, context: &TaskContext) -> Vec<String> {
+fn path_variants(
+    args: &serde_json::Value,
+    metadata: &ToolMetadata,
+    context: &TaskContext,
+) -> Vec<String> {
     let path = args.get("path").and_then(|v| v.as_str()).or_else(|| {
         metadata
             .summary_key_arg
@@ -790,8 +801,15 @@ fn bash_param_variants(command: &str) -> Vec<String> {
     };
 
     for split_at in 1..=tokens.len().min(3) {
-        let prefix = tokens[..split_at].join(" ");
-        let suffix = tokens[split_at..].join(" ");
+        // 安全切片
+        let prefix = tokens
+            .get(..split_at)
+            .map(|t| t.join(" "))
+            .unwrap_or_default();
+        let suffix = tokens
+            .get(split_at..)
+            .map(|t| t.join(" "))
+            .unwrap_or_default();
         if suffix.is_empty() {
             variants.push(prefix);
         } else {

@@ -93,9 +93,13 @@ impl I18nManager {
     /// 支持 "module.section.message" 格式的键
     fn get_nested_value(messages: &HashMap<String, Value>, key: &str) -> Option<String> {
         let parts: Vec<&str> = key.split('.').collect();
+        if parts.is_empty() {
+            return None;
+        }
         let mut current = messages.get(parts[0])?;
 
-        for &part in &parts[1..] {
+        // 安全切片
+        for &part in parts.get(1..).unwrap_or(&[]) {
             current = current.as_object()?.get(part)?;
         }
 

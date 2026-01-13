@@ -3,11 +3,8 @@
 //! 管理所有已知命令的元数据
 
 use super::command_spec::CommandSpec;
+use crate::completion::CompletionRuntime;
 use std::collections::HashMap;
-use std::sync::OnceLock;
-
-/// 全局命令注册表实例
-static GLOBAL_REGISTRY: OnceLock<CommandRegistry> = OnceLock::new();
 
 /// 命令注册表
 pub struct CommandRegistry {
@@ -24,11 +21,7 @@ impl CommandRegistry {
 
     /// 获取全局注册表实例
     pub fn global() -> &'static CommandRegistry {
-        GLOBAL_REGISTRY.get_or_init(|| {
-            let mut registry = CommandRegistry::new();
-            registry.load_builtin_commands();
-            registry
-        })
+        CompletionRuntime::global().registry()
     }
 
     /// 注册命令
@@ -93,7 +86,7 @@ impl CommandRegistry {
     }
 
     /// 加载内置命令
-    fn load_builtin_commands(&mut self) {
+    pub(crate) fn load_builtin_commands(&mut self) {
         let builtin_commands = super::builtin::load_builtin_commands();
         self.register_all(builtin_commands);
     }

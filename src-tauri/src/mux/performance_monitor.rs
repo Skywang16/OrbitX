@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Instant;
 use tracing::warn;
 
@@ -15,14 +14,14 @@ pub struct PerformanceMetrics {
 
 pub struct PerformanceMonitor {
     start_time: Instant,
-    last_metrics: Arc<std::sync::Mutex<Option<PerformanceMetrics>>>,
+    last_metrics: std::sync::Mutex<Option<PerformanceMetrics>>,
 }
 
 impl PerformanceMonitor {
     pub fn new() -> Self {
         Self {
             start_time: Instant::now(),
-            last_metrics: Arc::new(std::sync::Mutex::new(None)),
+            last_metrics: std::sync::Mutex::new(None),
         }
     }
 
@@ -49,8 +48,8 @@ impl PerformanceMonitor {
     pub fn get_last_metrics(&self) -> Option<PerformanceMetrics> {
         self.last_metrics
             .lock()
-            .ok()
-            .and_then(|metrics| metrics.clone())
+            .map(|guard| guard.clone())
+            .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
     }
 
     pub fn check_performance_warnings(&self, metrics: &PerformanceMetrics) {

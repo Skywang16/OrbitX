@@ -8,7 +8,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_create_single_pane() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let size = PtySize::new(24, 80);
 
         let pane_id = mux.create_pane(size).await.unwrap();
@@ -24,7 +24,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_create_multiple_panes() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
 
         let pane1 = mux.create_pane(PtySize::new(24, 80)).await.unwrap();
         let pane2 = mux.create_pane(PtySize::new(30, 100)).await.unwrap();
@@ -53,7 +53,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_remove_pane() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let pane_id = mux.create_pane(PtySize::default()).await.unwrap();
 
         // 验证面板存在
@@ -72,7 +72,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_remove_multiple_panes() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
 
         let pane1 = mux.create_pane(PtySize::default()).await.unwrap();
         let pane2 = mux.create_pane(PtySize::default()).await.unwrap();
@@ -95,7 +95,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_pane_not_found_error() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let nonexistent_pane = PaneId::new(999);
 
         // 获取不存在的面板
@@ -116,7 +116,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_write_to_pane() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let pane_id = mux.create_pane(PtySize::default()).await.unwrap();
 
         // 写入字节数据
@@ -134,7 +134,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_resize_pane() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let pane_id = mux.create_pane(PtySize::new(24, 80)).await.unwrap();
 
         // 验证初始大小
@@ -157,7 +157,7 @@ mod terminal_mux_tests {
 
     #[tokio::test]
     async fn test_shutdown() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
 
         // 创建多个面板
         let _pane1 = mux.create_pane(PtySize::default()).await.unwrap();
@@ -183,7 +183,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_subscribe_and_notify() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let received_count = Arc::new(AtomicUsize::new(0));
         let received_clone = Arc::clone(&received_count);
 
@@ -212,7 +212,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_multiple_subscribers() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let received1 = Arc::new(AtomicUsize::new(0));
         let received2 = Arc::new(AtomicUsize::new(0));
         let received3 = Arc::new(AtomicUsize::new(0));
@@ -273,7 +273,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_subscriber_cleanup() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let cleanup_count = Arc::new(AtomicUsize::new(0));
         let cleanup_clone = Arc::clone(&cleanup_count);
 
@@ -307,7 +307,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_cross_thread_notification() {
-        let mux = Arc::new(TerminalMux::new());
+        let mux = TerminalMux::new_shared();
         let received = Arc::new(AtomicUsize::new(0));
         let received_clone = Arc::clone(&received);
 
@@ -323,7 +323,7 @@ mod notification_system_tests {
         let mux_clone = Arc::clone(&mux);
         let handle = thread::spawn(move || {
             for i in 0..5 {
-                mux_clone.notify_from_any_thread(MuxNotification::PaneOutput {
+                mux_clone.notify(MuxNotification::PaneOutput {
                     pane_id: PaneId::new(1),
                     data: format!("test data {i}").into_bytes().into(),
                 });
@@ -333,9 +333,9 @@ mod notification_system_tests {
 
         handle.join().unwrap();
 
-        // 处理跨线程通知
-        for _ in 0..10 {
-            mux.process_notifications();
+        // 等待后台通知线程处理完成（有超时上限避免卡死）
+        let start = std::time::Instant::now();
+        while received.load(Ordering::Relaxed) < 5 && start.elapsed() < Duration::from_secs(1) {
             thread::sleep(Duration::from_millis(5));
         }
 
@@ -345,7 +345,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_debug_subscriber() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let subscriber = TerminalMux::create_debug_subscriber();
 
         let subscriber_id = mux.subscribe(subscriber);
@@ -366,7 +366,7 @@ mod notification_system_tests {
 
     #[test]
     fn test_subscriber_panic_handling() {
-        let mux = TerminalMux::new();
+        let mux = TerminalMux::new_shared();
         let normal_count = Arc::new(AtomicUsize::new(0));
         let normal_clone = Arc::clone(&normal_count);
 

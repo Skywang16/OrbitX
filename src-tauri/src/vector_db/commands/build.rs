@@ -4,7 +4,7 @@ use crate::{api_error, api_success};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::{ipc::Channel, State};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -95,11 +95,10 @@ struct BuildEntry {
     state: Arc<BuildState>,
 }
 
-static BUILD_TASKS: once_cell::sync::OnceCell<Arc<Mutex<HashMap<String, BuildEntry>>>> =
-    once_cell::sync::OnceCell::new();
+static BUILD_TASKS: OnceLock<Mutex<HashMap<String, BuildEntry>>> = OnceLock::new();
 
-fn build_tasks() -> &'static Arc<Mutex<HashMap<String, BuildEntry>>> {
-    BUILD_TASKS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+fn build_tasks() -> &'static Mutex<HashMap<String, BuildEntry>> {
+    BUILD_TASKS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn send_progress(channel: &Channel<VectorBuildProgress>, p: VectorBuildProgress) -> bool {
@@ -260,7 +259,7 @@ pub async fn vector_build_index_start(
 ) -> TauriApiResult<EmptyData> {
     let mut store = build_tasks().lock();
     start_build_locked(&mut store, path, state.search_engine.clone());
-    Ok(api_success!(EmptyData::default()))
+    Ok(api_success!())
 }
 
 #[tauri::command]
@@ -285,7 +284,7 @@ pub async fn vector_build_index_subscribe(
     };
 
     if !send_progress(&channel, initial) {
-        return Ok(api_success!(EmptyData::default()));
+        return Ok(api_success!());
     }
 
     loop {
@@ -303,7 +302,7 @@ pub async fn vector_build_index_subscribe(
         }
     }
 
-    Ok(api_success!(EmptyData::default()))
+    Ok(api_success!())
 }
 
 #[tauri::command]
@@ -320,5 +319,5 @@ pub async fn vector_build_index_cancel(path: String) -> TauriApiResult<EmptyData
             p.current_file_chunks_done = 0;
         });
     }
-    Ok(api_success!(EmptyData::default()))
+    Ok(api_success!())
 }

@@ -55,14 +55,13 @@ fn validate_git_command(command: &str) -> Result<(), String> {
         return Err("NEVER run hard reset without explicit user request - this is destructive and violates Git Safety Protocol".to_string());
     }
 
-    if (cmd_lower.contains("push") && cmd_lower.contains("main"))
-        || (cmd_lower.contains("push") && cmd_lower.contains("master"))
+    if ((cmd_lower.contains("push") && cmd_lower.contains("main"))
+        || (cmd_lower.contains("push") && cmd_lower.contains("master")))
+        && (cmd_lower.contains("--force") || cmd_lower.contains("-f"))
     {
-        if cmd_lower.contains("--force") || cmd_lower.contains("-f") {
-            return Err(
-                "NEVER force push to main/master - this violates Git Safety Protocol".to_string(),
-            );
-        }
+        return Err(
+            "NEVER force push to main/master - this violates Git Safety Protocol".to_string(),
+        );
     }
 
     // 警告 amend 操作（但不完全禁止，因为有合理使用场景）
@@ -126,8 +125,8 @@ Command Execution Guidelines:
 Tool Usage Policy:
 - Avoid using shell with find, grep, cat, head, tail, sed, awk, or echo commands
 - Instead, use specialized tools:
-  - File search: Use orbit_search (NOT find or ls)
-  - Content search: Use orbit_search (NOT grep or rg)
+  - File search: Use list_files (NOT find or ls)
+  - Content search: Use grep tool (NOT shell grep or rg)
   - Read files: Use read_file (NOT cat/head/tail)
   - Edit files: Use unified_edit (NOT sed/awk)
   - Write files: Use write_file (NOT echo >/cat <<EOF)
@@ -157,7 +156,7 @@ Important Notes:
 - Never use git commands with -i flag (interactive mode not supported)
 - If no changes to commit, do not create empty commit
 - Quote paths with spaces using double quotes
-- Avoid using cat/grep/find - use read_file/orbit_search instead"#
+- Avoid using cat/grep/find - use read_file/grep tool instead"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

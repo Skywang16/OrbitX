@@ -33,7 +33,8 @@ pub struct Token {
 
 impl Token {
     pub fn text<'a>(&self, input: &'a str) -> &'a str {
-        &input[self.start..self.end]
+        // 安全切片：确保索引在有效范围内
+        input.get(self.start..self.end).unwrap_or("")
     }
 }
 
@@ -259,12 +260,15 @@ impl ContextAnalyzer {
         if tokens.len() == 1 && current_index == 1 {
             if let Some(cmd_token) = tokens.get(0) {
                 if cursor_pos > cmd_token.end {
-                    let tail = &input[cmd_token.end..cursor_pos.min(input.len())];
-                    if tail.chars().any(|c| c.is_whitespace()) {
-                        return CompletionPosition::Argument {
-                            command: command_name.to_string(),
-                            position: 0,
-                        };
+                    // 安全切片：确保索引在有效范围内
+                    let end_pos = cursor_pos.min(input.len());
+                    if let Some(tail) = input.get(cmd_token.end..end_pos) {
+                        if tail.chars().any(|c| c.is_whitespace()) {
+                            return CompletionPosition::Argument {
+                                command: command_name.to_string(),
+                                position: 0,
+                            };
+                        }
                     }
                 }
             }
@@ -325,7 +329,9 @@ impl ContextAnalyzer {
         }
 
         if !meta.subcommands.is_empty() {
-            let non_option_args: Vec<&Token> = tokens[1..]
+            let non_option_args: Vec<&Token> = tokens
+                .get(1..)
+                .unwrap_or(&[])
                 .iter()
                 .filter(|t| !t.text(input).starts_with('-'))
                 .collect();
@@ -338,7 +344,9 @@ impl ContextAnalyzer {
         }
 
         // 默认为参数位置
-        let arg_position = tokens[1..current_index]
+        let arg_position = tokens
+            .get(1..current_index)
+            .unwrap_or(&[])
             .iter()
             .filter(|t| !t.text(input).starts_with('-'))
             .count();
@@ -383,7 +391,9 @@ impl ContextAnalyzer {
 
         // 默认为参数
         let command_name = tokens[0].text(input);
-        let arg_position = tokens[1..current_index]
+        let arg_position = tokens
+            .get(1..current_index)
+            .unwrap_or(&[])
             .iter()
             .filter(|t| !t.text(input).starts_with('-'))
             .count();
@@ -414,7 +424,12 @@ impl ContextAnalyzer {
             end += 1;
         }
 
-        chars[start..end].iter().collect()
+        // 安全切片
+        if start <= end && end <= chars.len() {
+            chars[start..end].iter().collect()
+        } else {
+            String::new()
+        }
     }
 
     /// 检查是否是需要值的选项（O(1) 查找）

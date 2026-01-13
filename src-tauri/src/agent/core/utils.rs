@@ -72,7 +72,10 @@ pub fn tail_vec<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
     if limit == 0 || items.len() <= limit {
         items
     } else {
-        items[items.len() - limit..].to_vec()
+        // 直接使用 split_off，零拷贝获取尾部
+        let mut items = items;
+        let split_at = items.len() - limit;
+        items.split_off(split_at)
     }
 }
 

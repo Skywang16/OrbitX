@@ -3,22 +3,21 @@
 pub mod commands;
 pub mod defaults;
 pub mod error;
+pub mod manager;
 pub mod paths;
 pub mod shortcuts;
 pub mod terminal_commands;
 pub mod theme;
 pub mod types;
-pub mod manager;
 
-pub use commands::{
-    config_get, config_open_folder, config_reset_to_defaults, config_set,
-};
+pub use commands::{config_get, config_open_folder, config_reset_to_defaults, config_set};
 pub use defaults::*;
 pub use error::{
     ConfigCommandError, ConfigCommandResult, ConfigError, ConfigPathsError, ConfigPathsResult,
     ConfigResult, ShortcutsActionError, ShortcutsActionResult, ShortcutsError, ShortcutsResult,
     TerminalConfigError, TerminalConfigResult, ThemeConfigError, ThemeConfigResult,
 };
+pub use manager::ConfigManager;
 pub use paths::ConfigPaths;
 pub use shortcuts::{
     shortcuts_add, shortcuts_detect_conflicts, shortcuts_execute_action, shortcuts_get_config,
@@ -36,7 +35,6 @@ pub use theme::{
     ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
     ThemeValidationResult, ThemeValidator,
 };
-pub use manager::ConfigManager;
 pub use types::*;
 
 /// 配置系统版本

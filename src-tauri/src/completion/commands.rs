@@ -9,11 +9,11 @@ use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, OnceLock};
 use tauri::State;
 
 pub struct CompletionState {
-    pub engine: Arc<Mutex<Option<Arc<CompletionEngine>>>>,
+    engine: OnceLock<Arc<CompletionEngine>>,
 }
 
 impl Default for CompletionState {
@@ -25,44 +25,31 @@ impl Default for CompletionState {
 impl CompletionState {
     pub fn new() -> Self {
         Self {
-            engine: Arc::new(Mutex::new(None)),
+            engine: OnceLock::new(),
         }
     }
 
-    pub async fn validate(&self) -> CompletionStateResult<()> {
-        let engine_state = self
-            .engine
-            .lock()
-            .map_err(|_| CompletionStateError::LockPoisoned)?;
-
-        match engine_state.as_ref() {
-            Some(_) => Ok(()),
-            None => Err(CompletionStateError::NotInitialized),
-        }
+    pub fn validate(&self) -> CompletionStateResult<()> {
+        self.engine
+            .get()
+            .map(|_| ())
+            .ok_or(CompletionStateError::NotInitialized)
     }
 
     /// 获取引擎实例
-    pub async fn get_engine(&self) -> CompletionStateResult<Arc<CompletionEngine>> {
-        let engine_state = self
-            .engine
-            .lock()
-            .map_err(|_| CompletionStateError::LockPoisoned)?;
-
-        match engine_state.as_ref() {
-            Some(engine) => Ok(Arc::clone(engine)),
-            None => Err(CompletionStateError::NotInitialized),
-        }
+    pub fn get_engine(&self) -> CompletionStateResult<Arc<CompletionEngine>> {
+        self.engine
+            .get()
+            .map(Arc::clone)
+            .ok_or(CompletionStateError::NotInitialized)
     }
 
     /// 设置引擎实例
-    pub async fn set_engine(&self, engine: Arc<CompletionEngine>) -> CompletionStateResult<()> {
-        let mut engine_state = self
-            .engine
-            .lock()
-            .map_err(|_| CompletionStateError::LockPoisoned)?;
-
-        *engine_state = Some(engine);
-        Ok(())
+    pub fn set_engine(&self, engine: Arc<CompletionEngine>) -> CompletionStateResult<()> {
+        match self.engine.set(engine) {
+            Ok(()) => Ok(()),
+            Err(_) => Ok(()),
+        }
     }
 }
 
@@ -75,7 +62,7 @@ pub async fn completion_get(
     max_results: Option<usize>,
     state: State<'_, CompletionState>,
 ) -> TauriApiResult<CompletionResponse> {
-    let engine = match state.get_engine().await {
+    let engine = match state.get_engine() {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
     };
@@ -105,6 +92,10 @@ pub async fn completion_init_engine(
     cache: State<'_, Arc<UnifiedCache>>,
     database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<EmptyData> {
+    if state.validate().is_ok() {
+        return Ok(api_success!());
+    }
+
     let config = CompletionEngineConfig::default();
 
     match CompletionEngine::with_default_providers(
@@ -114,7 +105,7 @@ pub async fn completion_init_engine(
     )
     .await
     {
-        Ok(engine) => match state.set_engine(Arc::new(engine)).await {
+        Ok(engine) => match state.set_engine(Arc::new(engine)) {
             Ok(_) => Ok(api_success!()),
             Err(_) => Ok(api_error!("completion.init_failed")),
         },
@@ -127,7 +118,7 @@ pub async fn completion_init_engine(
 pub async fn completion_clear_cache(
     state: State<'_, CompletionState>,
 ) -> TauriApiResult<EmptyData> {
-    let engine = match state.get_engine().await {
+    let engine = match state.get_engine() {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
     };
@@ -149,7 +140,7 @@ pub struct CompletionStats {
 pub async fn completion_get_stats(
     state: State<'_, CompletionState>,
 ) -> TauriApiResult<CompletionStats> {
-    let engine = match state.get_engine().await {
+    let engine = match state.get_engine() {
         Ok(engine) => engine,
         Err(_) => return Ok(api_error!("completion.engine_not_initialized")),
     };

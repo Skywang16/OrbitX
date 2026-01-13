@@ -10,7 +10,6 @@ pub use commands::{
 pub use error::{SettingsError, SettingsResult};
 pub use manager::SettingsManager;
 pub use types::{
-    AgentConfig, AgentConfigPatch, EffectiveSettings, McpServerConfig, PermissionRules, RulesConfig,
-    Settings,
+    AgentConfig, AgentConfigPatch, EffectiveSettings, McpServerConfig, PermissionRules,
+    RulesConfig, Settings,
 };
-

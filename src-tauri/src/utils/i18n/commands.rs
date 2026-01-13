@@ -10,18 +10,19 @@ pub async fn language_set_app_language<R: tauri::Runtime>(
     config: State<'_, Arc<ConfigManager>>,
     language: String,
 ) -> TauriApiResult<EmptyData> {
-    let lang = Language::from_str(&language);
+    let lang = Language::from_tag_lossy(&language);
 
     if !LanguageManager::set_language(lang) {
         return Ok(api_error!("common.system_error"));
     }
 
-    if let Err(_) = config
+    if config
         .config_update(|cfg| {
             cfg.app.language = language.clone();
             Ok(())
         })
         .await
+        .is_err()
     {
         return Ok(api_error!("config.update_failed"));
     }

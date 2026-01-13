@@ -1,9 +1,15 @@
 use crate::git::GitService;
-use crate::utils::{ApiResponse, TauriApiResult};
+use crate::utils::{ApiResponse, EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
-use tauri::{AppHandle, Runtime, State};
 
-use super::GitWatcher;
+fn map_git_error<T>(e: crate::git::GitError) -> ApiResponse<T> {
+    match e.code {
+        crate::git::GitErrorCode::GitNotInstalled
+        | crate::git::GitErrorCode::NotARepository
+        | crate::git::GitErrorCode::ParseError => api_error!(e.message.as_str()),
+        _ => ApiResponse::error(e.message),
+    }
+}
 
 #[tauri::command]
 pub async fn git_check_repository(path: String) -> TauriApiResult<Option<String>> {
@@ -96,25 +102,118 @@ pub async fn git_get_diff(
 }
 
 #[tauri::command]
-pub async fn git_watch_start<R: Runtime>(
-    app_handle: AppHandle<R>,
-    watcher: State<'_, GitWatcher>,
-    path: String,
-) -> TauriApiResult<()> {
-    match watcher.start(app_handle, path).await {
-        Ok(()) => Ok(api_success!(())),
-        Err(e) => Ok(api_error!(e.as_str())),
+pub async fn git_stage_paths(path: String, paths: Vec<String>) -> TauriApiResult<EmptyData> {
+    match GitService::stage_paths(&path, &paths).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
     }
 }
 
 #[tauri::command]
-pub async fn git_watch_stop(watcher: State<'_, GitWatcher>) -> TauriApiResult<()> {
-    watcher.stop().await;
-    Ok(api_success!(()))
+pub async fn git_stage_all(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::stage_all(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
 }
 
 #[tauri::command]
-pub async fn git_watch_status(watcher: State<'_, GitWatcher>) -> TauriApiResult<Option<String>> {
-    let path = watcher.watched_path().await;
-    Ok(api_success!(path))
+pub async fn git_unstage_paths(path: String, paths: Vec<String>) -> TauriApiResult<EmptyData> {
+    match GitService::unstage_paths(&path, &paths).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
 }
+
+#[tauri::command]
+pub async fn git_unstage_all(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::unstage_all(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_discard_worktree_paths(
+    path: String,
+    paths: Vec<String>,
+) -> TauriApiResult<EmptyData> {
+    match GitService::discard_worktree_paths(&path, &paths).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_discard_worktree_all(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::discard_worktree_all(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_clean_paths(path: String, paths: Vec<String>) -> TauriApiResult<EmptyData> {
+    match GitService::clean_paths(&path, &paths).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_clean_all(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::clean_all(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_commit(path: String, message: String) -> TauriApiResult<EmptyData> {
+    match GitService::commit(&path, &message).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_push(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::push(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_pull(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::pull(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_fetch(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::fetch(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_checkout_branch(path: String, branch: String) -> TauriApiResult<EmptyData> {
+    match GitService::checkout_branch(&path, &branch).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+#[tauri::command]
+pub async fn git_init_repo(path: String) -> TauriApiResult<EmptyData> {
+    match GitService::init_repo(&path).await {
+        Ok(()) => Ok(api_success!()),
+        Err(e) => Ok(map_git_error(e)),
+    }
+}
+
+// git watch 已被统一文件监听器取代

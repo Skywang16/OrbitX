@@ -3,12 +3,7 @@ use crate::config::error::{ThemeConfigError, ThemeConfigResult};
 use crate::config::paths::ConfigPaths;
 use crate::storage::cache::UnifiedCache;
 use serde::{Deserialize, Serialize};
-use std::{
-    fs,
-    path::PathBuf,
-    sync::Arc,
-    time::SystemTime,
-};
+use std::{fs, path::PathBuf, sync::Arc, time::SystemTime};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +49,10 @@ impl ThemeManager {
         _options: ThemeManagerOptions,
         cache: Arc<UnifiedCache>,
     ) -> ThemeConfigResult<Self> {
-        Ok(Self { paths, _cache: cache })
+        Ok(Self {
+            paths,
+            _cache: cache,
+        })
     }
 
     pub fn paths(&self) -> &ConfigPaths {
@@ -80,7 +78,10 @@ impl ThemeManager {
                 continue;
             }
 
-            let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
             if file_name == "index.json" {
                 continue;
             }
@@ -165,7 +166,9 @@ impl ThemeManager {
             fs::create_dir_all(parent)?;
         }
 
-        let wrapper = ThemeFileWrapper { theme: theme.clone() };
+        let wrapper = ThemeFileWrapper {
+            theme: theme.clone(),
+        };
         let json = serde_json::to_string_pretty(&wrapper)?;
         fs::write(&path, format!("{json}\n"))?;
         Ok(path)

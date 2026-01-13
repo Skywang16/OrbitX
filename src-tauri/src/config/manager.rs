@@ -23,7 +23,9 @@ impl ConfigManager {
         let path = app_dir.join(CONFIG_FILE_NAME);
 
         let initial = if path.exists() {
-            read_json(&path).await.unwrap_or_else(|_| create_default_config())
+            read_json(&path)
+                .await
+                .unwrap_or_else(|_| create_default_config())
         } else {
             create_default_config()
         };
@@ -83,16 +85,21 @@ fn resolve_app_dir() -> ConfigResult<PathBuf> {
 
 async fn read_json(path: &Path) -> ConfigResult<AppConfig> {
     let raw = fs::read_to_string(path).await.map_err(|e| {
-        ConfigError::Internal(format!("failed to read config file {}: {e}", path.display()))
+        ConfigError::Internal(format!(
+            "failed to read config file {}: {e}",
+            path.display()
+        ))
     })?;
     Ok(serde_json::from_str(&raw)?)
 }
 
 async fn write_json(path: &Path, config: &AppConfig) -> ConfigResult<()> {
     let json = serde_json::to_string_pretty(config)?;
-    fs::write(path, format!("{json}\n"))
-        .await
-        .map_err(|e| ConfigError::Internal(format!("failed to write config file {}: {e}", path.display())))?;
+    fs::write(path, format!("{json}\n")).await.map_err(|e| {
+        ConfigError::Internal(format!(
+            "failed to write config file {}: {e}",
+            path.display()
+        ))
+    })?;
     Ok(())
 }
-

@@ -1,13 +1,15 @@
+use crate::api_success;
 use crate::settings::types::{EffectiveSettings, Settings};
 use crate::settings::SettingsManager;
 use crate::utils::{ApiResponse, TauriApiResult};
-use crate::api_success;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
-pub async fn get_global_settings(state: State<'_, Arc<SettingsManager>>) -> TauriApiResult<Settings> {
+pub async fn get_global_settings(
+    state: State<'_, Arc<SettingsManager>>,
+) -> TauriApiResult<Settings> {
     match state.get_global_settings().await {
         Ok(settings) => Ok(api_success!(settings)),
         Err(e) => Ok(ApiResponse::error(e.to_string())),

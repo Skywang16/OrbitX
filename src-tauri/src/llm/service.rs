@@ -53,11 +53,7 @@ impl LLMService {
         let config = LLMProviderConfig {
             provider_type,
             api_key: model.api_key,
-            api_url: if model.api_url.is_empty() {
-                None
-            } else {
-                Some(model.api_url)
-            },
+            api_url: (!model.api_url.is_empty()).then_some(model.api_url),
             options,
         };
 

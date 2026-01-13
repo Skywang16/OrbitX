@@ -1,7 +1,7 @@
 //! Terminal multiplexer configuration management
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tracing::warn;
 
@@ -285,7 +285,7 @@ impl TerminalSystemConfig {
 }
 
 /// Global configuration storage
-static GLOBAL_CONFIG: OnceLock<Arc<Mutex<TerminalSystemConfig>>> = OnceLock::new();
+static GLOBAL_CONFIG: OnceLock<Mutex<TerminalSystemConfig>> = OnceLock::new();
 
 /// Configuration manager facade
 pub struct ConfigManager;
@@ -295,19 +295,17 @@ impl ConfigManager {
     pub fn init() -> MuxConfigResult<()> {
         let config = Self::load_config()?;
         GLOBAL_CONFIG
-            .set(Arc::new(Mutex::new(config)))
+            .set(Mutex::new(config))
             .map_err(|_| MuxConfigError::Internal("Config manager already initialized".into()))?;
         Ok(())
     }
 
     /// Acquire the shared configuration handle
-    pub fn get() -> Arc<Mutex<TerminalSystemConfig>> {
-        GLOBAL_CONFIG
-            .get_or_init(|| {
-                warn!("Terminal mux config manager was not initialised; falling back to defaults");
-                Arc::new(Mutex::new(TerminalSystemConfig::default()))
-            })
-            .clone()
+    pub fn get() -> &'static Mutex<TerminalSystemConfig> {
+        GLOBAL_CONFIG.get_or_init(|| {
+            warn!("Terminal mux config manager was not initialised; falling back to defaults");
+            Mutex::new(TerminalSystemConfig::default())
+        })
     }
 
     /// Load a configuration snapshot (file -> environment -> defaults)
@@ -326,8 +324,7 @@ impl ConfigManager {
     /// Reload the in-memory configuration
     pub fn reload() -> MuxConfigResult<()> {
         let new_config = Self::load_config()?;
-        let config_guard = Self::get();
-        let mut config = config_guard
+        let mut config = Self::get()
             .lock()
             .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
         *config = new_config;
@@ -336,8 +333,7 @@ impl ConfigManager {
 
     /// Return a snapshot of the configuration
     pub fn config_get() -> TerminalSystemConfig {
-        let config_guard = Self::get();
-        let config = config_guard
+        let config = Self::get()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         config.clone()
@@ -348,8 +344,7 @@ impl ConfigManager {
     where
         F: FnOnce(&mut TerminalSystemConfig),
     {
-        let config_guard = Self::get();
-        let mut config = config_guard
+        let mut config = Self::get()
             .lock()
             .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
 

@@ -303,11 +303,17 @@ impl<'a> SummaryScope<'a> {
         }
 
         let split_at = messages.len().saturating_sub(keep_recent_messages);
-        let boundary_ts = messages[split_at].created_at.timestamp().saturating_sub(1);
+        let boundary_ts = messages
+            .get(split_at)
+            .map(|m| m.created_at.timestamp().saturating_sub(1))
+            .unwrap_or(0);
+
+        // 安全切片
+        let compactable = messages.get(..split_at)?;
 
         Some(Self {
             boundary_ts,
-            messages: &messages[..split_at],
+            messages: compactable,
         })
     }
 }

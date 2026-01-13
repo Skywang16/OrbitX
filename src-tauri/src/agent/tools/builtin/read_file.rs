@@ -150,7 +150,12 @@ impl ReadFileTool {
             match self.find_symbol_range(content, language, symbol_name) {
                 Ok(Some((start_line, end_line))) => {
                     let lines: Vec<&str> = content.lines().collect();
-                    let symbol_lines = &lines[start_line..=end_line];
+                    // 安全切片
+                    let symbol_lines = if start_line <= end_line && end_line < lines.len() {
+                        lines.get(start_line..=end_line).unwrap_or(&[])
+                    } else {
+                        &[]
+                    };
                     let result_text = symbol_lines.join("\n");
 
                     ToolResult {
@@ -356,7 +361,8 @@ impl ReadFileTool {
             let start_byte = node.start_byte();
             let end_byte = node.end_byte().min(start_byte + 200); // 限制预览长度
 
-            let preview = &source[start_byte..end_byte];
+            // 安全切片
+            let preview = source.get(start_byte..end_byte).unwrap_or("");
             let first_line = preview.lines().next().unwrap_or("").trim();
 
             let indent = "  ".repeat(depth);
@@ -590,8 +596,8 @@ impl ReadFileTool {
             return false;
         }
 
-        // 提取符号名称并比较
-        let text = &source[node.start_byte()..node.end_byte()];
+        // 提取符号名称并比较 - 安全切片
+        let text = source.get(node.start_byte()..node.end_byte()).unwrap_or("");
         let first_line = text.lines().next().unwrap_or("");
 
         // 简单的名称匹配（可以进一步优化）
@@ -726,6 +732,10 @@ Examples:
                 FileRecordSource::ReadTool,
             ))
             .await?;
+
+        context
+            .note_agent_read_snapshot(path.as_path(), &raw_content)
+            .await;
 
         // 根据模式处理
         let mode = args.mode.as_deref().unwrap_or("full");

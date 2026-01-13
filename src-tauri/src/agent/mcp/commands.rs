@@ -5,10 +5,10 @@ use tauri::State;
 
 use crate::agent::mcp::registry::McpRegistry;
 use crate::agent::mcp::types::{McpServerStatus, McpTestResult};
+use crate::api_success;
 use crate::settings::types::McpServerConfig;
 use crate::settings::SettingsManager;
 use crate::utils::TauriApiResult;
-use crate::{api_success};
 
 /// 获取 MCP 服务器状态列表（需要 workspace 才有意义）
 #[tauri::command]
@@ -21,9 +21,13 @@ pub async fn list_mcp_servers(
     };
 
     let workspace_root = PathBuf::from(workspace);
-    Ok(api_success!(registry.get_servers_status(Some(
-        workspace_root.as_path()
-    ))))
+    let workspace_root = tokio::fs::canonicalize(&workspace_root)
+        .await
+        .unwrap_or(workspace_root);
+    let workspace_key = workspace_root.to_string_lossy().to_string();
+    Ok(api_success!(
+        registry.get_servers_status(Some(workspace_key.as_str()))
+    ))
 }
 
 /// 测试 MCP 服务器连接（不写入 registry）
@@ -37,19 +41,19 @@ pub async fn test_mcp_server(
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
 
-    let result = match crate::agent::mcp::client::McpClient::new(name, &config, &workspace_root).await
-    {
-        Ok(client) => McpTestResult {
-            success: true,
-            tools_count: client.tools().len(),
-            error: None,
-        },
-        Err(e) => McpTestResult {
-            success: false,
-            tools_count: 0,
-            error: Some(e.to_string()),
-        },
-    };
+    let result =
+        match crate::agent::mcp::client::McpClient::new(name, &config, &workspace_root).await {
+            Ok(client) => McpTestResult {
+                success: true,
+                tools_count: client.tools().len(),
+                error: None,
+            },
+            Err(e) => McpTestResult {
+                success: false,
+                tools_count: 0,
+                error: Some(e.to_string()),
+            },
+        };
 
     Ok(api_success!(result))
 }
@@ -66,6 +70,9 @@ pub async fn reload_mcp_servers(
     };
 
     let workspace_root = PathBuf::from(workspace);
+    let workspace_root = tokio::fs::canonicalize(&workspace_root)
+        .await
+        .unwrap_or(workspace_root);
     let effective = match settings_mgr
         .get_effective_settings(Some(workspace_root.clone()))
         .await
@@ -87,7 +94,8 @@ pub async fn reload_mcp_servers(
         .reload_workspace_servers(&workspace_root, &effective, workspace_settings.as_ref())
         .await;
 
-    Ok(api_success!(registry.get_servers_status(Some(
-        workspace_root.as_path()
-    ))))
+    let workspace_key = workspace_root.to_string_lossy().to_string();
+    Ok(api_success!(
+        registry.get_servers_status(Some(workspace_key.as_str()))
+    ))
 }

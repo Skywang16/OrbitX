@@ -125,6 +125,7 @@ Common Errors to Avoid:
             }
         }
 
+        context.note_agent_write_intent(path.as_path()).await;
         snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
         if let Err(err) = fs::write(&path, args.content).await {

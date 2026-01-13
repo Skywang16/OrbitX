@@ -437,6 +437,11 @@ impl UnifiedCache {
         self.data.read().await.len()
     }
 
+    pub async fn is_empty(&self) -> bool {
+        self.purge_expired().await;
+        self.data.read().await.is_empty()
+    }
+
     /// 获取所有键
     pub async fn keys(&self) -> Vec<String> {
         self.purge_expired().await;

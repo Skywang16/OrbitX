@@ -284,15 +284,17 @@
 
         const rootPath = gitStore.repositoryRoot || gitStore.currentPath
         if (rootPath) {
-          try {
-            const files = await gitApi.getCommitFiles(rootPath, hash)
-            commitFiles.value.set(hash, files)
-            commitFiles.value = new Map(commitFiles.value)
-          } catch (e) {
-            console.error('Failed to load commit files:', e)
-            commitFiles.value.set(hash, [])
-            commitFiles.value = new Map(commitFiles.value)
-          }
+          await gitApi
+            .getCommitFiles(rootPath, hash)
+            .then(files => {
+              commitFiles.value.set(hash, files)
+              commitFiles.value = new Map(commitFiles.value)
+            })
+            .finally(() => {
+              loadingCommits.value.delete(hash)
+              loadingCommits.value = new Set(loadingCommits.value)
+            })
+          return
         }
 
         loadingCommits.value.delete(hash)
@@ -307,10 +309,14 @@
         return 'file--added'
       case 'modified':
         return 'file--modified'
+      case 'typeChanged':
+        return 'file--type-changed'
       case 'deleted':
         return 'file--deleted'
       case 'renamed':
         return 'file--renamed'
+      case 'unknown':
+        return 'file--unknown'
       default:
         return ''
     }
@@ -322,12 +328,16 @@
         return 'A'
       case 'modified':
         return 'M'
+      case 'typeChanged':
+        return 'T'
       case 'deleted':
         return 'D'
       case 'renamed':
         return 'R'
       case 'copied':
         return 'C'
+      case 'unknown':
+        return '?'
       default:
         return '?'
     }
@@ -453,9 +463,12 @@
               </span>
               <span class="file-path">{{ getFilePath(file.path) }}</span>
               <span class="file-name">{{ getFileName(file.path) }}</span>
-              <span v-if="file.additions > 0 || file.deletions > 0" class="file-stats">
-                <span v-if="file.additions > 0" class="additions">+{{ file.additions }}</span>
-                <span v-if="file.deletions > 0" class="deletions">-{{ file.deletions }}</span>
+              <span v-if="file.isBinary" class="file-stats">
+                <span class="file-binary">binary</span>
+              </span>
+              <span v-else-if="(file.additions ?? 0) > 0 || (file.deletions ?? 0) > 0" class="file-stats">
+                <span v-if="(file.additions ?? 0) > 0" class="additions">+{{ file.additions }}</span>
+                <span v-if="(file.deletions ?? 0) > 0" class="deletions">-{{ file.deletions }}</span>
               </span>
             </div>
           </template>
@@ -675,12 +688,20 @@
     color: var(--color-warning);
   }
 
+  .file--type-changed {
+    color: var(--color-warning);
+  }
+
   .file--deleted {
     color: var(--color-error);
   }
 
   .file--renamed {
     color: var(--color-info);
+  }
+
+  .file--unknown {
+    color: var(--text-400);
   }
 
   .file-path {
@@ -713,5 +734,12 @@
 
   .deletions {
     color: var(--color-error);
+  }
+
+  .file-binary {
+    color: var(--text-300);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
 </style>

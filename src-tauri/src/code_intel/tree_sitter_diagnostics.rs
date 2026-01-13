@@ -47,7 +47,10 @@ pub enum DiagnosticsError {
     #[error("unsupported language for {file}: {language:?}")]
     UnsupportedLanguage { file: String, language: Language },
     #[error("tree-sitter error for {file}: {error}")]
-    TreeSitter { file: String, error: TreeSitterError },
+    TreeSitter {
+        file: String,
+        error: TreeSitterError,
+    },
     #[error("failed to parse {file}")]
     ParseFailed { file: String },
 }
@@ -58,16 +61,20 @@ pub fn diagnose_syntax(
     language: Language,
 ) -> Result<Vec<TreeSitterDiagnostic>, DiagnosticsError> {
     let mut parser = Parser::new();
-    configure_parser_for_language(&mut parser, file_path, language).map_err(|error| match error {
-        TreeSitterError::UnsupportedLanguage(language) => DiagnosticsError::UnsupportedLanguage {
-            file: file_path.display().to_string(),
-            language,
+    configure_parser_for_language(&mut parser, file_path, language).map_err(
+        |error| match error {
+            TreeSitterError::UnsupportedLanguage(language) => {
+                DiagnosticsError::UnsupportedLanguage {
+                    file: file_path.display().to_string(),
+                    language,
+                }
+            }
+            error => DiagnosticsError::TreeSitter {
+                file: file_path.display().to_string(),
+                error,
+            },
         },
-        error => DiagnosticsError::TreeSitter {
-            file: file_path.display().to_string(),
-            error,
-        },
-    })?;
+    )?;
 
     let tree = parser
         .parse(content, None)
@@ -86,7 +93,11 @@ pub fn diagnose_syntax(
     Ok(out)
 }
 
-fn collect_error_nodes(path: &Path, cursor: &mut TreeCursor<'_>, out: &mut Vec<TreeSitterDiagnostic>) {
+fn collect_error_nodes(
+    path: &Path,
+    cursor: &mut TreeCursor<'_>,
+    out: &mut Vec<TreeSitterDiagnostic>,
+) {
     loop {
         let node = cursor.node();
         maybe_push_diagnostic(path, node, out);
@@ -124,4 +135,3 @@ fn maybe_push_diagnostic(path: &Path, node: Node<'_>, out: &mut Vec<TreeSitterDi
         source: "tree-sitter",
     });
 }
-

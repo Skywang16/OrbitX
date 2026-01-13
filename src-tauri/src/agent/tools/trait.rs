@@ -16,6 +16,12 @@ pub struct ToolDescriptionContext {
     pub cwd: String,
 }
 
+/// Context for checking tool availability at registration time
+#[derive(Debug, Clone, Default)]
+pub struct ToolAvailabilityContext {
+    pub has_vector_index: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSchema {
     pub name: String,
@@ -55,6 +61,13 @@ pub trait RunnableTool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> Value;
+
+    /// Check if this tool is available for registration.
+    /// Tools can override this to conditionally disable themselves.
+    /// Default: always available.
+    fn is_available(&self, _ctx: &ToolAvailabilityContext) -> bool {
+        true
+    }
 
     /// Optional dynamic description based on context
     /// Returns None to use the static description()

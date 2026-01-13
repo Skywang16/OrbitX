@@ -369,48 +369,39 @@ impl SmartCompletionProvider {
         use crate::completion::output_analyzer::OutputAnalyzer;
 
         let analyzer = OutputAnalyzer::global();
-        let provider_mutex = analyzer.get_context_provider();
+        let provider = analyzer.context_provider();
 
         match command {
             "kill" | "killall" => {
                 // 为 kill 命令添加最近的 PID
-                if let Ok(provider) = provider_mutex.lock() {
-                    let pids = provider.get_recent_pids();
-                    for pid in pids {
-                        let item = CompletionItem::new(pid, CompletionType::Value)
-                            .with_score(85.0)
-                            .with_description("最近的进程ID".to_string())
-                            .with_source("context".to_string());
-                        items.push(item);
-                    }
+                for pid in provider.get_recent_pids() {
+                    let item = CompletionItem::new(pid, CompletionType::Value)
+                        .with_score(85.0)
+                        .with_description("最近的进程ID".to_string())
+                        .with_source("context".to_string());
+                    items.push(item);
                 }
             }
             "lsof" => {
                 // 为 lsof 命令添加最近的端口
-                if let Ok(provider) = provider_mutex.lock() {
-                    let ports = provider.get_recent_ports();
-                    for port in ports {
-                        let item = CompletionItem::new(port, CompletionType::Value)
-                            .with_score(85.0)
-                            .with_description("最近使用的端口".to_string())
-                            .with_source("context".to_string());
-                        items.push(item);
-                    }
+                for port in provider.get_recent_ports() {
+                    let item = CompletionItem::new(port, CompletionType::Value)
+                        .with_score(85.0)
+                        .with_description("最近使用的端口".to_string())
+                        .with_source("context".to_string());
+                    items.push(item);
                 }
             }
             "cd" => {
                 // 为 cd 命令添加最近访问的目录
-                if let Ok(provider) = provider_mutex.lock() {
-                    let paths = provider.get_recent_paths();
-                    for path in paths {
-                        // 只添加目录
-                        if std::path::Path::new(&path).is_dir() {
-                            let item = CompletionItem::new(path, CompletionType::Directory)
-                                .with_score(80.0)
-                                .with_description("最近访问的目录".to_string())
-                                .with_source("context".to_string());
-                            items.push(item);
-                        }
+                for path in provider.get_recent_paths() {
+                    // 只添加目录
+                    if std::path::Path::new(&path).is_dir() {
+                        let item = CompletionItem::new(path, CompletionType::Directory)
+                            .with_score(80.0)
+                            .with_description("最近访问的目录".to_string())
+                            .with_source("context".to_string());
+                        items.push(item);
                     }
                 }
             }
@@ -468,11 +459,7 @@ impl SmartCompletionProvider {
 
         let analyzer = OutputAnalyzer::global();
         let (last_cmd, last_output) = {
-            let provider_mutex = analyzer.get_context_provider();
-            let Ok(provider) = provider_mutex.lock() else {
-                return Vec::new();
-            };
-
+            let provider = analyzer.context_provider();
             let Some(last) = provider.get_last_command() else {
                 return Vec::new();
             };

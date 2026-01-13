@@ -42,4 +42,3 @@ fn compile_all(patterns: &[String]) -> Vec<CompiledPermissionPattern> {
 fn matches_any(patterns: &[CompiledPermissionPattern], action: &ToolAction) -> bool {
     patterns.iter().any(|p| p.matches(action))
 }
-
