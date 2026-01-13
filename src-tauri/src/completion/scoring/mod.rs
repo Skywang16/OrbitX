@@ -79,7 +79,7 @@ pub const MATCH_RATIO_WEIGHT: f64 = 20.0;
 /// 确保分数在有效范围内
 #[inline]
 pub fn clamp_score(score: f64) -> f64 {
-    score.max(0.0).min(MAX_SCORE)
+    score.clamp(0.0, MAX_SCORE)
 }
 
 #[cfg(test)]
@@ -99,8 +99,7 @@ mod tests {
         let max_possible = BASE_SCORE + HISTORY_WEIGHT + SMART_BOOST + PREFIX_MATCH_BONUS;
         assert!(
             max_possible <= MAX_SCORE + 20.0,
-            "评分系数总和过大: {}",
-            max_possible
+            "评分系数总和过大: {max_possible}"
         );
     }
 }

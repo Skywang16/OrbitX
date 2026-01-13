@@ -58,7 +58,7 @@ fn build_agent_root_xml(agent_xml: &str, task_prompt: &str, mark_nodes: bool) ->
         agent_xml.to_string()
     };
 
-    let wrapped = format!("<root>{}</root>", inner);
+    let wrapped = format!("<root>{inner}</root>");
     let mut root = Element::parse(Cursor::new(wrapped)).ok()?;
 
     if !task_prompt.trim().is_empty() {
@@ -96,7 +96,7 @@ pub async fn build_agent_user_prompt(
         .to_string();
 
     let built = build_agent_root_xml(&agent_xml, &task_prompt, has_task_node_status_tool)
-        .unwrap_or_else(|| format!("<root>{}</root>", agent_xml));
+        .unwrap_or_else(|| format!("<root>{agent_xml}</root>"));
 
     Ok(built)
 }

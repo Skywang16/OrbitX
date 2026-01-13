@@ -257,7 +257,7 @@ impl TaskExecutor {
                     finished_at
                         .signed_duration_since(started_at)
                         .num_milliseconds()
-                        .max(0) as i64,
+                        .max(0),
                 ),
             }),
         )
@@ -275,8 +275,7 @@ impl TaskExecutor {
         }
 
         ctx.add_user_message(format!(
-            "The agent modified files but introduced syntax errors. Fix them and ensure syntax_diagnostics reports no errors.\nrepairRound={}\n{}",
-            repair_round, preview
+            "The agent modified files but introduced syntax errors. Fix them and ensure syntax_diagnostics reports no errors.\nrepairRound={repair_round}\n{preview}"
         ))
         .await?;
 

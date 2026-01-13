@@ -294,8 +294,10 @@ mod tests {
     #[tokio::test]
     async fn test_file_size_limit() {
         let pool = setup_test_db().await;
-        let mut config = CheckpointConfig::default();
-        config.max_file_size = 10; // 10 bytes limit
+        let config = CheckpointConfig {
+            max_file_size: 10, // 10 bytes limit
+            ..Default::default()
+        };
         let store = BlobStore::new(pool, config);
 
         let large_content = vec![0u8; 20]; // 20 bytes

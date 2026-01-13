@@ -67,8 +67,7 @@ impl CheckpointConfig {
 /// 简单的 glob 匹配实现
 fn glob_match(pattern: &str, text: &str) -> bool {
     // 简化版本，实际应该使用 glob crate
-    if pattern.ends_with("/**") {
-        let prefix = &pattern[..pattern.len() - 3];
+    if let Some(prefix) = pattern.strip_suffix("/**") {
         text.starts_with(prefix)
     } else if pattern.contains('*') {
         // 简单的通配符匹配

@@ -111,7 +111,7 @@ impl CheckpointStorage {
         .await?;
 
         rows.iter()
-            .map(|r| CheckpointSummary::from_row(r))
+            .map(CheckpointSummary::from_row)
             .collect()
     }
 
@@ -183,7 +183,7 @@ impl CheckpointStorage {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.iter().map(|r| FileSnapshot::from_row(r)).collect()
+        rows.iter().map(FileSnapshot::from_row).collect()
     }
 
     pub async fn find_file_snapshot(

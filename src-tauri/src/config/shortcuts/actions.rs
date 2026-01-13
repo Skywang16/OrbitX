@@ -19,6 +19,8 @@ use tracing::{error, warn};
 pub type ActionHandler =
     Box<dyn Fn(&ActionContext) -> ShortcutsActionResult<serde_json::Value> + Send + Sync>;
 
+pub type ShortcutEventListener = Arc<dyn Fn(&ShortcutEvent) + Send + Sync>;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionMetadata {
     pub name: String,
@@ -31,7 +33,7 @@ pub struct ActionMetadata {
 pub struct ActionRegistry {
     handlers: Arc<RwLock<HashMap<String, ActionHandler>>>,
     metadata: Arc<RwLock<HashMap<String, ActionMetadata>>>,
-    event_listeners: Arc<RwLock<Vec<Arc<dyn Fn(&ShortcutEvent) + Send + Sync>>>>,
+    event_listeners: Arc<RwLock<Vec<ShortcutEventListener>>>,
 }
 
 impl ActionRegistry {
@@ -101,7 +103,7 @@ impl ActionRegistry {
         };
 
         if !handler_exists {
-            let error_msg = format!("Action not registered: {}", action_name);
+            let error_msg = format!("Action not registered: {action_name}");
             warn!("{}", error_msg);
 
             self.emit_event(ShortcutEvent {
@@ -143,7 +145,7 @@ impl ActionRegistry {
                 OperationResult::success(value)
             }
             Err(err) => {
-                let error_msg = format!("Action execution failed: {}", err);
+                let error_msg = format!("Action execution failed: {err}");
                 error!("{}", error_msg);
 
                 self.emit_event(ShortcutEvent {

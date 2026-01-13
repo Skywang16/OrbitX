@@ -23,6 +23,12 @@ struct ListFilesArgs {
 
 pub struct ListFilesTool;
 
+impl Default for ListFilesTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListFilesTool {
     pub fn new() -> Self {
         Self
@@ -123,10 +129,9 @@ Common Use Cases:
         ];
 
         for forbidden in &forbidden_paths {
-            if path_str == *forbidden || path_str.starts_with(&format!("{}/", forbidden)) {
+            if path_str == *forbidden || path_str.starts_with(&format!("{forbidden}/")) {
                 return Ok(validation_error(format!(
-                    "Cannot list system directory '{}'. Please specify a user directory path.",
-                    forbidden
+                    "Cannot list system directory '{forbidden}'. Please specify a user directory path."
                 )));
             }
         }
@@ -138,7 +143,7 @@ Common Use Cases:
         let api_response = match response {
             Ok(resp) => resp,
             Err(err) => {
-                return Ok(tool_error(format!("Directory listing failed: {}", err)));
+                return Ok(tool_error(format!("Directory listing failed: {err}")));
             }
         };
 

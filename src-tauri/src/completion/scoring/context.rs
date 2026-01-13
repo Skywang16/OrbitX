@@ -75,7 +75,7 @@ impl ScoringContext {
 
     /// 设置历史权重
     pub fn with_history_weight(mut self, weight: f64) -> Self {
-        self.history_weight = weight.max(0.0).min(1.0);
+        self.history_weight = weight.clamp(0.0, 1.0);
         self
     }
 

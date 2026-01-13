@@ -138,7 +138,7 @@ impl<'a> AuditLogs<'a> {
         let rows = qb.fetch_all(self.db.pool()).await?;
         let entries: Vec<AuditLogEntry> = rows
             .iter()
-            .map(|row| AuditLogEntry::from_row(row))
+            .map(AuditLogEntry::from_row)
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(entries)
@@ -152,7 +152,7 @@ impl<'a> AuditLogs<'a> {
         .fetch_optional(self.db.pool())
         .await?;
 
-        Ok(row.map(|r| AuditLogEntry::from_row(&r)).transpose()?)
+        row.map(|r| AuditLogEntry::from_row(&r)).transpose()
     }
 
     pub async fn find_all(&self) -> RepositoryResult<Vec<AuditLogEntry>> {

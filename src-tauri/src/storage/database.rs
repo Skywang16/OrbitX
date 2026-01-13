@@ -217,9 +217,7 @@ impl DatabaseManager {
         let key_bytes = self.key_vault.master_key().await?;
         let cipher = ChaCha20Poly1305::new(key_bytes.as_ref().into());
         let (nonce_bytes, payload) = encrypted.split_at(NONCE_LEN);
-        let nonce = nonce_bytes
-            .try_into()
-            .map_err(|_| DatabaseError::InvalidEncryptedData)?;
+        let nonce = nonce_bytes.into();
         let plaintext = cipher
             .decrypt(nonce, payload)
             .map_err(DatabaseError::from)?;
@@ -241,8 +239,7 @@ impl DatabaseManager {
                     .await
                     .map_err(|err| {
                         DatabaseError::internal(format!(
-                            "Failed to execute SQL statement `{}`: {err}",
-                            statement
+                            "Failed to execute SQL statement `{statement}`: {err}"
                         ))
                     })?;
             }
@@ -272,8 +269,7 @@ impl DatabaseManager {
             .await
             .map_err(|err| {
                 DatabaseError::internal(format!(
-                    "Failed to insert default AI config `{}`: {err}",
-                    feature_name
+                    "Failed to insert default AI config `{feature_name}`: {err}"
                 ))
             })?;
         }
@@ -384,7 +380,7 @@ impl KeyVault {
                 // 如果获取机器 UID 失败，使用主机名作为备选方案
                 hostname::get()
                     .map(|h| h.to_string_lossy().to_string())
-                    .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {}", e)))
+                    .map_err(|e| DatabaseError::internal(format!("获取主机名失败: {e}")))
             }
         }
     }
@@ -396,7 +392,7 @@ impl KeyVault {
             })?;
         }
         let encoded = BASE64.encode(bytes);
-        let payload = format!("{}\n{}\n", KEY_FILE_VERSION, encoded);
+        let payload = format!("{KEY_FILE_VERSION}\n{encoded}\n");
         let tmp_path = self.path.with_extension("tmp");
         tokio::fs::write(&tmp_path, payload.as_bytes())
             .await

@@ -63,7 +63,7 @@ pub fn diagnose_syntax(
     let mut parser = Parser::new();
     configure_parser_for_language(&mut parser, file_path, language).map_err(
         |error| match error {
-            TreeSitterError::UnsupportedLanguage(language) => {
+            TreeSitterError::Unsupported(language) => {
                 DiagnosticsError::UnsupportedLanguage {
                     file: file_path.display().to_string(),
                     language,

@@ -98,11 +98,11 @@ pub enum ReplayError {
 #[derive(Debug, Error)]
 pub enum TerminalValidationError {
     #[error("Invalid pane id")]
-    InvalidPaneId,
+    PaneId,
     #[error("Invalid command history entry at index {index}: {reason}")]
-    InvalidHistoryEntry { index: usize, reason: String },
+    HistoryEntry { index: usize, reason: String },
     #[error("Invalid current command: {reason}")]
-    InvalidCurrentCommand { reason: String },
+    CurrentCommand { reason: String },
 }
 
 #[derive(Debug, Error)]

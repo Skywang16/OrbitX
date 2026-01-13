@@ -126,7 +126,7 @@ impl ReactOrchestrator {
                 .call_stream(llm_request, cancel_token)
                 .await
                 .map_err(|e| {
-                    TaskExecutorError::InternalError(format!("LLM stream call failed: {}", e))
+                    TaskExecutorError::InternalError(format!("LLM stream call failed: {e}"))
                 })?;
 
             // 新的流处理状态
@@ -173,7 +173,7 @@ impl ReactOrchestrator {
                     Ok(StreamEvent::ContentBlockDelta { index, delta }) => {
                         if let Some(block) = current_blocks.get_mut(&index) {
                             match delta {
-                                ContentDelta::TextDelta { text } => {
+                                ContentDelta::Text { text } => {
                                     if let BlockAccumulator::Text(s) = block {
                                         s.push_str(&text);
                                         if text_stream_id.is_none() {
@@ -194,12 +194,12 @@ impl ReactOrchestrator {
                                         iter_ctx.append_output(&text);
                                     }
                                 }
-                                ContentDelta::InputJsonDelta { partial_json } => {
+                                ContentDelta::InputJson { partial_json } => {
                                     if let BlockAccumulator::ToolUse { input_json, .. } = block {
                                         input_json.push_str(&partial_json);
                                     }
                                 }
-                                ContentDelta::ThinkingDelta { thinking } => {
+                                ContentDelta::Thinking { thinking } => {
                                     if let BlockAccumulator::Thinking(s) = block {
                                         s.push_str(&thinking);
                                         if thinking_stream_id.is_none() {
@@ -336,10 +336,9 @@ impl ReactOrchestrator {
                         let _ = context
                             .set_system_prompt(format!(
                                 "<system-reminder type=\"duplicate-tools\">\n\
-                                 You called {} duplicate tool(s) in this iteration.\n\
+                                 You called {duplicates_count} duplicate tool(s) in this iteration.\n\
                                  The results haven't changed. Please use the existing results instead of re-calling the same tools.\n\
-                                 </system-reminder>",
-                                duplicates_count
+                                 </system-reminder>"
                             ))
                             .await;
                     }
@@ -376,7 +375,7 @@ impl ReactOrchestrator {
                             if status != crate::agent::tools::ToolResultStatus::Success {
                                 react.fail_iteration(
                                     react_iteration_index,
-                                    format!("Tool {} failed", tool_name),
+                                    format!("Tool {tool_name} failed"),
                                 );
                             } else {
                                 react.reset_error_counter();

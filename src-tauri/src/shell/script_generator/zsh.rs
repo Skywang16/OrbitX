@@ -134,7 +134,7 @@ fi
     if !config.custom_env_vars.is_empty() {
         script.push_str("\n# 自定义环境变量\n");
         for (key, value) in &config.custom_env_vars {
-            script.push_str(&format!("export {}=\"{}\"\n", key, value));
+            script.push_str(&format!("export {key}=\"{value}\"\n"));
         }
     }
 

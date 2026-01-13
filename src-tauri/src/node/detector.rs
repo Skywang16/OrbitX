@@ -113,7 +113,7 @@ pub fn get_current_version(cwd: Option<&str>) -> Result<Option<String>, String> 
             "-c"
         };
 
-        let command = format!("cd '{}' && node -v", dir);
+        let command = format!("cd '{dir}' && node -v");
         // 在非 Windows 平台以 login shell 执行，Windows 下不传递无效的 "-l" 参数
         let output_result = {
             let mut cmd = Command::new(shell_cmd);
@@ -127,7 +127,7 @@ pub fn get_current_version(cwd: Option<&str>) -> Result<Option<String>, String> 
                 let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 if !version.is_empty() {
                     let cleaned = version.trim_start_matches('v');
-                    return Ok(Some(format!("v{}", cleaned)));
+                    return Ok(Some(format!("v{cleaned}")));
                 }
             }
         }
@@ -146,7 +146,7 @@ pub fn get_current_version(cwd: Option<&str>) -> Result<Option<String>, String> 
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let cleaned = version.trim_start_matches('v');
-            return Ok(Some(format!("v{}", cleaned)));
+            return Ok(Some(format!("v{cleaned}")));
         }
     }
 
@@ -187,14 +187,14 @@ fn read_versions_from_dir(path: PathBuf, add_v_prefix: bool) -> Result<Vec<Strin
     }
 
     let entries = std::fs::read_dir(&path)
-        .map_err(|e| format!("Failed to read versions directory: {}", e))?;
+        .map_err(|e| format!("Failed to read versions directory: {e}"))?;
 
     let mut versions = Vec::new();
     for entry in entries.flatten() {
         if let Some(name) = entry.file_name().to_str() {
             if !name.starts_with('.') && entry.path().is_dir() {
                 let version = if add_v_prefix && !name.starts_with('v') {
-                    format!("v{}", name)
+                    format!("v{name}")
                 } else {
                     name.to_string()
                 };
@@ -210,7 +210,7 @@ fn read_versions_from_dir(path: PathBuf, add_v_prefix: bool) -> Result<Vec<Strin
 // 获取 nvm 版本列表
 fn get_nvm_versions() -> Result<Vec<String>, String> {
     let nvm_dir = env::var("NVM_DIR")
-        .or_else(|_| env::var("HOME").map(|h| format!("{}/.nvm", h)))
+        .or_else(|_| env::var("HOME").map(|h| format!("{h}/.nvm")))
         .map_err(|_| "Cannot determine NVM_DIR".to_string())?;
 
     let versions_path = PathBuf::from(nvm_dir).join("versions/node");
@@ -246,7 +246,7 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 // 获取 fnm 版本列表
 fn get_fnm_versions() -> Result<Vec<String>, String> {
     let fnm_dir = env::var("FNM_DIR")
-        .or_else(|_| env::var("HOME").map(|h| format!("{}/.local/share/fnm", h)))
+        .or_else(|_| env::var("HOME").map(|h| format!("{h}/.local/share/fnm")))
         .map_err(|_| "Cannot determine FNM_DIR".to_string())?;
 
     let versions_path = PathBuf::from(fnm_dir).join("node-versions");
@@ -257,7 +257,7 @@ fn get_fnm_versions() -> Result<Vec<String>, String> {
 // 获取 volta 版本列表
 fn get_volta_versions() -> Result<Vec<String>, String> {
     let volta_home = env::var("VOLTA_HOME")
-        .or_else(|_| env::var("HOME").map(|h| format!("{}/.volta", h)))
+        .or_else(|_| env::var("HOME").map(|h| format!("{h}/.volta")))
         .map_err(|_| "Cannot determine VOLTA_HOME".to_string())?;
 
     let inventory_path = PathBuf::from(volta_home).join("tools/inventory/node");
@@ -275,7 +275,7 @@ fn get_n_versions() -> Result<Vec<String>, String> {
 // 获取 asdf 版本列表
 fn get_asdf_versions() -> Result<Vec<String>, String> {
     let asdf_dir = env::var("ASDF_DATA_DIR")
-        .or_else(|_| env::var("HOME").map(|h| format!("{}/.asdf", h)))
+        .or_else(|_| env::var("HOME").map(|h| format!("{h}/.asdf")))
         .map_err(|_| "Cannot determine ASDF_DATA_DIR".to_string())?;
 
     let versions_path = PathBuf::from(asdf_dir).join("installs/nodejs");

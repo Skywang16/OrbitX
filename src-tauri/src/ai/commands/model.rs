@@ -49,7 +49,7 @@ pub async fn ai_models_remove(
 
     match state.ai_service.remove_model(&model_id).await {
         Ok(_) => Ok(api_success!(
-            EmptyData::default(),
+            EmptyData,
             "ai.remove_model_success"
         )),
         Err(error) => {
@@ -70,7 +70,7 @@ pub async fn ai_models_update(
 
     match state.ai_service.update_model(&model_id, updates).await {
         Ok(_) => Ok(api_success!(
-            EmptyData::default(),
+            EmptyData,
             "ai.update_model_success"
         )),
         Err(error) => {
@@ -98,7 +98,7 @@ pub async fn ai_models_test_connection(
 
     match state.ai_service.test_connection_with_config(&config).await {
         Ok(_result) => Ok(api_success!(
-            EmptyData::default(),
+            EmptyData,
             "ai.test_connection_success"
         )),
         Err(e) => Ok(api_error!("ai.test_connection_error", "error" => e.to_string())),

@@ -41,7 +41,7 @@ impl TerminalState {
         // 验证Mux实例是否可访问
         mux.pane_count();
 
-        Ok(ApiResponse::ok(EmptyData::default()))
+        Ok(ApiResponse::ok(EmptyData))
     }
 }
 

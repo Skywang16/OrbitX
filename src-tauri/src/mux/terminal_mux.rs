@@ -216,7 +216,7 @@ impl TerminalMux {
 
             panes
                 .remove(&pane_id)
-                .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?
+                .ok_or(TerminalMuxError::PaneNotFound { pane_id })?
         };
 
         // 标记面板为死亡状态，停止I/O线程
@@ -253,7 +253,7 @@ impl TerminalMux {
     pub fn write_to_pane(&self, pane_id: PaneId, data: &[u8]) -> TerminalMuxResult<()> {
         let pane = self
             .get_pane(pane_id)
-            .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?;
+            .ok_or(TerminalMuxError::PaneNotFound { pane_id })?;
 
         pane.write(data)?;
         Ok(())
@@ -267,7 +267,7 @@ impl TerminalMux {
     pub fn resize_pane(&self, pane_id: PaneId, size: PtySize) -> TerminalMuxResult<()> {
         let pane = self
             .get_pane(pane_id)
-            .ok_or_else(|| TerminalMuxError::PaneNotFound { pane_id })?;
+            .ok_or(TerminalMuxError::PaneNotFound { pane_id })?;
 
         pane.resize(size)?;
 
@@ -393,7 +393,7 @@ impl TerminalMux {
                 .shell_integration
                 .generate_shell_script(&shell_type)
                 .map_err(|err| {
-                    TerminalMuxError::Internal(format!("Shell integration error: {}", err))
+                    TerminalMuxError::Internal(format!("Shell integration error: {err}"))
                 })?;
             self.write_to_pane(pane_id, script.as_bytes())?;
         }
@@ -434,7 +434,7 @@ impl TerminalMux {
     ) -> TerminalMuxResult<String> {
         self.shell_integration
             .generate_shell_script(shell_type)
-            .map_err(|err| TerminalMuxError::Internal(format!("Shell integration error: {}", err)))
+            .map_err(|err| TerminalMuxError::Internal(format!("Shell integration error: {err}")))
     }
 
     /// 生成Shell环境变量

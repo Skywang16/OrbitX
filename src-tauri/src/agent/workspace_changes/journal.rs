@@ -72,7 +72,7 @@ impl WorkspaceChangeJournal {
         abs_path: PathBuf,
         content: &str,
     ) {
-        if content.as_bytes().len() as u64 > MAX_SNAPSHOT_BYTES {
+        if content.len() as u64 > MAX_SNAPSHOT_BYTES {
             return;
         }
 
@@ -166,7 +166,7 @@ async fn handle_command(workspaces: &mut BTreeMap<Arc<str>, WorkspaceState>, cmd
             let pending = workspaces
                 .get_mut(&workspace_key)
                 .map(|s| s.pending.drain(..).collect())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             let _ = reply.send(pending);
         }
     }

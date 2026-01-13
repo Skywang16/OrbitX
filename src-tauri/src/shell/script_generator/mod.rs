@@ -139,7 +139,7 @@ impl ShellScriptGenerator {
                 source: err,
             })?;
 
-        writeln!(file, "\n{}", script_content).map_err(|err| ShellScriptError::Io {
+        writeln!(file, "\n{script_content}").map_err(|err| ShellScriptError::Io {
             operation: format!("write integration script {}", config_path.display()),
             source: err,
         })?;

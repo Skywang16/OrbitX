@@ -138,7 +138,7 @@ fn main() {
 }
 "#;
         let tokens = TokenEstimator::estimate_tokens(code);
-        assert!((15..=25).contains(&tokens), "Got {} tokens", tokens);
+        assert!((15..=25).contains(&tokens), "Got {tokens} tokens");
     }
 
     #[test]

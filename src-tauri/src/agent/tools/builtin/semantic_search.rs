@@ -68,7 +68,7 @@ impl SemanticSearchTool {
             .search_engine
             .search_in_workspace(path, query, search_options)
             .await
-            .map_err(|e| format!("Vector search failed: {}", e))?;
+            .map_err(|e| format!("Vector search failed: {e}"))?;
 
         let mut entries: Vec<SemanticResultEntry> = Vec::new();
         for r in results.into_iter().take(max_results) {
@@ -210,8 +210,7 @@ Examples:
                 if entries.is_empty() {
                     return Ok(ToolResult {
                         content: vec![ToolResultContent::Success(format!(
-                            "No code found matching \"{}\"",
-                            query
+                            "No code found matching \"{query}\""
                         ))],
                         status: ToolResultStatus::Success,
                         cancel_reason: None,
@@ -225,8 +224,7 @@ Examples:
 
                 Ok(ToolResult {
                     content: vec![ToolResultContent::Success(format!(
-                        "{}\n\n{}",
-                        summary, details
+                        "{summary}\n\n{details}"
                     ))],
                     status: ToolResultStatus::Success,
                     cancel_reason: None,

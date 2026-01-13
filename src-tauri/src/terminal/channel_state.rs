@@ -6,6 +6,12 @@ pub struct TerminalChannelState {
     pub manager: Arc<TerminalChannelManager>,
 }
 
+impl Default for TerminalChannelState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TerminalChannelState {
     pub fn new() -> Self {
         Self {

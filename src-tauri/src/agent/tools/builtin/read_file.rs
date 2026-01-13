@@ -36,6 +36,12 @@ struct ReadFileArgs {
 
 pub struct ReadFileTool;
 
+impl Default for ReadFileTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReadFileTool {
     pub fn new() -> Self {
         Self
@@ -122,7 +128,7 @@ impl ReadFileTool {
                         "language": format!("{:?}", language),
                     })),
                 },
-                Err(e) => validation_error(format!("Failed to parse code outline: {}", e)),
+                Err(e) => validation_error(format!("Failed to parse code outline: {e}")),
             }
         } else {
             // 不支持的语言，返回简单的行号索引
@@ -172,8 +178,8 @@ impl ReadFileTool {
                         })),
                     }
                 }
-                Ok(None) => validation_error(format!("Symbol '{}' not found in file", symbol_name)),
-                Err(e) => validation_error(format!("Failed to parse file: {}", e)),
+                Ok(None) => validation_error(format!("Symbol '{symbol_name}' not found in file")),
+                Err(e) => validation_error(format!("Failed to parse file: {e}")),
             }
         } else {
             validation_error("Language not supported for symbol extraction")
@@ -195,7 +201,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_python::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Python language: {}", e),
+                        error: format!("Failed to set Python language: {e}"),
                     })?;
             }
             Language::TypeScript => {
@@ -203,7 +209,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set TypeScript language: {}", e),
+                        error: format!("Failed to set TypeScript language: {e}"),
                     })?;
             }
             Language::JavaScript => {
@@ -211,7 +217,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_javascript::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set JavaScript language: {}", e),
+                        error: format!("Failed to set JavaScript language: {e}"),
                     })?;
             }
             Language::Rust => {
@@ -219,7 +225,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_rust::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Rust language: {}", e),
+                        error: format!("Failed to set Rust language: {e}"),
                     })?;
             }
             Language::Go => {
@@ -227,7 +233,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_go::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Go language: {}", e),
+                        error: format!("Failed to set Go language: {e}"),
                     })?;
             }
             Language::Java => {
@@ -235,7 +241,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_java::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Java language: {}", e),
+                        error: format!("Failed to set Java language: {e}"),
                     })?;
             }
             Language::C => {
@@ -243,7 +249,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_c::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C language: {}", e),
+                        error: format!("Failed to set C language: {e}"),
                     })?;
             }
             Language::Cpp => {
@@ -251,7 +257,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_cpp::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C++ language: {}", e),
+                        error: format!("Failed to set C++ language: {e}"),
                     })?;
             }
             Language::CSharp => {
@@ -259,7 +265,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C# language: {}", e),
+                        error: format!("Failed to set C# language: {e}"),
                     })?;
             }
             Language::Ruby => {
@@ -267,13 +273,13 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_ruby::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Ruby language: {}", e),
+                        error: format!("Failed to set Ruby language: {e}"),
                     })?;
             }
             _ => {
                 return Err(ToolExecutorError::InvalidArguments {
                     tool_name: "read_file".to_string(),
-                    error: format!("Language {:?} not supported for parsing", language),
+                    error: format!("Language {language:?} not supported for parsing"),
                 });
             }
         }
@@ -283,20 +289,19 @@ impl ReadFileTool {
                 .parse(content, None)
                 .ok_or_else(|| ToolExecutorError::ExecutionFailed {
                     tool_name: "read_file".to_string(),
-                    error: format!("Failed to parse {:?} code", language),
+                    error: format!("Failed to parse {language:?} code"),
                 })?;
 
         let mut outline = Vec::new();
         let mut cursor = tree.root_node().walk();
 
-        self.extract_outline_recursive(&mut cursor, content, &mut outline, language, 0);
+        Self::extract_outline_recursive(&mut cursor, content, &mut outline, language, 0);
 
         Ok(outline.join("\n"))
     }
 
     /// 递归提取大纲
     fn extract_outline_recursive(
-        &self,
         cursor: &mut TreeCursor,
         source: &str,
         outline: &mut Vec<String>,
@@ -380,7 +385,7 @@ impl ReadFileTool {
         // 递归处理子节点
         if cursor.goto_first_child() {
             loop {
-                self.extract_outline_recursive(cursor, source, outline, language, depth + 1);
+                Self::extract_outline_recursive(cursor, source, outline, language, depth + 1);
                 if !cursor.goto_next_sibling() {
                     break;
                 }
@@ -405,7 +410,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_python::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Python language: {}", e),
+                        error: format!("Failed to set Python language: {e}"),
                     })?;
             }
             Language::TypeScript => {
@@ -413,7 +418,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set TypeScript language: {}", e),
+                        error: format!("Failed to set TypeScript language: {e}"),
                     })?;
             }
             Language::JavaScript => {
@@ -421,7 +426,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_javascript::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set JavaScript language: {}", e),
+                        error: format!("Failed to set JavaScript language: {e}"),
                     })?;
             }
             Language::Rust => {
@@ -429,7 +434,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_rust::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Rust language: {}", e),
+                        error: format!("Failed to set Rust language: {e}"),
                     })?;
             }
             Language::Go => {
@@ -437,7 +442,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_go::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Go language: {}", e),
+                        error: format!("Failed to set Go language: {e}"),
                     })?;
             }
             Language::Java => {
@@ -445,7 +450,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_java::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Java language: {}", e),
+                        error: format!("Failed to set Java language: {e}"),
                     })?;
             }
             Language::C => {
@@ -453,7 +458,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_c::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C language: {}", e),
+                        error: format!("Failed to set C language: {e}"),
                     })?;
             }
             Language::Cpp => {
@@ -461,7 +466,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_cpp::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C++ language: {}", e),
+                        error: format!("Failed to set C++ language: {e}"),
                     })?;
             }
             Language::CSharp => {
@@ -469,7 +474,7 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set C# language: {}", e),
+                        error: format!("Failed to set C# language: {e}"),
                     })?;
             }
             Language::Ruby => {
@@ -477,13 +482,13 @@ impl ReadFileTool {
                     .set_language(&tree_sitter_ruby::LANGUAGE.into())
                     .map_err(|e| ToolExecutorError::ExecutionFailed {
                         tool_name: "read_file".to_string(),
-                        error: format!("Failed to set Ruby language: {}", e),
+                        error: format!("Failed to set Ruby language: {e}"),
                     })?;
             }
             _ => {
                 return Err(ToolExecutorError::InvalidArguments {
                     tool_name: "read_file".to_string(),
-                    error: format!("Language {:?} not supported for parsing", language),
+                    error: format!("Language {language:?} not supported for parsing"),
                 });
             }
         }
@@ -493,7 +498,7 @@ impl ReadFileTool {
                 .parse(content, None)
                 .ok_or_else(|| ToolExecutorError::ExecutionFailed {
                     tool_name: "read_file".to_string(),
-                    error: format!("Failed to parse {:?} code", language),
+                    error: format!("Failed to parse {language:?} code"),
                 })?;
 
         let mut cursor = tree.root_node().walk();
@@ -750,7 +755,8 @@ Examples:
                     ))
                 }
             }
-            "full" | _ => Ok(self.read_full(&raw_content, args.offset, args.limit)),
+            "full" => Ok(self.read_full(&raw_content, args.offset, args.limit)),
+            _ => Ok(self.read_full(&raw_content, args.offset, args.limit)),
         }
     }
 }

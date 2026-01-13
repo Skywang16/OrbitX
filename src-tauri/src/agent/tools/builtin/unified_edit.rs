@@ -320,8 +320,8 @@ impl MultiStrategyMatcher {
         }
 
         // 计算相对缩进差异
-        let search_base = search_indents.get(0).copied().unwrap_or(0);
-        let window_base = window_indents.get(0).copied().unwrap_or(0);
+        let search_base = search_indents.first().copied().unwrap_or(0);
+        let window_base = window_indents.first().copied().unwrap_or(0);
 
         for (&search_indent, &window_indent) in search_indents.iter().zip(window_indents.iter()) {
             let search_relative = search_indent.saturating_sub(search_base);
@@ -414,6 +414,12 @@ fn apply_replacement_with_indent(
 
 pub struct UnifiedEditTool;
 
+impl Default for UnifiedEditTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnifiedEditTool {
     pub fn new() -> Self {
         Self
@@ -454,7 +460,7 @@ impl UnifiedEditTool {
         }
     }
 
-    async fn ensure_parent(path: &PathBuf) -> Result<(), ToolResult> {
+    async fn ensure_parent(path: &Path) -> Result<(), ToolResult> {
         if let Some(parent) = path.parent() {
             if !parent.exists() {
                 return Err(error_result(format!(
@@ -606,8 +612,7 @@ Examples:
                     let match_count = original.matches(&old_text).count();
                     if match_count > 1 {
                         return Ok(error_result(format!(
-                            "Found {} matches. Please provide more context to make a unique match.",
-                            match_count
+                            "Found {match_count} matches. Please provide more context to make a unique match."
                         )));
                     }
 
@@ -732,14 +737,13 @@ Examples:
                 let threshold_pct = (DEFAULT_FUZZY_THRESHOLD * 100.0) as u32;
 
                 let error_msg = format!(
-                    "No sufficiently similar match found (needs {}% similarity)\n\n\
+                    "No sufficiently similar match found (needs {threshold_pct}% similarity)\n\n\
                     Tried strategies: Exact, LineTrimmed, WhitespaceNormalized, IndentationFlexible, BlockAnchor\n\n\
                     Suggestions:\n\
                     1. Use read_file to verify the file's current content\n\
                     2. Check for exact whitespace/indentation match\n\
                     3. Provide more context to make the match unique\n\
-                    4. Try using mode='outline' to see file structure first",
-                    threshold_pct
+                    4. Try using mode='outline' to see file structure first"
                 );
 
                 return Ok(error_result(error_msg));
@@ -789,7 +793,7 @@ Examples:
 
                 let insert_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
                 let position = after_line.min(lines.len() as u32) as usize;
-                lines.splice(position..position, insert_lines.into_iter());
+                lines.splice(position..position, insert_lines);
                 let mut updated = lines.join("\n");
                 if (trailing_newline || content.ends_with('\n')) && !updated.ends_with('\n') {
                     updated.push('\n');
@@ -830,14 +834,14 @@ Examples:
                 let patch = match Patch::from_str(&diff_content) {
                     Ok(patch) => patch,
                     Err(err) => {
-                        return Ok(error_result(format!("Failed to parse patch: {}", err)));
+                        return Ok(error_result(format!("Failed to parse patch: {err}")));
                     }
                 };
 
                 let updated = match apply(&original, &patch) {
                     Ok(result) => result,
                     Err(err) => {
-                        return Ok(error_result(format!("Failed to apply patch: {}", err)));
+                        return Ok(error_result(format!("Failed to apply patch: {err}")));
                     }
                 };
 

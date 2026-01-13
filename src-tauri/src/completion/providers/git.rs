@@ -25,7 +25,7 @@ impl GitCompletionProvider {
     /// 检查是否在git仓库中
     async fn is_git_repository(&self, working_directory: &Path) -> CompletionProviderResult<bool> {
         let path_str = working_directory.to_string_lossy().to_string();
-        let cache_key = format!("completion/git/repo:{}", path_str);
+        let cache_key = format!("completion/git/repo:{path_str}");
 
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Some(is_repo) = cached_result.as_bool() {
@@ -122,9 +122,9 @@ impl GitCompletionProvider {
             }
 
             let (completion_type, description, score) = if branch.starts_with("origin/") {
-                (CompletionType::Value, format!("远程分支: {}", branch), 8.0)
+                (CompletionType::Value, format!("远程分支: {branch}"), 8.0)
             } else {
-                (CompletionType::Value, format!("本地分支: {}", branch), 10.0)
+                (CompletionType::Value, format!("本地分支: {branch}"), 10.0)
             };
 
             let mut item = CompletionItem::new(branch.to_string(), completion_type)
@@ -230,7 +230,7 @@ impl GitCompletionProvider {
                 };
 
                 let item = CompletionItem::new(filename.to_string(), CompletionType::File)
-                    .with_description(format!("{}: {}", description, filename))
+                    .with_description(format!("{description}: {filename}"))
                     .with_score(score)
                     .with_source("git".to_string())
                     .with_metadata("type".to_string(), "file".to_string())

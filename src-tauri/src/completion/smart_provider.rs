@@ -151,7 +151,7 @@ impl SmartCompletionProvider {
                                     .with_score(90.0);
 
                             if option.takes_value {
-                                item = item.with_display_text(format!("{} <value>", long));
+                                item = item.with_display_text(format!("{long} <value>"));
                             }
 
                             items.push(item);
@@ -168,7 +168,7 @@ impl SmartCompletionProvider {
                                     .with_score(85.0);
 
                             if option.takes_value {
-                                item = item.with_display_text(format!("{} <value>", short));
+                                item = item.with_display_text(format!("{short} <value>"));
                             }
 
                             items.push(item);
@@ -251,7 +251,7 @@ impl SmartCompletionProvider {
             for subcommand in &meta.subcommands {
                 if subcommand.starts_with(&context.current_word) {
                     let item = CompletionItem::new(subcommand.clone(), CompletionType::Subcommand)
-                        .with_description(format!("{} 子命令", parent))
+                        .with_description(format!("{parent} 子命令"))
                         .with_source("builtin".to_string())
                         .with_score(95.0);
                     items.push(item);
@@ -540,7 +540,7 @@ impl SmartCompletionProvider {
             std::collections::HashMap::new();
 
         for mut item in items {
-            item.score = item.score.max(0.0).min(100.0);
+            item.score = item.score.clamp(0.0, 100.0);
             seen.entry(item.text.clone())
                 .and_modify(|existing| {
                     if item.score > existing.score {
@@ -579,7 +579,7 @@ fn transition_confidence(now_ts: u64, count: u64, success_count: u64, last_used_
         return 0.0;
     }
 
-    let success_rate = (success_count as f64 / count as f64).max(0.0).min(1.0);
+    let success_rate = (success_count as f64 / count as f64).clamp(0.0, 1.0);
     let seconds_ago = now_ts.saturating_sub(last_used_ts);
     let recency = match seconds_ago {
         0..=3600 => 1.0,

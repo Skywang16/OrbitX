@@ -159,8 +159,7 @@ impl ToolRegistry {
         match self.entries.entry(key) {
             Entry::Occupied(_) => {
                 return Err(ToolExecutorError::ConfigurationError(format!(
-                    "Tool already registered: {}",
-                    name
+                    "Tool already registered: {name}"
                 )));
             }
             Entry::Vacant(entry) => {
@@ -262,7 +261,7 @@ impl ToolRegistry {
             return self
                 .make_error_result(
                     &resolved,
-                    format!("Denied by settings permissions: {}", resolved),
+                    format!("Denied by settings permissions: {resolved}"),
                     Some(format!("action={} source=settings.json", action.tool)),
                     ToolResultStatus::Error,
                     Some("denied".to_string()),
@@ -458,7 +457,7 @@ impl ToolRegistry {
             ToolConfirmationDecision::Deny => Some(
                 self.make_error_result(
                     tool_name,
-                    format!("User denied tool execution: {}", tool_name),
+                    format!("User denied tool execution: {tool_name}"),
                     Some(summary),
                     ToolResultStatus::Cancelled,
                     Some("denied".to_string()),
@@ -494,8 +493,7 @@ impl ToolRegistry {
             return Err(ToolExecutorError::ExecutionFailed {
                 tool_name: tool_name.to_string(),
                 error: format!(
-                    "Failed to request user confirmation (UI channel unavailable): {}",
-                    err
+                    "Failed to request user confirmation (UI channel unavailable): {err}"
                 ),
             });
         }
@@ -540,7 +538,7 @@ impl ToolRegistry {
                 return self
                     .make_error_result(
                         tool_name,
-                        format!("Tool not found: {}", tool_name),
+                        format!("Tool not found: {tool_name}"),
                         None,
                         ToolResultStatus::Error,
                         None,
@@ -554,7 +552,7 @@ impl ToolRegistry {
             return self
                 .make_error_result(
                     tool_name,
-                    format!("Argument validation failed: {}", e),
+                    format!("Argument validation failed: {e}"),
                     None,
                     ToolResultStatus::Error,
                     None,
@@ -567,7 +565,7 @@ impl ToolRegistry {
             return self
                 .make_error_result(
                     tool_name,
-                    format!("Pre-run hook failed: {}", e),
+                    format!("Pre-run hook failed: {e}"),
                     None,
                     ToolResultStatus::Error,
                     None,
@@ -576,7 +574,7 @@ impl ToolRegistry {
                 .await;
         }
 
-        let result = match tool.run(context, args).await {
+        match tool.run(context, args).await {
             Ok(mut r) => {
                 let elapsed = start.elapsed().as_millis() as u64;
                 r.execution_time_ms = Some(elapsed);
@@ -600,9 +598,7 @@ impl ToolRegistry {
                     )
                     .await;
             }
-        };
-
-        result
+        }
     }
 
     async fn make_error_result(
@@ -619,7 +615,7 @@ impl ToolRegistry {
         error!("Tool {} failed: {}", tool_name, error_message);
 
         let full_message = if let Some(d) = details {
-            format!("{} ({})", error_message, d)
+            format!("{error_message} ({d})")
         } else {
             error_message
         };
@@ -873,7 +869,7 @@ fn summarize_tool_call(
     const MAX_LEN: usize = 240;
     if summary.len() > MAX_LEN {
         summary.truncate(MAX_LEN);
-        summary.push_str("…");
+        summary.push('…');
     }
     summary
 }

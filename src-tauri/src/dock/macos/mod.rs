@@ -5,7 +5,6 @@ use cocoa::foundation::{NSAutoreleasePool, NSString};
 use objc::runtime::{Class, Object, Sel, BOOL};
 use objc::{class, msg_send, sel, sel_impl};
 use serde_json::json;
-use std::ffi::CStr;
 use tauri::{AppHandle, Emitter, Runtime};
 
 extern "C" {
@@ -125,7 +124,7 @@ impl<R: Runtime> MacOSDockMenu<R> {
             });
 
             let dock_menu_sel = sel!(applicationDockMenu:);
-            let dock_menu_types = CStr::from_bytes_with_nul(b"@@:@\0").unwrap().as_ptr();
+            let dock_menu_types = c"@@:@".as_ptr();
             let _method_added = class_addMethod(
                 delegate_class as *mut Class,
                 dock_menu_sel,
@@ -134,7 +133,7 @@ impl<R: Runtime> MacOSDockMenu<R> {
             );
 
             let switch_tab_sel = sel!(switchToTab:);
-            let switch_tab_types = CStr::from_bytes_with_nul(b"v@:@\0").unwrap().as_ptr();
+            let switch_tab_types = c"v@:@".as_ptr();
             let _action_added = class_addMethod(
                 delegate_class as *mut Class,
                 switch_tab_sel,
@@ -169,10 +168,10 @@ unsafe fn build_dock_menu(state: &DockState) -> id {
 
     if tabs.is_empty() {
         let title = NSString::alloc(nil);
-        let title: id = msg_send![title, initWithUTF8String: "No Active Tabs\0".as_ptr()];
+        let title: id = msg_send![title, initWithUTF8String: c"No Active Tabs".as_ptr()];
         let item = NSMenuItem::alloc(nil);
         let empty_key = NSString::alloc(nil);
-        let empty_key: id = msg_send![empty_key, initWithUTF8String: "\0".as_ptr()];
+        let empty_key: id = msg_send![empty_key, initWithUTF8String: c"".as_ptr()];
         let item = item.initWithTitle_action_keyEquivalent_(title, sel!(noAction:), empty_key);
         let _: () = msg_send![item, setEnabled: NO];
         menu.addItem_(item);
@@ -186,7 +185,7 @@ unsafe fn build_dock_menu(state: &DockState) -> id {
             let title: id = msg_send![title, initWithUTF8String: title_cstr.as_ptr()];
             let item = NSMenuItem::alloc(nil);
             let empty_key = NSString::alloc(nil);
-            let empty_key: id = msg_send![empty_key, initWithUTF8String: "\0".as_ptr()];
+            let empty_key: id = msg_send![empty_key, initWithUTF8String: c"".as_ptr()];
             let item =
                 item.initWithTitle_action_keyEquivalent_(title, sel!(switchToTab:), empty_key);
             let _: () = msg_send![item, setTarget: delegate];

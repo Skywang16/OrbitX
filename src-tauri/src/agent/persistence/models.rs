@@ -49,7 +49,7 @@ impl FromStr for FileRecordState {
         match s {
             "active" => Ok(Self::Active),
             "stale" => Ok(Self::Stale),
-            other => Err(AgentError::Parse(format!("Unknown file state: {}", other))),
+            other => Err(AgentError::Parse(format!("Unknown file state: {other}"))),
         }
     }
 }
@@ -83,8 +83,7 @@ impl FromStr for FileRecordSource {
             "agent_edited" => Ok(Self::AgentEdited),
             "file_mentioned" => Ok(Self::FileMentioned),
             other => Err(AgentError::Parse(format!(
-                "Unknown file record source: {}",
-                other
+                "Unknown file record source: {other}"
             ))),
         }
     }
@@ -132,8 +131,7 @@ impl FromStr for ExecutionStatus {
             "error" => Ok(Self::Error),
             "cancelled" => Ok(Self::Cancelled),
             other => Err(AgentError::Parse(format!(
-                "Unknown execution status: {}",
-                other
+                "Unknown execution status: {other}"
             ))),
         }
     }
@@ -191,8 +189,7 @@ impl FromStr for MessageRole {
             "assistant" => Ok(Self::Assistant),
             "tool" => Ok(Self::Tool),
             other => Err(AgentError::Parse(format!(
-                "Unknown message role: {}",
-                other
+                "Unknown message role: {other}"
             ))),
         }
     }
@@ -240,8 +237,7 @@ impl FromStr for ToolExecutionStatus {
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
             other => Err(AgentError::Parse(format!(
-                "Unknown tool execution status: {}",
-                other
+                "Unknown tool execution status: {other}"
             ))),
         }
     }
@@ -299,7 +295,7 @@ impl FromStr for ExecutionEventType {
             "tool_result" => Ok(Self::ToolResult),
             "error" => Ok(Self::Error),
             "finish" => Ok(Self::Finish),
-            other => Err(AgentError::Parse(format!("Unknown event type: {}", other))),
+            other => Err(AgentError::Parse(format!("Unknown event type: {other}"))),
         }
     }
 }

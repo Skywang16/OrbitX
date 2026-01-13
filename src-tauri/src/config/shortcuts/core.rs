@@ -106,7 +106,7 @@ impl ShortcutManager {
 
         let key_combo = KeyCombination::from_binding(&binding);
         if self.has_conflict_in_config(&config, &key_combo).await {
-            let detail = format!("Shortcut {} already conflicts", key_combo.to_string());
+            let detail = format!("Shortcut {key_combo} already conflicts");
             return Err(ShortcutsError::Conflict { detail });
         }
 
@@ -121,7 +121,7 @@ impl ShortcutManager {
         let mut config = self.config_get().await?;
 
         if index >= config.len() {
-            let reason = format!("Shortcut index out of bounds: {}", index);
+            let reason = format!("Shortcut index out of bounds: {index}");
             return Err(ShortcutsError::Validation { reason });
         }
 
@@ -140,7 +140,7 @@ impl ShortcutManager {
         self.validate_single_binding(&new_binding).await?;
 
         if index >= config.len() {
-            let reason = format!("Shortcut index out of bounds: {}", index);
+            let reason = format!("Shortcut index out of bounds: {index}");
             return Err(ShortcutsError::Validation { reason });
         }
 
@@ -178,7 +178,7 @@ impl ShortcutManager {
             if !registry.is_action_registered(&action_name).await {
                 warnings.push(ValidationWarning {
                     warning_type: ValidationWarningType::UnregisteredAction,
-                    message: format!("Action '{}' is not registered", action_name),
+                    message: format!("Action '{action_name}' is not registered"),
                     key_combination: Some(KeyCombination::from_binding(binding)),
                 });
             }
@@ -216,7 +216,7 @@ impl ShortcutManager {
 
             key_map
                 .entry(key_str)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(conflicting_binding);
         }
 
@@ -226,7 +226,7 @@ impl ShortcutManager {
                 if bindings.len() > 1 {
                     Some(ConflictInfo {
                         key_combination: KeyCombination::new(
-                            key_str.split('+').last().unwrap_or("").to_string(),
+                            key_str.split('+').next_back().unwrap_or("").to_string(),
                             key_str
                                 .split('+')
                                 .take(key_str.split('+').count() - 1)
@@ -403,7 +403,7 @@ impl ShortcutManager {
         for modifier in &binding.modifiers {
             if !valid_modifiers.contains(&modifier.to_lowercase().as_str()) {
                 return Err(ShortcutsError::Validation {
-                    reason: format!("Unsupported modifier: {}", modifier),
+                    reason: format!("Unsupported modifier: {modifier}"),
                 });
             }
         }

@@ -300,7 +300,7 @@ mod tests {
             .with_source("smart");
 
         let score = scorer.calculate(&ctx);
-        assert!(score >= 0.0 && score <= MAX_SCORE, "分数应该在有效范围内");
+        assert!((0.0..=MAX_SCORE).contains(&score), "分数应该在有效范围内");
     }
 
     #[test]
@@ -348,9 +348,7 @@ mod tests {
 
         assert!(
             score_high > score_low,
-            "高频命令应该得分更高: {} vs {}",
-            score_high,
-            score_low
+            "高频命令应该得分更高: {score_high} vs {score_low}"
         );
     }
 
@@ -378,9 +376,7 @@ mod tests {
 
         assert!(
             score_recent > score_old,
-            "最近使用的命令应该得分更高: {} vs {}",
-            score_recent,
-            score_old
+            "最近使用的命令应该得分更高: {score_recent} vs {score_old}"
         );
     }
 }

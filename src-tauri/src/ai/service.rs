@@ -176,7 +176,7 @@ impl AIService {
                     headers,
                     payload,
                     timeout,
-                    tolerated: &TOLERATED_STANDARD_CODES,
+                    tolerated: TOLERATED_STANDARD_CODES,
                 }))
             }
             AIProvider::OpenAiCompatible => {
@@ -190,7 +190,7 @@ impl AIService {
                     headers,
                     payload,
                     timeout,
-                    tolerated: &TOLERATED_CUSTOM_CODES,
+                    tolerated: TOLERATED_CUSTOM_CODES,
                 }))
             }
         }
@@ -238,14 +238,14 @@ impl AIService {
             return Err(AIServiceError::ProviderApi {
                 provider: request.provider_label,
                 status,
-                message: format!("Authentication failed: {}", error_text),
+                message: format!("Authentication failed: {error_text}"),
             });
         }
 
         // 可容忍的状态码：说明 API 端点可用且认证有效
         // 400: 请求格式错误，但说明服务器可达
         // 429: 请求过多，但说明认证成功
-        if request.tolerated.iter().any(|code| *code == status) {
+        if request.tolerated.contains(&status) {
             return Ok("Connection successful".to_string());
         }
 
@@ -311,7 +311,7 @@ fn basic_chat_payload(model: &str) -> Value {
 fn join_url(base: &str, suffix: &str) -> String {
     let base = base.trim_end_matches('/');
     let suffix = suffix.trim_start_matches('/');
-    format!("{}/{}", base, suffix)
+    format!("{base}/{suffix}")
 }
 
 const TOLERATED_STANDARD_CODES: &[StatusCode] =

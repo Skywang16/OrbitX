@@ -29,13 +29,13 @@ impl DockState {
         let mut state = self
             .tabs
             .write()
-            .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire write lock: {e}"))?;
         *state = tabs;
 
         let mut active = self
             .active_tab_id
             .write()
-            .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire write lock: {e}"))?;
         *active = active_tab_id;
 
         Ok(())
@@ -45,7 +45,7 @@ impl DockState {
         let state = self
             .tabs
             .read()
-            .map_err(|e| format!("Failed to acquire read lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire read lock: {e}"))?;
         Ok(state.clone())
     }
 
@@ -53,7 +53,7 @@ impl DockState {
         let active = self
             .active_tab_id
             .read()
-            .map_err(|e| format!("Failed to acquire read lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire read lock: {e}"))?;
         Ok(active.clone())
     }
 
@@ -61,7 +61,7 @@ impl DockState {
         let mut state = self
             .tabs
             .write()
-            .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire write lock: {e}"))?;
         state.clear();
         Ok(())
     }

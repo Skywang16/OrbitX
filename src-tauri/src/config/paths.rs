@@ -200,7 +200,7 @@ impl ConfigPaths {
 
     /// 获取指定shell的集成脚本文件路径
     pub fn shell_integration_script_path(&self, shell_name: &str) -> PathBuf {
-        self.shell_dir.join(format!("integration.{}", shell_name))
+        self.shell_dir.join(format!("integration.{shell_name}"))
     }
 
     // 路径验证和操作方法

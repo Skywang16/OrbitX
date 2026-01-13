@@ -12,6 +12,7 @@ use crate::completion::types::{CompletionContext, CompletionItem, CompletionType
 use crate::storage::cache::UnifiedCache;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -36,7 +37,7 @@ pub enum ShellType {
 
 impl ShellType {
     /// 从文件路径推断Shell类型
-    fn from_path(path: &PathBuf) -> Self {
+    fn from_path(path: &Path) -> Self {
         if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
             match file_name {
                 ".bash_history" => Self::Bash,
@@ -546,15 +547,11 @@ git commit -m "test"
         // 位置越靠前分数越高（新评分系统使用历史权重+位置加分）
         assert!(
             score1 >= score2,
-            "位置 0 应该 >= 位置 10: {} vs {}",
-            score1,
-            score2
+            "位置 0 应该 >= 位置 10: {score1} vs {score2}"
         );
         assert!(
             score2 >= score3,
-            "位置 10 应该 >= 位置 50: {} vs {}",
-            score2,
-            score3
+            "位置 10 应该 >= 位置 50: {score2} vs {score3}"
         );
 
         // 测试匹配度：更短的输入匹配更短的命令应该得分更高
@@ -562,8 +559,8 @@ git commit -m "test"
         let score_long = provider.calculate_command_score("git status", "git", 0, None);
 
         // 两者都是前缀匹配，分数应该都大于 0
-        assert!(score_short > 0.0, "短匹配应该有分数: {}", score_short);
-        assert!(score_long > 0.0, "长匹配应该有分数: {}", score_long);
+        assert!(score_short > 0.0, "短匹配应该有分数: {score_short}");
+        assert!(score_long > 0.0, "长匹配应该有分数: {score_long}");
     }
 
     #[tokio::test]

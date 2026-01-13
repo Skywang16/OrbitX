@@ -40,6 +40,14 @@ use crate::llm::anthropic_types::{
 use crate::storage::DatabaseManager;
 use tokio_util::sync::CancellationToken;
 
+pub struct TaskContextDeps {
+    pub tool_registry: Arc<ToolRegistry>,
+    pub repositories: Arc<DatabaseManager>,
+    pub agent_persistence: Arc<AgentPersistence>,
+    pub checkpoint_service: Option<Arc<CheckpointService>>,
+    pub workspace_changes: Arc<WorkspaceChangeJournal>,
+}
+
 pub struct TaskContext {
     pub task_id: Arc<str>,
     pub session_id: i64,
@@ -67,12 +75,8 @@ impl TaskContext {
         execution: AgentExecution,
         config: TaskExecutionConfig,
         workspace_path: String,
-        tool_registry: Arc<ToolRegistry>,
         progress_channel: Option<Channel<TaskEvent>>,
-        repositories: Arc<DatabaseManager>,
-        agent_persistence: Arc<AgentPersistence>,
-        checkpoint_service: Option<Arc<CheckpointService>>,
-        workspace_changes: Arc<WorkspaceChangeJournal>,
+        deps: TaskContextDeps,
     ) -> TaskExecutorResult<Self> {
         let agent_config = AgentConfig::default();
         let runtime_config = ReactRuntimeConfig {
@@ -108,8 +112,8 @@ impl TaskContext {
             workspace_root.clone(),
             user_prompt.clone(),
             config,
-            Arc::clone(&repositories),
-            Arc::clone(&agent_persistence),
+            Arc::clone(&deps.repositories),
+            Arc::clone(&deps.agent_persistence),
         ));
 
         let execution = ExecutionState::new(record, task_status);
@@ -124,11 +128,11 @@ impl TaskContext {
             cwd: Arc::from(normalized_workspace.as_str()),
             config,
             session,
-            tool_registry,
+            tool_registry: deps.tool_registry,
             state_manager: Arc::new(StateManager::new(task_state)),
-            checkpoint_service,
+            checkpoint_service: deps.checkpoint_service,
             active_checkpoint: Arc::new(RwLock::new(None)),
-            workspace_changes,
+            workspace_changes: deps.workspace_changes,
             workspace_key,
             states,
             pause_status: AtomicU8::new(0),
@@ -784,8 +788,7 @@ impl TaskContext {
 
         let Some(index) = find_block_index(&message.blocks, block_id) else {
             return Err(TaskExecutorError::StatePersistenceFailed(format!(
-                "block {} not found for update",
-                block_id
+                "block {block_id} not found for update"
             )));
         };
 
@@ -859,7 +862,7 @@ impl TaskContext {
         let duration_ms = finished_at
             .signed_duration_since(message.created_at)
             .num_milliseconds()
-            .max(0) as i64;
+            .max(0);
 
         message.status = status.clone();
         message.finished_at = Some(finished_at);
@@ -924,7 +927,7 @@ impl TaskContext {
                         b.duration_ms = Some(
                             now.signed_duration_since(b.started_at)
                                 .num_milliseconds()
-                                .max(0) as i64,
+                                .max(0),
                         );
                         changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
                     }
@@ -938,7 +941,7 @@ impl TaskContext {
         message.duration_ms = Some(
             now.signed_duration_since(message.created_at)
                 .num_milliseconds()
-                .max(0) as i64,
+                .max(0),
         );
 
         self.agent_persistence()
@@ -1005,7 +1008,7 @@ fn map_user_image_blocks(images: &[ImageAttachment]) -> Vec<Block> {
             Block::UserImage(UserImageBlock {
                 data_url: attachment.data_url.clone(),
                 mime_type: attachment.mime_type.clone(),
-                file_name: Some(format!("image_{}.{}", index, ext)),
+                file_name: Some(format!("image_{index}.{ext}")),
                 file_size: Some(attachment.data_url.len() as i64),
             })
         })

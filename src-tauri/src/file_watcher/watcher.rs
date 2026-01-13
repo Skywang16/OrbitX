@@ -123,7 +123,7 @@ impl UnifiedFileWatcher {
 
         let workspace_root = tokio::fs::canonicalize(&requested_root)
             .await
-            .map_err(|e| format!("Failed to canonicalize path: {}", e))?;
+            .map_err(|e| format!("Failed to canonicalize path: {e}"))?;
 
         let repo_root = find_git_root(&workspace_root).await;
         let git_paths = match &repo_root {
@@ -485,7 +485,7 @@ async fn resolve_git_paths(worktree: &Path) -> Result<GitPaths, String> {
     } else if dot_git.is_file() {
         let content = tokio::fs::read_to_string(&dot_git)
             .await
-            .map_err(|e| format!("Failed to read .git file: {}", e))?;
+            .map_err(|e| format!("Failed to read .git file: {e}"))?;
         let content = content.trim();
         let gitdir = content
             .strip_prefix("gitdir:")
@@ -511,7 +511,7 @@ async fn resolve_git_paths(worktree: &Path) -> Result<GitPaths, String> {
         if commondir.is_file() {
             let content = tokio::fs::read_to_string(&commondir)
                 .await
-                .map_err(|e| format!("Failed to read commondir: {}", e))?;
+                .map_err(|e| format!("Failed to read commondir: {e}"))?;
             let value = content.trim();
             let common_path = PathBuf::from(value);
             if common_path.is_absolute() {

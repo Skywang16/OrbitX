@@ -21,9 +21,7 @@ impl PermissionPattern {
             });
         };
 
-        let Some(close_idx) = raw.rfind(')') else {
-            return None;
-        };
+        let close_idx = raw.rfind(')')?;
 
         if close_idx <= open_idx {
             return None;

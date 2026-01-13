@@ -126,8 +126,7 @@ impl FromStr for FileChangeType {
             "modified" => Ok(Self::Modified),
             "deleted" => Ok(Self::Deleted),
             other => Err(CheckpointError::Parse(format!(
-                "Unknown file change type: {}",
-                other
+                "Unknown file change type: {other}"
             ))),
         }
     }

@@ -151,7 +151,7 @@ impl ActiveTerminalContextRegistry {
     /// * `false` - 该面板不是活跃终端或获取状态失败
     pub fn terminal_context_is_pane_active(&self, pane_id: PaneId) -> bool {
         match self.global_active_pane.read() {
-            Ok(active_pane) => active_pane.map_or(false, |id| id == pane_id),
+            Ok(active_pane) => *active_pane == Some(pane_id),
             Err(e) => {
                 warn!("检查面板活跃状态时获取读锁失败: {}", e);
                 false

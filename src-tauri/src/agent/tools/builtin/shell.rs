@@ -88,6 +88,12 @@ struct ShellArgs {
 
 pub struct ShellTool;
 
+impl Default for ShellTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShellTool {
     pub fn new() -> Self {
         Self
@@ -337,7 +343,7 @@ Important Notes:
 fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
     let (message, status, tool_status, cancel_reason) = match error {
         ShellError::Timeout(ms) => (
-            format!("Command timed out after {}ms", ms),
+            format!("Command timed out after {ms}ms"),
             "timeout",
             ToolResultStatus::Error,
             None,
@@ -349,19 +355,19 @@ fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
             Some("aborted".to_string()),
         ),
         ShellError::ValidationFailed(msg) => (
-            format!("Validation failed: {}", msg),
+            format!("Validation failed: {msg}"),
             "validation_error",
             ToolResultStatus::Error,
             None,
         ),
         ShellError::TooManyBackgroundCommands(max) => (
-            format!("Too many background commands (max: {})", max),
+            format!("Too many background commands (max: {max})"),
             "limit_exceeded",
             ToolResultStatus::Error,
             None,
         ),
         _ => (
-            format!("Command failed: {}", error),
+            format!("Command failed: {error}"),
             "failed",
             ToolResultStatus::Error,
             None,

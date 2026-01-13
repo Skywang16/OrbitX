@@ -26,6 +26,12 @@ struct WebFetchArgs {
 }
 
 pub struct WebFetchTool;
+impl Default for WebFetchTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebFetchTool {
     pub fn new() -> Self {
         Self
@@ -193,7 +199,7 @@ Error Handling:
 
         let raw_text = match resp.text().await {
             Ok(t) => t,
-            Err(e) => format!("<read-error>{}", e),
+            Err(e) => format!("<read-error>{e}"),
         };
 
         let (data_text, extracted_text) = if content_type
@@ -338,7 +344,7 @@ async fn validate_fetch_url(url: &Url) -> ToolExecutorResult<()> {
             let addrs = lookup_host((host, port)).await.map_err(|e| {
                 ToolExecutorError::ExecutionFailed {
                     tool_name: "web_fetch".to_string(),
-                    error: format!("Failed to resolve host '{}': {}", host, e),
+                    error: format!("Failed to resolve host '{host}': {e}"),
                 }
             })?;
             for addr in addrs {
@@ -367,7 +373,7 @@ async fn fetch_follow_redirects(
         let resp = client.get(url.clone()).send().await.map_err(|e| {
             ToolExecutorError::ExecutionFailed {
                 tool_name: "web_fetch".to_string(),
-                error: format!("request failed: {}", e),
+                error: format!("request failed: {e}"),
             }
         })?;
 
@@ -384,7 +390,7 @@ async fn fetch_follow_redirects(
                     .join(location)
                     .map_err(|e| ToolExecutorError::InvalidArguments {
                         tool_name: "web_fetch".to_string(),
-                        error: format!("Invalid redirect URL: {}", e),
+                        error: format!("Invalid redirect URL: {e}"),
                     })?;
                 continue;
             }
@@ -395,7 +401,7 @@ async fn fetch_follow_redirects(
 
     Err(ToolExecutorError::ResourceLimitExceeded {
         tool_name: "web_fetch".to_string(),
-        resource_type: format!("too many redirects (max: {})", max_redirects),
+        resource_type: format!("too many redirects (max: {max_redirects})"),
     })
 }
 
@@ -405,7 +411,7 @@ async fn try_jina_reader(url: &Url, timeout_ms: u64) -> Result<Option<String>, T
         .timeout(Duration::from_millis(timeout_ms))
         .user_agent("OrbitX-Agent/1.0")
         .build()
-        .map_err(|e| tool_error(format!("Failed to build request client: {}", e)))?;
+        .map_err(|e| tool_error(format!("Failed to build request client: {e}")))?;
 
     let response = match client.get(jina_url).send().await {
         Ok(resp) => resp,

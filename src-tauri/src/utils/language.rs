@@ -96,7 +96,7 @@ impl LanguageManager {
     pub fn get_language() -> Language {
         CURRENT_LANGUAGE
             .read()
-            .map(|lang| lang.clone())
+            .map(|lang| *lang)
             .unwrap_or_default()
     }
 

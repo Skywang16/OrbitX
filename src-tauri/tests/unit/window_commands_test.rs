@@ -164,11 +164,9 @@ fn test_concurrent_state_access() {
         handle.join().unwrap();
     }
 
-    // 验证状态一致性（最后一个设置的值）
-    let mgr = manager.lock().unwrap();
-    let value = mgr.get_always_on_top();
-    // 值应该是true或false中的一个
-    assert!(value || !value);
+    // 并发访问完成后依然可写且可读（不死锁/不崩溃）
+    manager.lock().unwrap().set_always_on_top(true);
+    assert!(manager.lock().unwrap().get_always_on_top());
 }
 
 #[test]
@@ -195,6 +193,6 @@ fn test_atomic_always_on_top() {
         handle.join().unwrap();
     }
 
-    // 验证没有panic
-    assert!(true);
+    // 无写入时，默认值应保持不变
+    assert!(!manager.get_always_on_top());
 }

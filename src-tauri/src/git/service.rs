@@ -264,12 +264,12 @@ impl GitService {
     ) -> Result<Vec<CommitInfo>, GitError> {
         let root = Self::ensure_repo_root(path).await?;
 
-        let limit = limit.max(1).min(200);
+        let limit = limit.clamp(1, 200);
         // Use -z for NUL-separated records, %x1f for field separator, %s for subject (no newlines)
         let format = "%H%x1f%h%x1f%an%x1f%ae%x1f%ad%x1f%D%x1f%P%x1f%s";
-        let n_arg = format!("-n{}", limit);
-        let skip_arg = format!("--skip={}", skip);
-        let pretty_arg = format!("--pretty=format:{}", format);
+        let n_arg = format!("-n{limit}");
+        let skip_arg = format!("--skip={skip}");
+        let pretty_arg = format!("--pretty=format:{format}");
         let args = [
             "log",
             "-z",
@@ -325,7 +325,7 @@ impl GitService {
 
         // Get diff for a specific file in a commit
         // Use commit^..commit to show diff between parent and commit
-        let range = format!("{}^..{}", commit_hash, commit_hash);
+        let range = format!("{commit_hash}^..{commit_hash}");
         let args = ["diff", "--no-color", "--unified=3", &range, "--", file_path];
 
         let output = match Self::execute(&args, &root).await {
@@ -551,7 +551,7 @@ impl GitService {
         branch: &str,
         upstream: &str,
     ) -> Result<(u32, u32), GitError> {
-        let range = format!("{}...{}", branch, upstream);
+        let range = format!("{branch}...{upstream}");
         let output =
             Self::execute_text(&["rev-list", "--left-right", "--count", &range], cwd).await?;
         let mut parts = output.split_whitespace();

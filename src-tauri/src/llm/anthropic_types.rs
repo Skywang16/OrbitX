@@ -472,11 +472,14 @@ pub enum ContentBlockStart {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentDelta {
     /// 文本增量
-    TextDelta { text: String },
+    #[serde(rename = "text_delta")]
+    Text { text: String },
     /// 工具输入JSON增量（可能是不完整的JSON片段）
-    InputJsonDelta { partial_json: String },
+    #[serde(rename = "input_json_delta")]
+    InputJson { partial_json: String },
     /// Thinking增量
-    ThinkingDelta { thinking: String },
+    #[serde(rename = "thinking_delta")]
+    Thinking { thinking: String },
 }
 
 /// 消息Delta数据

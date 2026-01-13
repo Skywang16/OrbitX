@@ -86,7 +86,7 @@ impl CompletionEngine {
     pub fn add_provider(&mut self, provider: Arc<dyn CompletionProvider>) {
         self.providers.push(ProviderHandle { provider });
         self.providers
-            .sort_by(|a, b| b.priority().cmp(&a.priority()));
+            .sort_by_key(|p| std::cmp::Reverse(p.priority()));
     }
 
     pub async fn with_default_providers(
@@ -153,8 +153,8 @@ impl CompletionEngine {
         for handle in self
             .providers
             .iter()
+            .filter(|&handle| handle.should_provide(context))
             .cloned()
-            .filter(|handle| handle.should_provide(context))
         {
             let provider_cache_key = Self::provider_cache_key(handle.name(), fingerprint);
             if let Some(entry) = self
@@ -326,7 +326,7 @@ impl CompletionEngine {
             let ctx = Arc::clone(&context);
 
             match timeout(config.provider_timeout, async move {
-                provider.provide_completions(&*ctx).await
+                provider.provide_completions(&ctx).await
             })
             .await
             {
@@ -392,11 +392,11 @@ impl CompletionEngine {
     }
 
     fn result_cache_key(fingerprint: u64) -> String {
-        format!("result:{}", fingerprint)
+        format!("result:{fingerprint}")
     }
 
     fn provider_cache_key(provider: &str, fingerprint: u64) -> String {
-        format!("provider:{}:{}", provider, fingerprint)
+        format!("provider:{provider}:{fingerprint}")
     }
 }
 

@@ -179,7 +179,7 @@ fn strip_line(line: &str, in_block_comment: &mut bool) -> Option<String> {
 
 fn parse_order(filename: &str) -> SqlScriptResult<u32> {
     let digits: String = filename
-        .split(|c| c == '_' || c == '-')
+        .split(['_', '-'])
         .next()
         .unwrap_or_default()
         .chars()

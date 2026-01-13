@@ -464,7 +464,7 @@ impl TerminalContextService {
     }
 
     fn cache_key(pane_id: PaneId) -> String {
-        format!("{}/{}", CONTEXT_CACHE_PREFIX, pane_id)
+        format!("{CONTEXT_CACHE_PREFIX}/{pane_id}")
     }
 }
 

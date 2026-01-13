@@ -45,7 +45,7 @@ fn filter_dirs(e: &DirEntry) -> bool {
             ".vscode",
             ".DS_Store",
         ];
-        return !EXCLUDES.iter().any(|d| *d == name);
+        return !EXCLUDES.contains(&name);
     }
     true
 }

@@ -165,7 +165,7 @@ impl NpmCompletionProvider {
                     };
 
                     let item = CompletionItem::new(name.clone(), CompletionType::Value)
-                        .with_description(format!("脚本: {} -> {}", name, command))
+                        .with_description(format!("脚本: {name} -> {command}"))
                         .with_score(priority)
                         .with_source("npm".to_string())
                         .with_metadata("type".to_string(), "script".to_string())
@@ -208,7 +208,7 @@ impl NpmCompletionProvider {
             for (name, version) in deps {
                 if query.is_empty() || name.to_lowercase().starts_with(&query.to_lowercase()) {
                     let item = CompletionItem::new(name.clone(), CompletionType::Value)
-                        .with_description(format!("依赖包: {} {}", name, version))
+                        .with_description(format!("依赖包: {name} {version}"))
                         .with_score(10.0)
                         .with_source("npm".to_string())
                         .with_metadata("type".to_string(), "dependency".to_string())
@@ -224,7 +224,7 @@ impl NpmCompletionProvider {
             for (name, version) in dev_deps {
                 if query.is_empty() || name.to_lowercase().starts_with(&query.to_lowercase()) {
                     let item = CompletionItem::new(name.clone(), CompletionType::Value)
-                        .with_description(format!("开发依赖: {} {}", name, version))
+                        .with_description(format!("开发依赖: {name} {version}"))
                         .with_score(8.0)
                         .with_source("npm".to_string())
                         .with_metadata("type".to_string(), "dev_dependency".to_string())
@@ -247,7 +247,7 @@ impl NpmCompletionProvider {
             return Ok(vec![]);
         }
 
-        let cache_key = format!("completion/npm/search:{}", query);
+        let cache_key = format!("completion/npm/search:{query}");
         if let Some(cached_result) = self.cache.get(&cache_key).await {
             if let Ok(items) = serde_json::from_value::<Vec<CompletionItem>>(cached_result) {
                 return Ok(items);

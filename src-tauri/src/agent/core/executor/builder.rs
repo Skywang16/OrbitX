@@ -182,12 +182,14 @@ impl TaskExecutor {
             execution,
             config,
             cwd,
-            tool_registry,
             progress_channel,
-            Arc::clone(&self.database()),
-            Arc::clone(&self.agent_persistence()),
-            self.checkpoint_service(),
-            self.workspace_changes(),
+            crate::agent::core::context::TaskContextDeps {
+                tool_registry,
+                repositories: Arc::clone(&self.database()),
+                agent_persistence: Arc::clone(&self.agent_persistence()),
+                checkpoint_service: self.checkpoint_service(),
+                workspace_changes: self.workspace_changes(),
+            },
         )
         .await
     }

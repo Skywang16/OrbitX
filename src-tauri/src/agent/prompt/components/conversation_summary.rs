@@ -47,7 +47,6 @@ Output only the summary of the conversation so far, without any additional comme
 /// * `history` - Formatted conversation history to be summarized
 pub fn build_conversation_summary_user_prompt(history: &str) -> String {
     format!(
-        "Summarize the following conversation history:\n\n{}",
-        history
+        "Summarize the following conversation history:\n\n{history}"
     )
 }

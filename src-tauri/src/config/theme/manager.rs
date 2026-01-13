@@ -24,19 +24,12 @@ pub struct ThemeIndexEntry {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ThemeManagerOptions {
     pub auto_refresh_index: bool,
     pub index_refresh_interval: u64,
 }
 
-impl Default for ThemeManagerOptions {
-    fn default() -> Self {
-        Self {
-            auto_refresh_index: false,
-            index_refresh_interval: 0,
-        }
-    }
-}
 
 pub struct ThemeManager {
     paths: ConfigPaths,

@@ -149,7 +149,7 @@ impl ShellManager {
         cache_guard
             .as_ref()
             .map(|entry| entry.default_shell.clone())
-            .unwrap_or_else(|| Self::get_default_shell_internal())
+            .unwrap_or_else(Self::get_default_shell_internal)
     }
 
     pub fn refresh_cache() {

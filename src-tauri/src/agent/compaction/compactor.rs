@@ -45,8 +45,7 @@ impl SessionCompactor {
             messages: vec![MessageParam {
                 role: AnthropicRole::User,
                 content: MessageContent::Text(format!(
-                    "Summarize the following conversation:\n\n{}",
-                    conversation_text
+                    "Summarize the following conversation:\n\n{conversation_text}"
                 )),
             }],
             tools: None,

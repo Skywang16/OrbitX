@@ -37,7 +37,7 @@ pub fn run() {
     init_logging();
 
     if let Err(e) = I18nManager::initialize() {
-        eprintln!("初始化国际化失败: {}", e);
+        eprintln!("初始化国际化失败: {e}");
     }
 
     let mut builder = tauri::Builder::default();
@@ -82,7 +82,7 @@ pub fn run() {
     let app_instance = app_result
         .setup(|app| {
             if let Err(e) = initialize_app_states(app) {
-                eprintln!("应用程序初始化失败: {}", e);
+                eprintln!("应用程序初始化失败: {e}");
                 std::process::exit(1);
             }
 
@@ -90,11 +90,11 @@ pub fn run() {
             match menu::create_menu(app.handle()) {
                 Ok(menu) => {
                     if let Err(e) = app.set_menu(menu) {
-                        eprintln!("设置菜单失败: {}", e);
+                        eprintln!("设置菜单失败: {e}");
                     }
                 }
                 Err(e) => {
-                    eprintln!("创建菜单失败: {}", e);
+                    eprintln!("创建菜单失败: {e}");
                 }
             }
 
@@ -113,7 +113,7 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            eprintln!("构建 Tauri 应用程序时发生错误: {}", e);
+            eprintln!("构建 Tauri 应用程序时发生错误: {e}");
             std::process::exit(1);
         });
 
@@ -129,7 +129,7 @@ pub fn run() {
                         if !is_visible {
                             // 如果窗口被隐藏，重新显示它
                             if let Err(e) = window.show() {
-                                eprintln!("无法显示窗口: {}", e);
+                                eprintln!("无法显示窗口: {e}");
                             }
                             // 将窗口置于最前
                             let _ = window.set_focus();
@@ -141,7 +141,7 @@ pub fn run() {
             // 在应用真正退出前清理资源
             tauri::RunEvent::ExitRequested { .. } => {
                 if let Err(e) = crate::mux::singleton::shutdown_mux() {
-                    eprintln!("清理 TerminalMux 失败: {}", e);
+                    eprintln!("清理 TerminalMux 失败: {e}");
                 }
             }
             _ => {}

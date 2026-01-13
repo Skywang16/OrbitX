@@ -25,6 +25,12 @@ struct SyntaxDiagnosticsArgs {
 
 pub struct SyntaxDiagnosticsTool;
 
+impl Default for SyntaxDiagnosticsTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SyntaxDiagnosticsTool {
     pub fn new() -> Self {
         Self
@@ -134,11 +140,8 @@ impl RunnableTool for SyntaxDiagnosticsTool {
         });
 
         let summary = format_diagnostics_summary(&all_diags);
-        let status = if all_diags.is_empty() {
-            ToolResultStatus::Success
-        } else {
-            ToolResultStatus::Success
-        };
+        // 无论是否有诊断信息，都返回成功状态，因为检查本身成功完成
+        let status = ToolResultStatus::Success;
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(summary)],

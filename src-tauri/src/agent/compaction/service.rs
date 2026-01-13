@@ -203,7 +203,7 @@ impl CompactionService {
         let duration_ms = finished_at
             .signed_duration_since(job.started_at)
             .num_milliseconds()
-            .max(0) as i64;
+            .max(0);
 
         job.summary_message.status = MessageStatus::Completed;
         job.summary_message.finished_at = Some(finished_at);
@@ -386,7 +386,7 @@ fn render_messages(
                         tool_outputs
                             .get(&key)
                             .map(|(c, _)| c.clone())
-                            .unwrap_or_else(|| String::new())
+                            .unwrap_or_default()
                     };
                     out.push_str(&format!("tool {}({}): {}\n", tool.name, tool.id, content));
                 }

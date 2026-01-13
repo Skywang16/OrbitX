@@ -258,7 +258,7 @@ impl ContextAnalyzer {
         // - 光标仍在命令词内部：补全命令名
         // - 光标在命令词之后且已输入空白：进入第一个参数位置
         if tokens.len() == 1 && current_index == 1 {
-            if let Some(cmd_token) = tokens.get(0) {
+            if let Some(cmd_token) = tokens.first() {
                 if cursor_pos > cmd_token.end {
                     // 安全切片：确保索引在有效范围内
                     let end_pos = cursor_pos.min(input.len());

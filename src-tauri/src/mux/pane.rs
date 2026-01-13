@@ -42,6 +42,12 @@ pub struct LocalPane {
     _slave: Mutex<Box<dyn SlavePty + Send>>,
 }
 
+struct SpawnedProcess {
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
+    slave: Mutex<Box<dyn SlavePty + Send>>,
+}
+
 impl LocalPane {
     pub fn new(pane_id: PaneId, size: PtySize) -> PaneResult<Self> {
         Self::new_with_config(pane_id, size, &TerminalConfig::default())
@@ -56,7 +62,7 @@ impl LocalPane {
         let pty_pair = Self::create_pty(pane_id, size)?;
         let mut cmd = Self::build_command(config)?;
         Self::setup_shell_integration(&mut cmd, config)?;
-        let (master, writer, slave) = Self::spawn_process(pane_id, pty_pair, cmd)?;
+        let spawned = Self::spawn_process(pane_id, pty_pair, cmd)?;
 
         Ok(Self {
             pane_id,
@@ -66,9 +72,9 @@ impl LocalPane {
             pixel_height: AtomicU16::new(size.pixel_height),
             dead: AtomicBool::new(false),
             shell_info: config.shell_config.shell_info.clone(),
-            master,
-            writer,
-            _slave: slave,
+            master: spawned.master,
+            writer: spawned.writer,
+            _slave: spawned.slave,
         })
     }
 
@@ -84,7 +90,7 @@ impl LocalPane {
         };
 
         pty_system.openpty(pty_size).map_err(|err| {
-            PaneError::Internal(format!("Failed to create PTY for {:?}: {err}", pane_id))
+            PaneError::Internal(format!("Failed to create PTY for {pane_id:?}: {err}"))
         })
     }
 
@@ -161,18 +167,18 @@ impl LocalPane {
         let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
 
         std::fs::create_dir_all(&temp_dir)
-            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {}", e)))?;
+            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {e}")))?;
 
         let temp_zshrc = temp_dir.join(".zshrc");
         let mut file = std::fs::File::create(&temp_zshrc)
-            .map_err(|e| PaneError::Internal(format!("创建 .zshrc 失败: {}", e)))?;
+            .map_err(|e| PaneError::Internal(format!("创建 .zshrc 失败: {e}")))?;
 
         use std::io::Write;
         writeln!(file, "# Load user zshrc FIRST (so nvm etc. loads)").ok();
         writeln!(file, "[[ -f ~/.zshrc ]] && source ~/.zshrc").ok();
         writeln!(file).ok();
         writeln!(file, "# OrbitX Shell Integration (after user env loaded)").ok();
-        writeln!(file, "{}", integration_script).ok();
+        writeln!(file, "{integration_script}").ok();
 
         if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
             cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
@@ -190,18 +196,18 @@ impl LocalPane {
         let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
 
         std::fs::create_dir_all(&temp_dir)
-            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {}", e)))?;
+            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {e}")))?;
 
         let temp_bashrc = temp_dir.join(".bashrc");
         let mut file = std::fs::File::create(&temp_bashrc)
-            .map_err(|e| PaneError::Internal(format!("创建 .bashrc 失败: {}", e)))?;
+            .map_err(|e| PaneError::Internal(format!("创建 .bashrc 失败: {e}")))?;
 
         use std::io::Write;
         writeln!(file, "# Load user bashrc FIRST (so nvm etc. loads)").ok();
         writeln!(file, "[[ -f ~/.bashrc ]] && source ~/.bashrc").ok();
         writeln!(file).ok();
         writeln!(file, "# OrbitX Shell Integration (after user env loaded)").ok();
-        writeln!(file, "{}", integration_script).ok();
+        writeln!(file, "{integration_script}").ok();
 
         cmd.env("BASH_ENV", temp_bashrc);
 
@@ -213,11 +219,7 @@ impl LocalPane {
         pane_id: PaneId,
         pty_pair: portable_pty::PtyPair,
         cmd: CommandBuilder,
-    ) -> PaneResult<(
-        Mutex<Box<dyn MasterPty + Send>>,
-        Mutex<Box<dyn Write + Send>>,
-        Mutex<Box<dyn SlavePty + Send>>,
-    )> {
+    ) -> PaneResult<SpawnedProcess> {
         pty_pair
             .slave
             .spawn_command(cmd)
@@ -227,8 +229,7 @@ impl LocalPane {
 
         let writer = pty_pair.master.take_writer().map_err(|err| {
             PaneError::Internal(format!(
-                "Failed to acquire PTY writer for {:?}: {err}",
-                pane_id
+                "Failed to acquire PTY writer for {pane_id:?}: {err}"
             ))
         })?;
 
@@ -236,7 +237,11 @@ impl LocalPane {
         let writer = Mutex::new(writer);
         let slave = Mutex::new(pty_pair.slave);
 
-        Ok((master, writer, slave))
+        Ok(SpawnedProcess {
+            master,
+            writer,
+            slave,
+        })
     }
 }
 
@@ -364,8 +369,7 @@ impl LocalPane {
             'z' => 0x1A, // Ctrl+Z
             _ => {
                 return Err(PaneError::Internal(format!(
-                    "Unsupported control character: {}",
-                    ctrl_char
+                    "Unsupported control character: {ctrl_char}"
                 )))
             }
         };
@@ -391,8 +395,7 @@ impl LocalPane {
             "Insert" => b"\x1b[2~",
             _ => {
                 return Err(PaneError::Internal(format!(
-                    "Unsupported key sequence: {}",
-                    key
+                    "Unsupported key sequence: {key}"
                 )))
             }
         };

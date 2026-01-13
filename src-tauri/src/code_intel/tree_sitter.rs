@@ -7,7 +7,7 @@ use crate::vector_db::core::Language;
 #[derive(Debug, thiserror::Error)]
 pub enum TreeSitterError {
     #[error("language {0:?} not supported for tree-sitter parsing")]
-    UnsupportedLanguage(Language),
+    Unsupported(Language),
     #[error("failed to set tree-sitter language: {0}")]
     SetLanguage(String),
 }
@@ -62,7 +62,7 @@ pub fn configure_parser_for_language(
         Language::Swift => parser
             .set_language(&tree_sitter_swift::LANGUAGE.into())
             .map_err(|e| TreeSitterError::SetLanguage(e.to_string()))?,
-        Language::Kotlin => return Err(TreeSitterError::UnsupportedLanguage(language)),
+        Language::Kotlin => return Err(TreeSitterError::Unsupported(language)),
     }
 
     Ok(())

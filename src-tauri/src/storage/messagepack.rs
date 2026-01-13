@@ -122,7 +122,7 @@ impl MessagePackManager {
             let mut hasher = Sha256::new();
             hasher.update(payload);
             let digest = hasher.finalize();
-            if &digest[..] != &header[14..46] {
+            if digest[..] != header[14..46] {
                 return Err(MessagePackError::ChecksumFailed);
             }
         }
@@ -140,7 +140,7 @@ impl MessagePackManager {
 
         let mut deserializer = Deserializer::new(&decoded[..]);
         SessionState::deserialize(&mut deserializer)
-            .map_err(|e| MessagePackError::internal(format!("State deserialization failed: {}", e)))
+            .map_err(|e| MessagePackError::internal(format!("State deserialization failed: {e}")))
     }
 
     pub async fn save_state(&self, state: &SessionState) -> MessagePackResult<()> {
@@ -185,7 +185,7 @@ impl MessagePackManager {
             )
         })?;
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let backup_file = backup_dir.join(format!("session_state_{}.msgpack.bak", timestamp));
+        let backup_file = backup_dir.join(format!("session_state_{timestamp}.msgpack.bak"));
         async_fs::copy(source_file, &backup_file)
             .await
             .map_err(|e| {

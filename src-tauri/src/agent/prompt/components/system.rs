@@ -29,7 +29,7 @@ async fn get_directory_preview(working_directory: Option<&str>) -> String {
 
                 let mut preview = String::from("Files in Current Directory:\n");
                 for entry in entries {
-                    preview.push_str(&format!("  {}", entry));
+                    preview.push_str(&format!("  {entry}"));
                     preview.push('\n');
                 }
 

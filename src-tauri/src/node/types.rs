@@ -1,6 +1,5 @@
-//! Node.js 版本管理相关数据结构
-
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// Node.js 版本管理器类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -25,16 +24,20 @@ impl NodeVersionManager {
             NodeVersionManager::Unknown => "unknown",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for NodeVersionManager {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "nvm" => NodeVersionManager::Nvm,
             "fnm" => NodeVersionManager::Fnm,
             "volta" => NodeVersionManager::Volta,
             "n" => NodeVersionManager::N,
             "asdf" => NodeVersionManager::Asdf,
             _ => NodeVersionManager::Unknown,
-        }
+        })
     }
 }
 

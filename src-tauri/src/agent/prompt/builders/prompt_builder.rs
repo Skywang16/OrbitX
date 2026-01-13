@@ -59,8 +59,7 @@ impl PromptBuilder {
         for component_id in sorted.iter() {
             let Some(def) = self.registry.get(component_id.clone()) else {
                 return Err(AgentError::Internal(format!(
-                    "Component not found: {:?}",
-                    component_id
+                    "Component not found: {component_id:?}"
                 )));
             };
 

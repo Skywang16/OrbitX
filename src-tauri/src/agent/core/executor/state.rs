@@ -34,7 +34,7 @@ impl TaskExecutor {
         Ok(TaskSummary {
             task_id: task_id.to_string(),
             session_id: ctx.session_id,
-            status: format!("{:?}", status).to_lowercase(),
+            status: format!("{status:?}").to_lowercase(),
             current_iteration: current_iteration as i32,
             error_count: error_count as i32,
             created_at: created_at.to_rfc3339(),
@@ -74,8 +74,7 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<FileContextStatus> {
         let ctx = self.get_session_context(session_id).await.ok_or_else(|| {
             TaskExecutorError::InternalError(format!(
-                "No active context found for session {}",
-                session_id
+                "No active context found for session {session_id}"
             ))
         })?;
 

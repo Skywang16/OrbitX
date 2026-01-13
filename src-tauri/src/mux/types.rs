@@ -96,24 +96,14 @@ impl PaneInfo {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct TerminalConfig {
     pub shell_config: ShellConfig,
 }
 
 impl TerminalConfig {
     pub fn with_shell(shell_config: ShellConfig) -> Self {
-        Self {
-            shell_config,
-            ..Default::default()
-        }
-    }
-}
-
-impl Default for TerminalConfig {
-    fn default() -> Self {
-        Self {
-            shell_config: ShellConfig::default(),
-        }
+        Self { shell_config }
     }
 }
 

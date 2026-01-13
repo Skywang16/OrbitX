@@ -57,7 +57,7 @@ impl IoHandler {
     pub fn spawn_io_threads(&self, pane: Arc<dyn Pane>) -> IoHandlerResult<()> {
         let pane_id = pane.pane_id();
         let reader = pane.reader().map_err(|err| IoHandlerError::PaneReader {
-            reason: format!("Failed to acquire reader for {:?}: {err}", pane_id),
+            reason: format!("Failed to acquire reader for {pane_id:?}: {err}"),
         })?;
 
         let handle = self.spawn_reader_thread(pane_id, reader, pane);

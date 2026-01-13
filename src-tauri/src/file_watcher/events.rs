@@ -36,13 +36,15 @@ pub struct FileWatcherEventBatch {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FileWatcherEvent {
     #[serde(rename_all = "camelCase")]
-    GitChanged {
+    #[serde(rename = "git_changed")]
+    Git {
         repo_root: String,
         change_type: GitChangeType,
         timestamp_ms: u64,
     },
     #[serde(rename_all = "camelCase")]
-    FsChanged {
+    #[serde(rename = "fs_changed")]
+    Fs {
         workspace_root: String,
         path: String,
         event_type: FsEventType,
@@ -53,7 +55,7 @@ pub enum FileWatcherEvent {
 
 impl FileWatcherEvent {
     pub fn git_changed(repo_root: String, change_type: GitChangeType) -> Self {
-        Self::GitChanged {
+        Self::Git {
             repo_root,
             change_type,
             timestamp_ms: now_timestamp_ms(),
@@ -66,7 +68,7 @@ impl FileWatcherEvent {
         event_type: FsEventType,
         old_path: Option<String>,
     ) -> Self {
-        Self::FsChanged {
+        Self::Fs {
             workspace_root,
             path,
             event_type,

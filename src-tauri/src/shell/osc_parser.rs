@@ -63,6 +63,12 @@ pub enum WindowTitleType {
 
 pub struct OscParser;
 
+impl Default for OscParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OscParser {
     pub fn new() -> Self {
         Self

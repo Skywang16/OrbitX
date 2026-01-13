@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -31,16 +32,18 @@ impl KeyCombination {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        if self.modifiers.is_empty() {
-            self.key.clone()
-        } else {
-            format!("{}+{}", self.modifiers.join("+"), self.key)
-        }
-    }
-
     pub fn from_binding(binding: &crate::config::types::ShortcutBinding) -> Self {
         Self::new(binding.key.clone(), binding.modifiers.clone())
+    }
+}
+
+impl fmt::Display for KeyCombination {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.modifiers.is_empty() {
+            write!(f, "{}", self.key)
+        } else {
+            write!(f, "{}+{}", self.modifiers.join("+"), self.key)
+        }
     }
 }
 

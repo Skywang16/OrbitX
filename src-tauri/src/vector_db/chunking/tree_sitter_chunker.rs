@@ -21,18 +21,18 @@ impl TreeSitterChunker {
 
         // 设置语言解析器
         configure_parser_for_language(&mut parser, file_path, language).map_err(|e| {
-            VectorDbError::ChunkingError(format!("Failed to configure tree-sitter language: {}", e))
+            VectorDbError::ChunkingError(format!("Failed to configure tree-sitter language: {e}"))
         })?;
 
         // 解析代码
         let tree = parser.parse(content, None).ok_or_else(|| {
-            VectorDbError::ChunkingError(format!("Failed to parse {:?} code", language))
+            VectorDbError::ChunkingError(format!("Failed to parse {language:?} code"))
         })?;
 
         let mut chunks = Vec::new();
         let mut cursor = tree.root_node().walk();
 
-        self.extract_code_chunks(&mut cursor, content, &mut chunks, file_path, language);
+        Self::extract_code_chunks(&mut cursor, content, &mut chunks, file_path, language);
 
         // 如果没有提取到任何块，返回整个文件作为一个块
         if chunks.is_empty() {
@@ -49,7 +49,6 @@ impl TreeSitterChunker {
 
     /// 递归提取代码块
     fn extract_code_chunks(
-        &self,
         cursor: &mut TreeCursor,
         source: &str,
         chunks: &mut Vec<Chunk>,
@@ -148,7 +147,7 @@ impl TreeSitterChunker {
         // 递归处理子节点
         if cursor.goto_first_child() {
             loop {
-                self.extract_code_chunks(cursor, source, chunks, file_path, language);
+                Self::extract_code_chunks(cursor, source, chunks, file_path, language);
                 if !cursor.goto_next_sibling() {
                     break;
                 }

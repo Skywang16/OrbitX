@@ -44,6 +44,12 @@ pub struct GrepResultEntry {
 
 pub struct GrepTool;
 
+impl Default for GrepTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GrepTool {
     pub fn new() -> Self {
         Self
@@ -60,7 +66,7 @@ impl GrepTool {
 
         tokio::task::spawn_blocking(move || Self::grep_search_sync(&path, &pattern, max_results))
             .await
-            .map_err(|e| format!("Search task failed: {}", e))?
+            .map_err(|e| format!("Search task failed: {e}"))?
     }
 
     fn grep_search_sync(
@@ -71,7 +77,7 @@ impl GrepTool {
         use std::cell::RefCell;
 
         let matcher = RegexMatcher::new_line_matcher(pattern)
-            .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+            .map_err(|e| format!("Invalid regex pattern: {e}"))?;
 
         let results = RefCell::new(Vec::with_capacity(max_results));
 
@@ -249,8 +255,7 @@ Tips:
                 if entries.is_empty() {
                     return Ok(ToolResult {
                         content: vec![ToolResultContent::Success(format!(
-                            "No matches for pattern \"{}\"",
-                            pattern
+                            "No matches for pattern \"{pattern}\""
                         ))],
                         status: ToolResultStatus::Success,
                         cancel_reason: None,
@@ -264,8 +269,7 @@ Tips:
 
                 Ok(ToolResult {
                     content: vec![ToolResultContent::Success(format!(
-                        "{}\n\n{}",
-                        summary, details
+                        "{summary}\n\n{details}"
                     ))],
                     status: ToolResultStatus::Success,
                     cancel_reason: None,

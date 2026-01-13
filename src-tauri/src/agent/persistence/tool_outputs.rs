@@ -65,8 +65,7 @@ impl ToolOutputRepository {
         let sql = format!(
             "SELECT message_id, block_id, output_content, compacted_at
              FROM tool_outputs
-             WHERE message_id IN ({})",
-            placeholders
+             WHERE message_id IN ({placeholders})"
         );
 
         let mut query = sqlx::query(&sql);

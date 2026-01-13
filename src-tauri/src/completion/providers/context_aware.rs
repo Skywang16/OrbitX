@@ -247,7 +247,7 @@ impl ContextAwareProvider {
                     let description = if let Some(process_names) =
                         record.extracted_entities.get("process_name")
                     {
-                        process_names.first().map(|name| format!("进程: {}", name))
+                        process_names.first().map(|name| format!("进程: {name}"))
                     } else {
                         Some("进程ID".to_string())
                     };

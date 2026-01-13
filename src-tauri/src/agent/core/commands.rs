@@ -64,14 +64,13 @@ fn build_file_change_notice(changes: &[PendingChange]) -> String {
     }
     let total_files = latest.len();
 
-    let mut lines = Vec::new();
-    lines.push("WORKSPACE FILE CHANGES (since your last message)".to_string());
-    lines.push(
+    let mut lines = vec![
+        "WORKSPACE FILE CHANGES (since your last message)".to_string(),
         "These changes were made by the user or external tools. Treat them as authoritative."
             .to_string(),
-    );
-    lines.push("Do NOT revert them. If you need to edit any of these files, re-read first with read_file to avoid overwriting user changes.".to_string());
-    lines.push(String::new());
+        "Do NOT revert them. If you need to edit any of these files, re-read first with read_file to avoid overwriting user changes.".to_string(),
+        String::new(),
+    ];
 
     const MAX_FILES: usize = 20;
     let mut shown = 0usize;
@@ -97,11 +96,11 @@ fn build_file_change_notice(changes: &[PendingChange]) -> String {
             } else {
                 "Changed; re-read before editing if needed."
             };
-            lines.push(format!("- {} ({}, {} ago): {}", path, kind, age, suffix));
+            lines.push(format!("- {path} ({kind}, {age} ago): {suffix}"));
             continue;
         }
 
-        lines.push(format!("- {} ({}, {} ago):", path, kind, age));
+        lines.push(format!("- {path} ({kind}, {age} ago):"));
         lines.push("```diff".to_string());
         lines.push(change.patch.clone().unwrap_or_default());
         lines.push("```".to_string());
@@ -111,8 +110,7 @@ fn build_file_change_notice(changes: &[PendingChange]) -> String {
     if omitted > 0 {
         lines.push(String::new());
         lines.push(format!(
-            "(Plus {} more changed files omitted to keep context small.)",
-            omitted
+            "(Plus {omitted} more changed files omitted to keep context small.)"
         ));
     }
 
@@ -125,18 +123,18 @@ fn format_age(age_ms: u64) -> String {
     }
     let secs = age_ms / 1_000;
     if secs < 60 {
-        return format!("{}s", secs);
+        return format!("{secs}s");
     }
     let mins = secs / 60;
     if mins < 60 {
-        return format!("{}m", mins);
+        return format!("{mins}m");
     }
     let hours = mins / 60;
     if hours < 48 {
-        return format!("{}h", hours);
+        return format!("{hours}h");
     }
     let days = hours / 24;
-    format!("{}d", days)
+    format!("{days}d")
 }
 
 /// 取消任务

@@ -70,8 +70,7 @@ impl PromptComponentRegistry {
         ) -> AgentResult<()> {
             if visiting.contains(&id) {
                 return Err(AgentError::Internal(format!(
-                    "Circular dependency detected: {:?}",
-                    id
+                    "Circular dependency detected: {id:?}"
                 )));
             }
             if visited.contains(&id) {
@@ -119,13 +118,12 @@ impl PromptComponentRegistry {
                     for dep in def.dependencies() {
                         if !components.contains(dep) {
                             errors.push(format!(
-                                "Component {:?} depends on {:?} which is missing from the selection",
-                                component, dep
+                                "Component {component:?} depends on {dep:?} which is missing from the selection"
                             ));
                         }
                     }
                 }
-                None => errors.push(format!("Component does not exist: {:?}", component)),
+                None => errors.push(format!("Component does not exist: {component:?}")),
             }
         }
         errors

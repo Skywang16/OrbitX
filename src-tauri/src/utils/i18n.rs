@@ -26,7 +26,7 @@ impl I18nManager {
         let lang_code = language.to_string();
         let json_content = Self::load_language_file(&lang_code)?;
         let messages: HashMap<String, Value> = serde_json::from_str(&json_content)
-            .map_err(|e| format!("Failed to parse language file {}: {}", lang_code, e))?;
+            .map_err(|e| format!("Failed to parse language file {lang_code}: {e}"))?;
 
         if let Ok(mut i18n_messages) = I18N_MESSAGES.write() {
             i18n_messages.insert(lang_code, messages);
@@ -46,7 +46,7 @@ impl I18nManager {
         match lang_code {
             "zh-CN" => Ok(include_str!("i18n/zh-CN.json").to_string()),
             "en-US" => Ok(include_str!("i18n/en-US.json").to_string()),
-            _ => Err(format!("Unsupported language: {}", lang_code)),
+            _ => Err(format!("Unsupported language: {lang_code}")),
         }
     }
 
@@ -116,7 +116,7 @@ impl I18nManager {
         if let Some(params) = params {
             let mut result = text.to_string();
             for (key, value) in params {
-                let placeholder = format!("{{{}}}", key);
+                let placeholder = format!("{{{key}}}");
                 result = result.replace(&placeholder, value);
             }
             result

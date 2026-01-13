@@ -47,15 +47,17 @@ impl std::str::FromStr for AIProvider {
             "anthropic" => Ok(AIProvider::Anthropic),
             "openai_compatible" => Ok(AIProvider::OpenAiCompatible),
             _ => Err(crate::storage::error::RepositoryError::Validation {
-                reason: format!("Unknown AI provider: {}", s),
+                reason: format!("Unknown AI provider: {s}"),
             }),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum ModelType {
     #[serde(rename = "chat")]
+    #[default]
     Chat,
     #[serde(rename = "embedding")]
     Embedding,
@@ -78,17 +80,12 @@ impl std::str::FromStr for ModelType {
             "chat" => Ok(ModelType::Chat),
             "embedding" => Ok(ModelType::Embedding),
             _ => Err(crate::storage::error::RepositoryError::Validation {
-                reason: format!("Unknown model type: {}", s),
+                reason: format!("Unknown model type: {s}"),
             }),
         }
     }
 }
 
-impl Default for ModelType {
-    fn default() -> Self {
-        ModelType::Chat
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

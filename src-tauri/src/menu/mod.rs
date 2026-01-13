@@ -91,7 +91,7 @@ fn create_shell_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::men
 
 /// 编辑菜单
 fn create_edit_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Submenu<R>> {
-    SubmenuBuilder::new(app, &t("menu.edit"))
+    SubmenuBuilder::new(app, t("menu.edit"))
         .item(&PredefinedMenuItem::undo(app, Some(&t("menu.undo")))?)
         .item(&PredefinedMenuItem::redo(app, Some(&t("menu.redo")))?)
         .separator()
@@ -119,7 +119,7 @@ fn create_edit_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
 
 /// 显示菜单
 fn create_view_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Submenu<R>> {
-    SubmenuBuilder::new(app, &t("menu.view"))
+    SubmenuBuilder::new(app, t("menu.view"))
         .item(
             &MenuItemBuilder::with_id("increase_font_size", t("menu.increase_font_size"))
                 .accelerator("CmdOrCtrl+=")
@@ -154,7 +154,7 @@ fn create_view_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu
 
 /// 窗口菜单
 fn create_window_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Submenu<R>> {
-    SubmenuBuilder::new(app, &t("menu.window"))
+    SubmenuBuilder::new(app, t("menu.window"))
         .item(&PredefinedMenuItem::minimize(
             app,
             Some(&t("menu.minimize")),
@@ -179,7 +179,7 @@ fn create_window_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::me
 
 /// 帮助菜单
 fn create_help_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Submenu<R>> {
-    SubmenuBuilder::new(app, &t("menu.help"))
+    SubmenuBuilder::new(app, t("menu.help"))
         .item(&MenuItemBuilder::with_id("documentation", t("menu.documentation")).build(app)?)
         .item(&MenuItemBuilder::with_id("report_issue", t("menu.report_issue")).build(app)?)
         .build()

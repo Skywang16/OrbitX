@@ -56,7 +56,7 @@ impl WorkspaceRepository {
 
         self.get(path)
             .await?
-            .ok_or_else(|| AgentError::Internal(format!("Failed to upsert workspace {}", path)))
+            .ok_or_else(|| AgentError::Internal(format!("Failed to upsert workspace {path}")))
     }
 
     pub async fn get(&self, path: &str) -> AgentResult<Option<Workspace>> {
@@ -287,7 +287,7 @@ impl MessageRepository {
     ) -> AgentResult<Message> {
         let ts = now_timestamp();
         let blocks_json = serde_json::to_string(&blocks).map_err(|e| {
-            AgentError::Internal(format!("Failed to serialize message blocks: {}", e))
+            AgentError::Internal(format!("Failed to serialize message blocks: {e}"))
         })?;
 
         let result = sqlx::query(
@@ -326,7 +326,7 @@ impl MessageRepository {
 
     pub async fn update(&self, message: &Message) -> AgentResult<()> {
         let blocks_json = serde_json::to_string(&message.blocks).map_err(|e| {
-            AgentError::Internal(format!("Failed to serialize message blocks: {}", e))
+            AgentError::Internal(format!("Failed to serialize message blocks: {e}"))
         })?;
 
         let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
@@ -468,16 +468,14 @@ fn derive_session_title(content: &str) -> Option<String> {
     }
 
     let mut title = String::new();
-    let mut count = 0;
     let mut truncated = false;
 
-    for ch in normalized.chars() {
+    for (count, ch) in normalized.chars().enumerate() {
         if count >= SESSION_TITLE_MAX_LENGTH {
             truncated = true;
             break;
         }
         title.push(ch);
-        count += 1;
     }
 
     if truncated {
@@ -507,10 +505,7 @@ fn parse_role(role: &str) -> AgentResult<UiMessageRole> {
     match role {
         "user" => Ok(UiMessageRole::User),
         "assistant" => Ok(UiMessageRole::Assistant),
-        other => Err(AgentError::Parse(format!(
-            "Unknown message role: {}",
-            other
-        ))),
+        other => Err(AgentError::Parse(format!("Unknown message role: {other}"))),
     }
 }
 
@@ -521,8 +516,7 @@ fn parse_status(status: &str) -> AgentResult<UiMessageStatus> {
         "cancelled" => Ok(UiMessageStatus::Cancelled),
         "error" => Ok(UiMessageStatus::Error),
         other => Err(AgentError::Parse(format!(
-            "Unknown message status: {}",
-            other
+            "Unknown message status: {other}"
         ))),
     }
 }
@@ -554,7 +548,7 @@ fn context_usage_to_columns(usage: Option<&ContextUsage>) -> (Option<i64>, Optio
 fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
     let blocks_json: String = row.try_get("blocks_json")?;
     let blocks: Vec<Block> = serde_json::from_str(&blocks_json)
-        .map_err(|e| AgentError::Parse(format!("Invalid message blocks_json: {}", e)))?;
+        .map_err(|e| AgentError::Parse(format!("Invalid message blocks_json: {e}")))?;
 
     let role = parse_role(row.try_get::<String, _>("role")?.as_str())?;
     let status = parse_status(row.try_get::<String, _>("status")?.as_str())?;
@@ -655,7 +649,7 @@ impl WorkspaceFileContextRepository {
         self.find_by_path(workspace_path, relative_path)
             .await?
             .ok_or_else(|| {
-                AgentError::Internal(format!("Failed to fetch file context {}", relative_path))
+                AgentError::Internal(format!("Failed to fetch file context {relative_path}"))
             })
     }
 

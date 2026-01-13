@@ -1,4 +1,4 @@
-//! 文件系统管理模块
+//! 文件系统管理模块（内部实现）
 
 use crate::ai::error::{FileSystemToolError, FileSystemToolResult};
 use crate::storage::paths::StoragePaths;
@@ -438,7 +438,7 @@ impl FileSystemManager {
             }
         }
 
-        path.with_extension(format!("tmp.{}", timestamp))
+        path.with_extension(format!("tmp.{timestamp}"))
     }
 
     /// 获取备份文件路径
@@ -449,7 +449,7 @@ impl FileSystemManager {
             .as_secs();
 
         let backup_prefix = self.get_backup_prefix(path);
-        let backup_filename = format!("{}.{}.bak", backup_prefix, timestamp);
+        let backup_filename = format!("{backup_prefix}.{timestamp}.bak");
 
         self.paths.backup_file(&backup_filename)
     }

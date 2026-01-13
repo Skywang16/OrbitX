@@ -433,16 +433,14 @@ async fn resolve_file_path(path: &Path, workspace_root: &Path) -> CheckpointResu
             Err(e) if e.kind() == ErrorKind::NotFound => path.components().collect(),
             Err(e) => {
                 return Err(CheckpointError::InvalidFilePath(format!(
-                    "{:?} ({})",
-                    path, e
+                    "{path:?} ({e})"
                 )))
             }
         };
 
         if !absolute.starts_with(workspace_root) {
             return Err(CheckpointError::InvalidFilePath(format!(
-                "{:?} is outside workspace {:?}",
-                absolute, workspace_root
+                "{absolute:?} is outside workspace {workspace_root:?}"
             )));
         }
 
@@ -450,8 +448,7 @@ async fn resolve_file_path(path: &Path, workspace_root: &Path) -> CheckpointResu
             .strip_prefix(workspace_root)
             .map_err(|_| {
                 CheckpointError::InvalidFilePath(format!(
-                    "{:?} is outside workspace {:?}",
-                    absolute, workspace_root
+                    "{absolute:?} is outside workspace {workspace_root:?}"
                 ))
             })?
             .to_path_buf();

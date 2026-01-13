@@ -55,7 +55,7 @@ impl SessionMessageLoader {
                 }
                 MessageRole::Assistant => {
                     let (assistant_blocks, tool_results) =
-                        map_assistant_blocks(&message, &output_map);
+                        map_assistant_blocks(message, &output_map);
 
                     llm_messages.push(MessageParam {
                         role: AnthropicRole::Assistant,

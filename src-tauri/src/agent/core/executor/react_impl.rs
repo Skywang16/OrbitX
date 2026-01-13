@@ -38,8 +38,7 @@ impl ReactHandler for TaskExecutor {
             .await?
             .ok_or_else(|| {
                 crate::agent::error::TaskExecutorError::ConfigurationError(format!(
-                    "Model not found: {}",
-                    model_id
+                    "Model not found: {model_id}"
                 ))
             })?;
 
@@ -200,7 +199,7 @@ impl ReactHandler for TaskExecutor {
                                     finished_at
                                         .signed_duration_since(started_at)
                                         .num_milliseconds()
-                                        .max(0) as i64,
+                                        .max(0),
                                 )
                             },
                         ),

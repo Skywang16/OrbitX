@@ -101,6 +101,12 @@ struct TodoItemInput {
 
 pub struct TodoWriteTool;
 
+impl Default for TodoWriteTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TodoWriteTool {
     pub fn new() -> Self {
         Self
@@ -176,7 +182,7 @@ impl RunnableTool for TodoWriteTool {
             .count();
         let total = args.todos.len();
 
-        let mut output = format!("Todo ({}/{})\n", done, total);
+        let mut output = format!("Todo ({done}/{total})\n");
         for t in &args.todos {
             let icon = match t.status.as_str() {
                 "in_progress" => "▶",

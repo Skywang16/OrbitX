@@ -43,7 +43,7 @@ pub fn init_logging() {
     match result {
         Ok(_) => {}
         Err(e) => {
-            eprintln!("Log system initialization failed: {}", e);
+            eprintln!("Log system initialization failed: {e}");
             std::process::exit(1);
         }
     }
@@ -384,7 +384,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     // Initialize Dock Manager for platform-specific dock/jump list menus
     let app_handle = app.handle();
-    match crate::dock::DockManager::new(&app_handle) {
+    match crate::dock::DockManager::new(app_handle) {
         Ok(dock_manager) => {
             app.manage(dock_manager);
         }
@@ -691,7 +691,7 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
                 .join(theme_file)
         } else {
             app_handle.path().resolve(
-                format!("_up_/config/themes/{}", theme_file),
+                format!("_up_/config/themes/{theme_file}"),
                 BaseDirectory::Resource,
             )?
         };

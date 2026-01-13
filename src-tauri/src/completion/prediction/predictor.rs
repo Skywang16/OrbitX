@@ -167,9 +167,7 @@ impl CommandPredictor {
         // 简单模式匹配 docker ps 输出
         // 第一列是容器 ID
         output
-            .lines()
-            .skip(1) // 跳过表头
-            .next()
+            .lines().nth(1)
             .and_then(|line| line.split_whitespace().next())
             .map(|id| id.to_string())
     }

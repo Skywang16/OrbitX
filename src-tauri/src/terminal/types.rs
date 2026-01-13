@@ -3,6 +3,7 @@
 use crate::mux::PaneId;
 use crate::terminal::error::{TerminalValidationError, TerminalValidationResult};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::time::SystemTime;
 
 /// 终端 Channel 消息类型
@@ -34,24 +35,29 @@ pub struct TerminalContext {
 /// Shell类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum ShellType {
+    #[default]
     Bash,
     Zsh,
     Fish,
     Other(String),
 }
 
-impl ShellType {
-    /// 从字符串解析Shell类型
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for ShellType {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "bash" => ShellType::Bash,
             "zsh" => ShellType::Zsh,
             "fish" => ShellType::Fish,
             _ => ShellType::Other(s.to_string()),
-        }
+        })
     }
+}
 
+impl ShellType {
     /// 获取Shell的显示名称
     pub fn display_name(&self) -> &str {
         match self {
@@ -74,12 +80,6 @@ impl ShellType {
             ShellType::Fish => "❯ ",
             ShellType::Other(_) => "$ ",
         }
-    }
-}
-
-impl Default for ShellType {
-    fn default() -> Self {
-        ShellType::Bash
     }
 }
 
@@ -148,7 +148,7 @@ impl CommandInfo {
 
     /// 检查命令是否成功执行
     pub fn is_successful(&self) -> bool {
-        self.exit_code.map_or(false, |code| code == 0)
+        self.exit_code == Some(0)
     }
 
     /// 获取命令执行时长
@@ -196,20 +196,20 @@ impl TerminalContext {
     pub fn validate(&self) -> TerminalValidationResult<()> {
         // 验证面板ID是否有效
         if self.pane_id.as_u32() == 0 {
-            return Err(TerminalValidationError::InvalidPaneId);
+            return Err(TerminalValidationError::PaneId);
         }
 
         // 验证命令历史记录的完整性
         for (index, command) in self.command_history.iter().enumerate() {
             if let Err(e) = command.validate() {
-                return Err(TerminalValidationError::InvalidHistoryEntry { index, reason: e });
+                return Err(TerminalValidationError::HistoryEntry { index, reason: e });
             }
         }
 
         // 验证当前命令的完整性
         if let Some(ref command) = self.current_command {
             if let Err(e) = command.validate() {
-                return Err(TerminalValidationError::InvalidCurrentCommand { reason: e });
+                return Err(TerminalValidationError::CurrentCommand { reason: e });
             }
         }
 
@@ -388,19 +388,19 @@ mod tests {
 
     #[test]
     fn test_shell_type_parsing() {
-        assert_eq!(ShellType::from_str("bash"), ShellType::Bash);
-        assert_eq!(ShellType::from_str("zsh"), ShellType::Zsh);
-        assert_eq!(ShellType::from_str("fish"), ShellType::Fish);
+        assert_eq!(ShellType::from_str("bash").unwrap(), ShellType::Bash);
+        assert_eq!(ShellType::from_str("zsh").unwrap(), ShellType::Zsh);
+        assert_eq!(ShellType::from_str("fish").unwrap(), ShellType::Fish);
         assert_eq!(
-            ShellType::from_str("powershell"),
+            ShellType::from_str("powershell").unwrap(),
             ShellType::Other("powershell".to_string())
         );
         assert_eq!(
-            ShellType::from_str("cmd"),
+            ShellType::from_str("cmd").unwrap(),
             ShellType::Other("cmd".to_string())
         );
         assert_eq!(
-            ShellType::from_str("unknown"),
+            ShellType::from_str("unknown").unwrap(),
             ShellType::Other("unknown".to_string())
         );
     }

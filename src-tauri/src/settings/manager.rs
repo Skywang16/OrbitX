@@ -1,5 +1,5 @@
 use crate::settings::error::{SettingsError, SettingsResult};
-use crate::settings::types::{EffectiveSettings, Settings};
+use crate::settings::types::{EffectiveSettings, PermissionRules, Settings};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -126,40 +126,43 @@ impl SettingsManager {
     }
 
     fn default_global_settings() -> Settings {
-        let mut settings = Settings::default();
-        settings.schema = Some(SETTINGS_SCHEMA_URL.to_string());
-        settings.permissions.allow = vec![
-            "Read(${workspaceFolder}/**)".into(),
-            "Bash(ls:*)".into(),
-            "Bash(cat:${workspaceFolder}/**)".into(),
-            "Bash(head:${workspaceFolder}/**)".into(),
-            "Bash(tail:${workspaceFolder}/**)".into(),
-            "Bash(git status:*)".into(),
-            "Bash(git diff:*)".into(),
-            "Bash(git log:*)".into(),
-            "Bash(git branch:*)".into(),
-        ];
-        settings.permissions.deny = vec![
-            "Bash(rm -rf /)".into(),
-            "Bash(sudo:*)".into(),
-            "Bash(git push --force:*)".into(),
-            "Write(/etc/**)".into(),
-            "Write(/usr/**)".into(),
-            "Write(/System/**)".into(),
-            "Write(~/.ssh/**)".into(),
-        ];
-        settings.permissions.ask = vec![
-            "Write(**)".into(),
-            "Edit(**)".into(),
-            "Bash(rm:*)".into(),
-            "Bash(mv:*)".into(),
-            "Bash(git push:*)".into(),
-            "Bash(git commit:*)".into(),
-            "Bash(git checkout:*)".into(),
-            "Bash(git reset:*)".into(),
-            "WebFetch(*)".into(),
-        ];
-        settings
+        Settings {
+            schema: Some(SETTINGS_SCHEMA_URL.to_string()),
+            permissions: PermissionRules {
+                allow: vec![
+                    "Read(${workspaceFolder}/**)".into(),
+                    "Bash(ls:*)".into(),
+                    "Bash(cat:${workspaceFolder}/**)".into(),
+                    "Bash(head:${workspaceFolder}/**)".into(),
+                    "Bash(tail:${workspaceFolder}/**)".into(),
+                    "Bash(git status:*)".into(),
+                    "Bash(git diff:*)".into(),
+                    "Bash(git log:*)".into(),
+                    "Bash(git branch:*)".into(),
+                ],
+                deny: vec![
+                    "Bash(rm -rf /)".into(),
+                    "Bash(sudo:*)".into(),
+                    "Bash(git push --force:*)".into(),
+                    "Write(/etc/**)".into(),
+                    "Write(/usr/**)".into(),
+                    "Write(/System/**)".into(),
+                    "Write(~/.ssh/**)".into(),
+                ],
+                ask: vec![
+                    "Write(**)".into(),
+                    "Edit(**)".into(),
+                    "Bash(rm:*)".into(),
+                    "Bash(mv:*)".into(),
+                    "Bash(git push:*)".into(),
+                    "Bash(git commit:*)".into(),
+                    "Bash(git checkout:*)".into(),
+                    "Bash(git reset:*)".into(),
+                    "WebFetch(*)".into(),
+                ],
+            },
+            ..Default::default()
+        }
     }
 
     fn resolve_app_dir() -> SettingsResult<PathBuf> {

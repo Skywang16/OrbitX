@@ -99,8 +99,10 @@ impl PromptOrchestrator {
             updated_at: Utc::now(),
         };
 
-        let mut prompt_ctx = AgentContext::default();
-        prompt_ctx.working_directory = Some(cwd.to_owned());
+        let mut prompt_ctx = AgentContext {
+            working_directory: Some(cwd.to_owned()),
+            ..Default::default()
+        };
         prompt_ctx.additional_context.insert(
             "taskPrompt".to_string(),
             serde_json::Value::String(user_prompt.to_owned()),
@@ -141,7 +143,7 @@ impl PromptOrchestrator {
             build_agent_user_prompt(Some(task_for_prompt), Some(prompt_ctx), tool_schemas_full)
                 .await
                 .map_err(|e| {
-                    TaskExecutorError::InternalError(format!("Failed to build user prompt: {}", e))
+                    TaskExecutorError::InternalError(format!("Failed to build user prompt: {e}"))
                 })?;
 
         Ok((system_prompt, user_prompt_built))

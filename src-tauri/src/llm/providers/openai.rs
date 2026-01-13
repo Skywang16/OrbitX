@@ -94,7 +94,7 @@ impl OpenAIProvider {
             .api_url
             .as_deref()
             .unwrap_or("https://api.openai.com/v1");
-        format!("{}/chat/completions", base)
+        format!("{base}/chat/completions")
     }
 
     /// 获取 Embedding API 端点
@@ -104,7 +104,7 @@ impl OpenAIProvider {
             .api_url
             .as_deref()
             .unwrap_or("https://api.openai.com/v1");
-        format!("{}/embeddings", base)
+        format!("{base}/embeddings")
     }
 
     /// 获取请求头
@@ -134,9 +134,9 @@ impl OpenAIProvider {
                     .unwrap_or("Unknown error");
 
                 let message = match error_type {
-                    "insufficient_quota" => format!("Quota exceeded: {}", error_message),
-                    "invalid_request_error" => format!("Request error: {}", error_message),
-                    "authentication_error" => format!("Authentication failed: {}", error_message),
+                    "insufficient_quota" => format!("Quota exceeded: {error_message}"),
+                    "invalid_request_error" => format!("Request error: {error_message}"),
+                    "authentication_error" => format!("Authentication failed: {error_message}"),
                     _ => error_message.to_string(),
                 };
 
@@ -145,7 +145,7 @@ impl OpenAIProvider {
         }
         OpenAiError::Api {
             status,
-            message: format!("意外的响应: {}", body),
+            message: format!("意外的响应: {body}"),
         }
     }
 
@@ -250,9 +250,7 @@ impl LLMProvider for OpenAIProvider {
             .unwrap_or("")
             .to_string();
         let usage_obj = json.get("usage");
-        let usage = usage_obj
-            .and_then(|u| {
-                Some(Usage {
+        let usage = usage_obj.map(|u| Usage {
                     input_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0)
                         as u32,
                     output_tokens: u
@@ -262,7 +260,6 @@ impl LLMProvider for OpenAIProvider {
                     cache_creation_input_tokens: None,
                     cache_read_input_tokens: None,
                 })
-            })
             .unwrap_or(Usage {
                 input_tokens: 0,
                 output_tokens: 0,
@@ -443,7 +440,7 @@ impl LLMProvider for OpenAIProvider {
                                         state.pending_events.push_back(
                                             StreamEvent::ContentBlockDelta {
                                                 index: 0,
-                                                delta: ContentDelta::TextDelta {
+                                                delta: ContentDelta::Text {
                                                     text: content.to_string(),
                                                 },
                                             },
@@ -498,7 +495,7 @@ impl LLMProvider for OpenAIProvider {
                                                 state.pending_events.push_back(
                                                     StreamEvent::ContentBlockDelta {
                                                         index: event_index,
-                                                        delta: ContentDelta::InputJsonDelta {
+                                                        delta: ContentDelta::InputJson {
                                                             partial_json: arguments.to_string(),
                                                         },
                                                     },
@@ -566,7 +563,7 @@ impl LLMProvider for OpenAIProvider {
                                 tracing::error!("OpenAI SSE stream error: {:?}", e);
                                 return Some((
                                     Err(LlmProviderError::OpenAi(OpenAiError::Stream {
-                                        message: format!("Network error: {}", e),
+                                        message: format!("Network error: {e}"),
                                     })),
                                     (stream, state),
                                 ));

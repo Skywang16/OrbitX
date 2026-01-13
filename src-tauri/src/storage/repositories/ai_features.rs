@@ -69,16 +69,14 @@ impl AIFeatureConfig {
             created_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("created_at")?)
                 .map_err(|e| {
                     RepositoryError::internal(format!(
-                        "Failed to parse created_at timestamp: {}",
-                        e
+                        "Failed to parse created_at timestamp: {e}"
                     ))
                 })?
                 .with_timezone(&Utc),
             updated_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("updated_at")?)
                 .map_err(|e| {
                     RepositoryError::internal(format!(
-                        "Failed to parse updated_at timestamp: {}",
-                        e
+                        "Failed to parse updated_at timestamp: {e}"
                     ))
                 })?
                 .with_timezone(&Utc),
@@ -111,9 +109,9 @@ impl<'a> AIFeatures<'a> {
         .fetch_optional(self.db.pool())
         .await?;
 
-        Ok(row_opt
+        row_opt
             .map(|row| AIFeatureConfig::from_row(&row))
-            .transpose()?)
+            .transpose()
     }
 
     /// 保存或更新功能配置

@@ -108,7 +108,7 @@ mod tests {
 
         for &pane_id in &pane_ids {
             manager.set_pane_shell_type(pane_id, ShellType::Bash);
-            manager.update_current_working_directory(pane_id, format!("/path/{}", pane_id));
+            manager.update_current_working_directory(pane_id, format!("/path/{pane_id}"));
         }
 
         // 测试批量获取性能
@@ -124,7 +124,7 @@ mod tests {
             assert_eq!(state.shell_type, Some(ShellType::Bash));
             assert_eq!(
                 state.current_working_directory,
-                Some(format!("/path/{}", pane_id))
+                Some(format!("/path/{pane_id}"))
             );
         }
 

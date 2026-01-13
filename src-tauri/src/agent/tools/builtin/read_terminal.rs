@@ -20,6 +20,12 @@ struct ReadTerminalArgs {
 
 pub struct ReadTerminalTool;
 
+impl Default for ReadTerminalTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReadTerminalTool {
     pub fn new() -> Self {
         Self
@@ -118,8 +124,7 @@ Common Use Cases:
             Ok(content) => content,
             Err(err) => {
                 return Ok(tool_error(format!(
-                    "Failed to read terminal buffer: {}",
-                    err
+                    "Failed to read terminal buffer: {err}"
                 )));
             }
         };
@@ -146,11 +151,7 @@ Common Use Cases:
         let lines_to_return = total_lines.min(max_lines);
 
         // 取最后N行（最新的内容）
-        let start_index = if total_lines > max_lines {
-            total_lines - max_lines
-        } else {
-            0
-        };
+        let start_index = total_lines.saturating_sub(max_lines);
 
         let selected_lines: Vec<&str> = lines.iter().skip(start_index).copied().collect();
         let result_text = selected_lines.join("\n");

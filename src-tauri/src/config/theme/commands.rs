@@ -121,19 +121,20 @@ pub async fn theme_set_terminal<R: Runtime>(
     }
 
     // 更新配置
-    if let Err(_) = config_manager
+    if config_manager
         .config_update(|config| {
             config.appearance.theme_config.terminal_theme = theme_name.clone();
             config.appearance.theme_config.follow_system = false; // 切换到手动模式
             Ok(())
         })
         .await
+        .is_err()
     {
         return Ok(api_error!("config.update_failed"));
     }
 
     // 发送主题变化事件，确保前端能立即响应
-    if let Err(_) = app_handle.emit("theme-changed", &theme_name) {
+    if app_handle.emit("theme-changed", &theme_name).is_err() {
         return Ok(api_error!("config.update_failed"));
     }
 
@@ -164,7 +165,7 @@ pub async fn theme_set_follow_system<R: Runtime>(
     }
 
     // 更新配置
-    if let Err(_) = config_manager
+    if config_manager
         .config_update(|config| {
             config.appearance.theme_config.follow_system = follow_system;
 
@@ -179,6 +180,7 @@ pub async fn theme_set_follow_system<R: Runtime>(
             Ok(())
         })
         .await
+        .is_err()
     {
         return Ok(api_error!("config.update_failed"));
     }
@@ -193,7 +195,10 @@ pub async fn theme_set_follow_system<R: Runtime>(
             theme_service.get_current_theme_name(&config.appearance.theme_config, is_system_dark);
 
         // 发送主题变化事件
-        if let Err(_) = app_handle.emit("theme-changed", &current_theme_name) {
+        if app_handle
+            .emit("theme-changed", &current_theme_name)
+            .is_err()
+        {
             return Ok(api_error!("config.update_failed"));
         }
     }

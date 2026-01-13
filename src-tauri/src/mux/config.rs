@@ -10,6 +10,7 @@ use crate::mux::error::{MuxConfigError, MuxConfigResult};
 /// Terminal runtime configuration persisted on disk
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct TerminalSystemConfig {
     /// Buffer configuration
     pub buffer: BufferConfig,
@@ -93,16 +94,6 @@ pub struct CleanupConfig {
     pub auto_cleanup_enabled: bool,
 }
 
-impl Default for TerminalSystemConfig {
-    fn default() -> Self {
-        Self {
-            buffer: BufferConfig::default(),
-            shell: ShellSystemConfig::default(),
-            performance: PerformanceConfig::default(),
-            cleanup: CleanupConfig::default(),
-        }
-    }
-}
 
 impl Default for BufferConfig {
     fn default() -> Self {
