@@ -31,7 +31,9 @@ use dashmap::DashMap;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::orchestrator::PromptOrchestrator;
 use crate::agent::react::orchestrator::ReactOrchestrator;
+use crate::agent::mcp::McpRegistry;
 use crate::checkpoint::CheckpointService;
+use crate::settings::SettingsManager;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
 /// TaskExecutor内部状态
@@ -40,6 +42,8 @@ struct TaskExecutorInner {
     database: Arc<DatabaseManager>,
     cache: Arc<UnifiedCache>,
     agent_persistence: Arc<AgentPersistence>,
+    settings_manager: Arc<SettingsManager>,
+    mcp_registry: Arc<McpRegistry>,
 
     // Checkpoint 服务（可选，用于自动创建 checkpoint）
     checkpoint_service: Option<Arc<CheckpointService>>,
@@ -70,10 +74,13 @@ impl TaskExecutor {
         database: Arc<DatabaseManager>,
         cache: Arc<UnifiedCache>,
         agent_persistence: Arc<AgentPersistence>,
+        settings_manager: Arc<SettingsManager>,
+        mcp_registry: Arc<McpRegistry>,
     ) -> Self {
         let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
             Arc::clone(&cache),
             Arc::clone(&database),
+            Arc::clone(&settings_manager),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
@@ -85,6 +92,8 @@ impl TaskExecutor {
                 database,
                 cache,
                 agent_persistence,
+                settings_manager,
+                mcp_registry,
                 checkpoint_service: None,
                 prompt_orchestrator,
                 react_orchestrator,
@@ -98,11 +107,14 @@ impl TaskExecutor {
         database: Arc<DatabaseManager>,
         cache: Arc<UnifiedCache>,
         agent_persistence: Arc<AgentPersistence>,
+        settings_manager: Arc<SettingsManager>,
+        mcp_registry: Arc<McpRegistry>,
         checkpoint_service: Arc<CheckpointService>,
     ) -> Self {
         let prompt_orchestrator = Arc::new(PromptOrchestrator::new(
             Arc::clone(&cache),
             Arc::clone(&database),
+            Arc::clone(&settings_manager),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
@@ -114,6 +126,8 @@ impl TaskExecutor {
                 database,
                 cache,
                 agent_persistence,
+                settings_manager,
+                mcp_registry,
                 checkpoint_service: Some(checkpoint_service),
                 prompt_orchestrator,
                 react_orchestrator,
@@ -134,6 +148,14 @@ impl TaskExecutor {
 
     pub fn agent_persistence(&self) -> Arc<AgentPersistence> {
         Arc::clone(&self.inner.agent_persistence)
+    }
+
+    pub fn settings_manager(&self) -> Arc<SettingsManager> {
+        Arc::clone(&self.inner.settings_manager)
+    }
+
+    pub fn mcp_registry(&self) -> Arc<McpRegistry> {
+        Arc::clone(&self.inner.mcp_registry)
     }
 
     pub(crate) fn prompt_orchestrator(&self) -> Arc<PromptOrchestrator> {

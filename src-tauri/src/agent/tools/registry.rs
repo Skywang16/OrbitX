@@ -9,28 +9,16 @@ use uuid::Uuid;
 
 use super::metadata::{RateLimitConfig, ToolCategory, ToolMetadata};
 use super::r#trait::{
-    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent,
-    ToolResultStatus, ToolSchema,
+    RunnableTool, ToolDescriptionContext, ToolResult, ToolResultContent, ToolResultStatus,
+    ToolSchema,
 };
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::types::TaskEvent;
+use crate::agent::{
+    permissions::PermissionChecker, permissions::PermissionDecision, permissions::ToolAction,
+};
 use crate::storage::repositories::AppPreferences;
-
-/// 根据 chat_mode 获取授予的权限集合
-pub fn get_permissions_for_mode(mode: &str) -> Vec<ToolPermission> {
-    match mode {
-        "chat" => vec![ToolPermission::ReadOnly, ToolPermission::Network],
-        _ => vec![
-            // Agent 模式:全权限（包含 "agent" 和任何其他值）
-            ToolPermission::ReadOnly,
-            ToolPermission::FileSystem,
-            ToolPermission::SystemCommand,
-            ToolPermission::Network,
-            ToolPermission::Terminal,
-        ],
-    }
-}
 
 struct RateLimiter {
     calls: Vec<Instant>,
@@ -73,7 +61,7 @@ pub struct ToolRegistry {
     category_index: DashMap<ToolCategory, Vec<String>>,
     rate_limiters: DashMap<String, RateLimiter>,
     aliases: DashMap<String, String>,
-    granted_permissions: Vec<ToolPermission>,
+    permission_checker: Option<Arc<PermissionChecker>>,
     execution_stats: DashMap<String, ToolExecutionStats>,
     pending_confirmations: DashMap<String, tokio::sync::oneshot::Sender<ToolConfirmationDecision>>,
 }
@@ -90,14 +78,14 @@ pub struct ToolExecutionStats {
 
 impl ToolRegistry {
     /// 唯一的构造函数 - 显式传递权限
-    pub fn new(granted: Vec<ToolPermission>) -> Self {
+    pub fn new(permission_checker: Option<Arc<PermissionChecker>>) -> Self {
         Self {
             tools: DashMap::new(),
             metadata_index: DashMap::new(),
             category_index: DashMap::new(),
             rate_limiters: DashMap::new(),
             aliases: DashMap::new(),
-            granted_permissions: granted,
+            permission_checker,
             execution_stats: DashMap::new(),
             pending_confirmations: DashMap::new(),
         }
@@ -125,7 +113,6 @@ impl ToolRegistry {
         is_chat_mode: bool, // 新增参数
     ) -> ToolExecutorResult<()> {
         let key = name.to_string();
-        let granted = &self.granted_permissions;
         let metadata = tool.metadata();
 
         // === Chat 模式工具过滤逻辑 ===
@@ -141,25 +128,11 @@ impl ToolRegistry {
                 }
                 // 其他类别:检查权限
                 _ => {
-                    if !tool.check_permissions(granted) {
-                        warn!(
-                            "Tool {} missing required permissions {:?}",
-                            name,
-                            tool.required_permissions()
-                        );
-                        return Ok(());
-                    }
+                    // permissions are enforced at runtime via settings.json (allow/deny/ask)
                 }
             }
         } else {
-            // Agent 模式:检查权限（现有逻辑）
-            if !tool.check_permissions(granted) {
-                warn!(
-                    "Tool {} missing required permissions {:?}",
-                    name,
-                    tool.required_permissions()
-                );
-            }
+            // Agent 模式: permissions are enforced at runtime via settings.json (allow/deny/ask)
         }
 
         match self.tools.entry(key.clone()) {
@@ -287,6 +260,27 @@ impl ToolRegistry {
             }
         };
 
+        let permission_decision = self
+            .permission_checker
+            .as_ref()
+            .map(|checker| {
+                let action = build_tool_action(&resolved, &metadata, context, &args);
+                (checker.check(&action), action)
+            });
+
+        if let Some((PermissionDecision::Deny, action)) = &permission_decision {
+            return self
+                .make_error_result(
+                    &resolved,
+                    format!("Denied by settings permissions: {}", resolved),
+                    Some(format!("action={} source=settings.json", action.tool)),
+                    ToolResultStatus::Error,
+                    Some("denied".to_string()),
+                    start,
+                )
+                .await;
+        }
+
         if let Err(err) = self.check_rate_limit(&resolved).await {
             let detail = Some(format!(
                 "category={}, priority={}",
@@ -305,10 +299,17 @@ impl ToolRegistry {
                 .await;
         }
 
-        let requires_confirmation = metadata.requires_confirmation
-            || self
-                .requires_workspace_confirmation(&metadata, context, &args)
-                .await;
+        let requires_confirmation = match permission_decision {
+            Some((PermissionDecision::Allow, _)) => false,
+            Some((PermissionDecision::Ask, _)) => true,
+            Some((PermissionDecision::Deny, _)) => true, // handled above
+            None => {
+                metadata.requires_confirmation
+                    || self
+                        .requires_workspace_confirmation(&metadata, context, &args)
+                        .await
+            }
+        };
 
         if requires_confirmation {
             if let Some(blocked) = self
@@ -561,24 +562,6 @@ impl ToolRegistry {
             }
         };
 
-        let granted = &self.granted_permissions;
-        if !tool.check_permissions(granted) {
-            return self
-                .make_error_result(
-                    tool_name,
-                    format!(
-                        "Permission denied: {} requires permissions {:?}",
-                        tool_name,
-                        tool.required_permissions()
-                    ),
-                    None,
-                    ToolResultStatus::Error,
-                    None,
-                    start,
-                )
-                .await;
-        }
-
         if let Err(e) = tool.validate_arguments(&args) {
             return self
                 .make_error_result(
@@ -732,6 +715,109 @@ impl ToolRegistry {
     }
 }
 
+fn build_tool_action(
+    tool_name: &str,
+    metadata: &ToolMetadata,
+    context: &TaskContext,
+    args: &serde_json::Value,
+) -> ToolAction {
+    let workspace_root = PathBuf::from(context.cwd.as_ref());
+
+    if tool_name.starts_with("mcp__") {
+        return ToolAction::new(tool_name, workspace_root, vec![]);
+    }
+
+    match tool_name {
+        "shell" => {
+            let command = args
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            ToolAction::new("Bash", workspace_root, bash_param_variants(command))
+        }
+        "read_file" => ToolAction::new("Read", workspace_root, path_variants(args, metadata, context)),
+        "write_file" => ToolAction::new("Write", workspace_root, path_variants(args, metadata, context)),
+        "edit_file" => ToolAction::new("Edit", workspace_root, path_variants(args, metadata, context)),
+        "list_files" | "orbit_search" => {
+            ToolAction::new("Read", workspace_root, path_variants(args, metadata, context))
+        }
+        "web_fetch" => {
+            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or_default();
+            ToolAction::new("WebFetch", workspace_root, web_fetch_variants(url))
+        }
+        "read_terminal" => ToolAction::new("Terminal", workspace_root, vec![]),
+        _ => {
+            let summary = metadata
+                .summary_key_arg
+                .and_then(|key| args.get(key))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+
+            let variants = if summary.is_empty() { vec![] } else { vec![summary] };
+            ToolAction::new(tool_name, workspace_root, variants)
+        }
+    }
+}
+
+fn path_variants(args: &serde_json::Value, metadata: &ToolMetadata, context: &TaskContext) -> Vec<String> {
+    let path = args.get("path").and_then(|v| v.as_str()).or_else(|| {
+        metadata
+            .summary_key_arg
+            .and_then(|key| args.get(key))
+            .and_then(|v| v.as_str())
+    });
+
+    let Some(path) = path else {
+        return vec![context.cwd.to_string()];
+    };
+
+    match crate::agent::tools::builtin::file_utils::ensure_absolute(path, &context.cwd) {
+        Ok(resolved) => vec![resolved.to_string_lossy().to_string()],
+        Err(_) => vec![path.to_string()],
+    }
+}
+
+fn bash_param_variants(command: &str) -> Vec<String> {
+    let cmd = command.trim();
+    if cmd.is_empty() {
+        return vec![];
+    }
+
+    let mut variants = vec![cmd.to_string()];
+    let Ok(tokens) = shell_words::split(cmd) else {
+        return variants;
+    };
+
+    for split_at in 1..=tokens.len().min(3) {
+        let prefix = tokens[..split_at].join(" ");
+        let suffix = tokens[split_at..].join(" ");
+        if suffix.is_empty() {
+            variants.push(prefix);
+        } else {
+            variants.push(format!("{prefix}:{suffix}"));
+        }
+    }
+
+    variants
+}
+
+fn web_fetch_variants(url: &str) -> Vec<String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return vec![];
+    }
+
+    let mut out = vec![format!("url:{url}"), url.to_string()];
+    if let Ok(parsed) = url::Url::parse(url) {
+        if let Some(host) = parsed.host_str() {
+            out.push(format!("domain:{host}"));
+            out.push(host.to_string());
+        }
+    }
+    out
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolConfirmationDecision {
@@ -776,7 +862,7 @@ fn summarize_tool_call(
 
 impl Default for ToolRegistry {
     fn default() -> Self {
-        Self::new(vec![])
+        Self::new(None)
     }
 }
 

@@ -93,8 +93,8 @@ orbitx/
 
 ## Configuration
 
-- Themes: `config/themes/*.toml`
-- Global config: `config/config.toml`
+- Themes: `config/themes/*.json`
+- Global config: `config.json` (runtime in app data dir)
 
 ## Usage
 

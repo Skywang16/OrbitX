@@ -10,8 +10,8 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
+    ToolResultStatus,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -38,15 +38,31 @@ impl RunnableTool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "Writes a file to the local filesystem.
+        r#"Writes a file to the local filesystem. Use this tool to create new files or completely overwrite existing ones.
 
 Usage:
 - The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
-- This tool will overwrite the existing file if there is one at the provided path.
-- If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first.
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked."
+- This tool will overwrite the existing file if there is one at the provided path
+- If this is an existing file, you MUST use the read_file tool first to read the file's contents. This tool will fail if you did not read the file first
+- ALWAYS prefer editing existing files in the codebase using edit_file tool. NEVER write new files unless explicitly required
+- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User
+- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked
+- Parent directory must already exist - this tool will not create directories
+
+File Creation Guidelines:
+- Use this tool only when creating genuinely new files
+- For existing files, prefer edit_file tool for better change tracking
+- Ensure the file extension matches the content type
+- Consider the project's existing file structure and naming conventions
+
+Examples:
+- Create new file: {"path": "/path/to/new-file.js", "content": "console.log('Hello World');"}
+- Overwrite existing: {"path": "/path/to/existing.js", "content": "// Completely new content"} (after reading first)
+
+Common Errors to Avoid:
+- Don't create files without reading existing ones first
+- Don't create documentation files unless explicitly requested
+- Don't write to paths where parent directories don't exist"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -71,10 +87,6 @@ Usage:
             .with_confirmation()
             .with_tags(vec!["filesystem".into(), "write".into()])
             .with_summary_key_arg("path")
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
     }
 
     async fn run(

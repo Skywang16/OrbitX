@@ -52,14 +52,6 @@ export class AiApi {
 
     await invoke<void>('ai_models_test_connection', { config: payload })
   }
-
-  getUserRules = async (): Promise<string | null> => {
-    return await invoke<string | null>('agent_get_user_rules')
-  }
-
-  setUserRules = async (rules: string | null): Promise<void> => {
-    await invoke<void>('agent_set_user_rules', { rules })
-  }
 }
 
 export const aiApi = new AiApi()

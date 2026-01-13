@@ -16,8 +16,8 @@ use url::Url;
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
-    BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
-    ToolPriority, ToolResult, ToolResultContent, ToolResultStatus,
+    BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPriority,
+    ToolResult, ToolResultContent, ToolResultStatus,
 };
 
 #[derive(Debug, Deserialize)]
@@ -39,22 +39,47 @@ impl RunnableTool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        "Fetches content from a specified URL and returns the response data.
+        r#"Fetches content from a specified URL and returns the response data with intelligent content processing.
 
 Usage:
-- Takes a URL as input
-- Performs an HTTP GET request
-- Follows up to 10 redirects
-- Simplifies HTML to plain text for easier analysis
-- Returns at most 2000 characters
+- Takes a URL as input and performs an HTTP GET request
+- Follows up to 10 redirects automatically
+- Simplifies HTML to plain text for easier analysis and reading
+- Returns at most 2000 characters to keep responses manageable
+- Includes SSRF protection and rate limiting for security
 
-Usage notes:
-  - The URL must be a fully-formed valid URL (http:// or https://)
-  - Timeout is fixed at 30000ms (30 seconds)
-  - max_content_length is fixed at 2000 characters
-  - This tool is read-only and does not modify any files
-  - Rate limited to 10 calls per minute to prevent abuse
-  - SSRF protection: Blocks requests to localhost/private IPs (including via DNS)"
+URL Requirements:
+- The URL must be a fully-formed valid URL starting with http:// or https://
+- Examples: "https://api.github.com/repos/owner/repo", "https://docs.example.com/api"
+- Blocked: localhost, private IPs, and internal network addresses for security
+
+Response Processing:
+- HTML content is automatically converted to readable plain text
+- JSON responses are returned as-is for API interactions
+- Large responses are truncated to 2000 characters with indication
+- Redirects are followed transparently
+
+Rate Limiting & Security:
+- Limited to 10 calls per minute to prevent abuse
+- SSRF protection blocks requests to localhost/private IPs (including via DNS)
+- 30-second timeout prevents hanging requests
+- This tool is read-only and does not modify any files
+
+Common Use Cases:
+- Fetching API documentation or specifications
+- Reading public documentation pages
+- Accessing configuration files from public repositories
+- Checking API endpoints for integration work
+
+Examples:
+- Fetch API docs: {"url": "https://api.github.com/repos/microsoft/vscode"}
+- Read documentation: {"url": "https://docs.python.org/3/library/json.html"}
+- Check public config: {"url": "https://raw.githubusercontent.com/owner/repo/main/config.json"}
+
+Error Handling:
+- Network errors, timeouts, and invalid URLs will return descriptive error messages
+- Rate limit exceeded will suggest waiting before retrying
+- SSRF blocked requests will explain the security restriction"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -82,10 +107,6 @@ Usage notes:
             })
             .with_timeout(Duration::from_secs(60))
             .with_tags(vec!["network".into(), "http".into()])
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::Network]
     }
 
     async fn run(

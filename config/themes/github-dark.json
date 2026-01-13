@@ -1,0 +1,64 @@
+{
+  "theme": {
+    "name": "github-dark",
+    "theme_type": "dark",
+    "ansi": {
+      "black": "#484f58",
+      "red": "#ff7b72",
+      "green": "#7ce38b",
+      "yellow": "#ffa657",
+      "blue": "#58a6ff",
+      "magenta": "#bc8cff",
+      "cyan": "#39c5cf",
+      "white": "#b1bac4"
+    },
+    "bright": {
+      "black": "#6e7681",
+      "red": "#ffa198",
+      "green": "#56d364",
+      "yellow": "#ffdf5d",
+      "blue": "#79c0ff",
+      "magenta": "#d2a8ff",
+      "cyan": "#56d4dd",
+      "white": "#f0f6fc"
+    },
+    "syntax": {
+      "comment": "#8b949e",
+      "string": "#7ce38b",
+      "number": "#79c0ff",
+      "keyword": "#ff7b72",
+      "function": "#d2a8ff",
+      "variable": "#f0f6fc",
+      "type_name": "#ffa657",
+      "operator": "#ff7b72"
+    },
+    "ui": {
+      "bg_100": "#010409",
+      "bg_200": "#0d1117",
+      "bg_300": "#161b22",
+      "bg_400": "#21262d",
+      "bg_500": "#30363d",
+      "bg_600": "#484f58",
+      "bg_700": "#6e7681",
+      "border_200": "rgba(48, 54, 61, 0.2)",
+      "border_300": "rgba(48, 54, 61, 0.4)",
+      "border_400": "rgba(48, 54, 61, 0.6)",
+      "text_100": "#f0f6fc",
+      "text_200": "#e6edf3",
+      "text_300": "#b1bac4",
+      "text_400": "#9198a1",
+      "text_500": "#6e7681",
+      "primary": "#bc8cff",
+      "primary_hover": "#a371f7",
+      "primary_alpha": "rgba(188, 140, 255, 0.15)",
+      "success": "#238636",
+      "warning": "#9e6a03",
+      "error": "#da3633",
+      "info": "#1f6feb",
+      "hover": "#161b22",
+      "active": "#21262d",
+      "focus": "#bc8cff",
+      "selection": "rgba(88, 166, 255, 0.25)"
+    }
+  }
+}

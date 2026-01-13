@@ -99,6 +99,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::config::commands::config_set,
         crate::config::commands::config_reset_to_defaults,
         crate::config::commands::config_open_folder,
+        // AI 设置（settings.json / workspace .orbitx/settings.json）
+        crate::settings::commands::get_global_settings,
+        crate::settings::commands::update_global_settings,
+        crate::settings::commands::get_workspace_settings,
+        crate::settings::commands::update_workspace_settings,
+        crate::settings::commands::get_effective_settings,
+        // MCP 管理命令
+        crate::agent::mcp::commands::list_mcp_servers,
+        crate::agent::mcp::commands::test_mcp_server,
+        crate::agent::mcp::commands::reload_mcp_servers,
         // 终端配置命令
         crate::config::terminal_commands::terminal_config_get,
         crate::config::terminal_commands::terminal_config_set,
@@ -143,8 +153,6 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_cancel_task,
         crate::agent::core::commands::agent_tool_confirm,
         crate::agent::core::commands::agent_list_tasks,
-        crate::agent::core::commands::agent_get_user_rules,
-        crate::agent::core::commands::agent_set_user_rules,
         // 项目规则命令已迁移到 workspace 模块
         // 存储系统命令（State/Runtime）
         crate::ai::tool::storage::storage_save_session_state,

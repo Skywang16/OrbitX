@@ -93,8 +93,8 @@ orbitx/
 
 ## 配置
 
-- 主题：`config/themes/*.toml`
-- 全局配置：`config/config.toml`
+- 主题：`config/themes/*.json`
+- 全局配置：`config.json`（运行时位于应用数据目录）
 
 ## 使用
 

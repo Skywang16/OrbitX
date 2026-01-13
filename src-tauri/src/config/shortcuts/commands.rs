@@ -6,7 +6,7 @@
 
 use super::core::ShortcutManager;
 use super::types::*;
-use crate::config::commands::ConfigManagerState;
+use crate::config::manager::ConfigManager;
 use crate::config::error::ShortcutsResult;
 use crate::config::types::{ShortcutBinding, ShortcutsConfig};
 use crate::utils::{EmptyData, TauriApiResult};
@@ -22,8 +22,8 @@ pub struct ShortcutManagerState {
 }
 
 impl ShortcutManagerState {
-    pub async fn new(config_state: &ConfigManagerState) -> ShortcutsResult<Self> {
-        let manager = ShortcutManager::new(Arc::clone(&config_state.toml_manager)).await?;
+    pub async fn new(config_manager: Arc<ConfigManager>) -> ShortcutsResult<Self> {
+        let manager = ShortcutManager::new(config_manager).await?;
         Ok(Self {
             manager: Arc::new(Mutex::new(manager)),
         })

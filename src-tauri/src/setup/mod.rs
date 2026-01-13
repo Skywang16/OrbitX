@@ -7,8 +7,9 @@ pub use error::{SetupError, SetupResult};
 use crate::ai::tool::shell::TerminalState;
 use crate::ai::AIManagerState;
 use crate::completion::commands::CompletionState;
-use crate::config::{ConfigManagerState, ShortcutManagerState};
+use crate::config::{ConfigManager, ShortcutManagerState};
 use crate::llm::commands::LLMManagerState;
+use crate::settings::SettingsManager;
 use crate::terminal::{
     commands::TerminalContextState, ActiveTerminalContextRegistry, TerminalChannelState,
     TerminalContextService,
@@ -56,18 +57,25 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let paths = crate::config::paths::ConfigPaths::new()?;
     app.manage(paths);
 
-    let config_state = tauri::async_runtime::block_on(async { ConfigManagerState::new().await })?;
-    app.manage(config_state);
+    // 在 ConfigManager 初始化前确保 config.json 存在（无迁移：仅在缺失时写入默认模板）
+    tauri::async_runtime::block_on(async {
+        let _ = copy_config_from_resources(app.handle()).await;
+    });
 
-    let shortcut_state = {
-        let config_state = app.state::<ConfigManagerState>();
-        tauri::async_runtime::block_on(async { ShortcutManagerState::new(&config_state).await })?
-    };
+    let config_manager = Arc::new(tauri::async_runtime::block_on(async {
+        ConfigManager::new().await
+    })?);
+    app.manage(Arc::clone(&config_manager));
+
+    let shortcut_state = tauri::async_runtime::block_on(async {
+        ShortcutManagerState::new(Arc::clone(&config_manager)).await
+    })?;
     app.manage(shortcut_state);
 
-    // 提取并管理 TomlConfigManager，以便其他服务可以依赖它
-    let config_manager = app.state::<ConfigManagerState>().toml_manager.clone();
-    app.manage(config_manager);
+    // 初始化 SettingsManager（settings.json / workspace .orbitx/settings.json）
+    app.manage(Arc::new(SettingsManager::new()?));
+    // 初始化 MCP Registry（按 workspace 缓存 MCP clients）
+    app.manage(Arc::new(crate::agent::mcp::McpRegistry::default()));
 
     // 初始化 DatabaseManager
     let database_manager = {
@@ -119,7 +127,6 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     // 在 ThemeManager 初始化前复制主题文件
     tauri::async_runtime::block_on(async {
         let _ = copy_themes_from_resources(app.handle()).await;
-        let _ = copy_default_config_from_resources(app.handle()).await;
     });
 
     let theme_service = tauri::async_runtime::block_on(async {
@@ -216,7 +223,9 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     // 初始化 Checkpoint 服务（提前创建，供 TaskExecutor 使用）
     let checkpoint_service = {
-        use crate::checkpoint::{BlobStore, CheckpointService, CheckpointStorage};
+        use crate::checkpoint::{
+            BlobStore, CheckpointConfig, CheckpointService, CheckpointStorage,
+        };
 
         let database = app
             .state::<Arc<crate::storage::DatabaseManager>>()
@@ -224,9 +233,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .clone();
         let pool = database.pool().clone();
 
+        let config = CheckpointConfig::default();
         let storage = Arc::new(CheckpointStorage::new(pool.clone()));
-        let blob_store = Arc::new(BlobStore::new(pool));
-        Arc::new(CheckpointService::new(storage, blob_store))
+        let blob_store = Arc::new(BlobStore::new(pool, config.clone()));
+        Arc::new(CheckpointService::with_config(storage, blob_store, config))
     };
 
     // 初始化TaskExecutor状态（带有 Checkpoint 服务）
@@ -242,11 +252,21 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .state::<Arc<crate::storage::UnifiedCache>>()
             .inner()
             .clone();
+        let settings_manager = app
+            .state::<Arc<crate::settings::SettingsManager>>()
+            .inner()
+            .clone();
+        let mcp_registry = app
+            .state::<Arc<crate::agent::mcp::McpRegistry>>()
+            .inner()
+            .clone();
 
         let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
+            settings_manager,
+            mcp_registry,
             Arc::clone(&checkpoint_service),
         ));
 
@@ -572,18 +592,17 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
 /// 获取回退的主题文件列表
 fn get_fallback_theme_list() -> Vec<String> {
     vec![
-        "catppuccin-latte.toml".to_string(),
-        "catppuccin-mocha.toml".to_string(),
-        "dark.toml".to_string(),
-        "dracula.toml".to_string(),
-        "github-dark.toml".to_string(),
-        "gruvbox-dark.toml".to_string(),
-        "index.toml".to_string(),
-        "light.toml".to_string(),
-        "material-dark.toml".to_string(),
-        "nord.toml".to_string(),
-        "one-dark.toml".to_string(),
-        "tokyo-night.toml".to_string(),
+        "catppuccin-latte.json".to_string(),
+        "catppuccin-mocha.json".to_string(),
+        "dark.json".to_string(),
+        "dracula.json".to_string(),
+        "github-dark.json".to_string(),
+        "gruvbox-dark.json".to_string(),
+        "light.json".to_string(),
+        "material-dark.json".to_string(),
+        "nord.json".to_string(),
+        "one-dark.json".to_string(),
+        "tokyo-night.json".to_string(),
     ]
 }
 
@@ -613,7 +632,7 @@ async fn get_theme_files_from_resources<R: tauri::Runtime>(
                     if path.is_file() {
                         path.file_name()
                             .and_then(|n| n.to_str())
-                            .filter(|name| name.ends_with(".toml"))
+                            .filter(|name| name.ends_with(".json"))
                             .map(String::from)
                     } else {
                         None
@@ -674,50 +693,45 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
     Ok(())
 }
 
-/// 从资源目录复制默认配置文件到用户配置目录
-async fn copy_default_config_from_resources<R: tauri::Runtime>(
+async fn copy_config_from_resources<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use crate::config::paths::ConfigPaths;
+    use std::env;
     use std::fs;
     use tauri::path::BaseDirectory;
 
-    let paths = ConfigPaths::new()?;
-    let config_dir = paths.config_dir();
-    let config_file_path = paths.config_file();
+    let app_dir = if let Ok(dir) = env::var("OrbitX_DATA_DIR") {
+        std::path::PathBuf::from(dir)
+    } else {
+        let data_dir = dirs::data_dir().ok_or("system data_dir unavailable")?;
+        data_dir.join("OrbitX")
+    };
 
-    // 确保配置目录存在
-    if !config_dir.exists() {
-        fs::create_dir_all(config_dir)?;
-    }
+    fs::create_dir_all(&app_dir)?;
 
-    if config_file_path.exists() {
+    let dest_path = app_dir.join(crate::config::CONFIG_FILE_NAME);
+    if dest_path.exists() {
         return Ok(());
     }
 
-    // 尝试从资源目录读取默认配置文件
-    match app_handle
-        .path()
-        .resolve("_up_/config/config.toml", BaseDirectory::Resource)
-    {
-        Ok(resource_path) => match fs::read_to_string(&resource_path) {
-            Ok(content) => match fs::write(&config_file_path, content) {
-                Ok(_) => {
-                    // 成功复制默认配置文件（静默）
-                }
-                Err(e) => {
-                    warn!("Failed to write default config file: {}", e);
-                }
-            },
-            Err(e) => {
-                warn!("Failed to read resource config file: {}", e);
-            }
-        },
-        Err(e) => {
-            warn!("Failed to resolve config file resource path: {}", e);
-        }
+    let source_path = if cfg!(debug_assertions) {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        current_dir.join("..").join("config").join("config.json")
+    } else {
+        app_handle
+            .path()
+            .resolve("_up_/config/config.json", BaseDirectory::Resource)?
+    };
+
+    if let Ok(content) = std::fs::read_to_string(&source_path) {
+        let _ = std::fs::write(&dest_path, content);
+        return Ok(());
     }
 
+    // Fallback: serialize the compiled defaults.
+    let default_config = crate::config::defaults::create_default_config();
+    let json = serde_json::to_string_pretty(&default_config)?;
+    let _ = std::fs::write(&dest_path, format!("{json}\n"));
     Ok(())
 }
 

@@ -2,7 +2,6 @@
   import { useI18n } from 'vue-i18n'
 
   import { useAISettingsStore } from './store'
-  import AIFeatureSettings from './components/AIFeatureSettings.vue'
   import AIModelConfig from './components/AIModelConfig.vue'
 
   const aiSettingsStore = useAISettingsStore()
@@ -27,9 +26,6 @@
 
     <div class="settings-group">
       <AIModelConfig />
-    </div>
-    <div class="settings-group">
-      <AIFeatureSettings />
     </div>
   </div>
 </template>

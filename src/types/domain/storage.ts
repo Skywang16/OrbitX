@@ -151,7 +151,7 @@ export interface UiState {
   sidebarWidth: number
   leftSidebarVisible?: boolean
   leftSidebarWidth?: number
-  leftSidebarActivePanel?: 'workspace' | 'git' | null
+  leftSidebarActivePanel?: 'workspace' | 'git' | 'config' | null
   onboardingCompleted?: boolean
 }
 

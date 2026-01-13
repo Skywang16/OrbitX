@@ -19,9 +19,6 @@ pub struct ConfigPaths {
     /// 缓存的canonical应用目录路径（用于路径验证，避免重复syscall）
     canonical_app_dir: PathBuf,
 
-    /// 配置目录
-    config_dir: PathBuf,
-
     /// 主题目录
     themes_dir: PathBuf,
 
@@ -67,8 +64,7 @@ impl ConfigPaths {
         let canonical_app_dir =
             fs::canonicalize(&app_data_dir).unwrap_or_else(|_| app_data_dir.clone());
 
-        let config_dir = app_data_dir.join(crate::config::CONFIG_DIR_NAME);
-        let themes_dir = config_dir.join(crate::config::THEMES_DIR_NAME);
+        let themes_dir = app_data_dir.join(crate::config::THEMES_DIR_NAME);
         let backups_dir = app_data_dir.join(crate::config::BACKUPS_DIR_NAME);
         let cache_dir = app_data_dir.join(crate::config::CACHE_DIR_NAME);
         let logs_dir = app_data_dir.join(crate::config::LOGS_DIR_NAME);
@@ -77,7 +73,6 @@ impl ConfigPaths {
         let paths = Self {
             app_data_dir,
             canonical_app_dir,
-            config_dir,
             themes_dir,
             backups_dir,
             cache_dir,
@@ -138,7 +133,6 @@ impl ConfigPaths {
     fn ensure_directories_exist(&self) -> ConfigPathsResult<()> {
         let directories = [
             &self.app_data_dir,
-            &self.config_dir,
             &self.themes_dir,
             &self.backups_dir,
             &self.cache_dir,
@@ -163,16 +157,6 @@ impl ConfigPaths {
         &self.app_data_dir
     }
 
-    /// 获取配置目录路径
-    pub fn config_dir(&self) -> &Path {
-        &self.config_dir
-    }
-
-    /// 获取主配置文件路径
-    pub fn config_file(&self) -> PathBuf {
-        self.config_dir.join(crate::config::CONFIG_FILE_NAME)
-    }
-
     /// 获取主题目录路径
     pub fn themes_dir(&self) -> &Path {
         &self.themes_dir
@@ -181,7 +165,7 @@ impl ConfigPaths {
     /// 获取指定主题文件路径
     pub fn theme_file<S: AsRef<str>>(&self, theme_name: S) -> PathBuf {
         self.themes_dir
-            .join(format!("{}.toml", theme_name.as_ref()))
+            .join(format!("{}.json", theme_name.as_ref()))
     }
 
     /// 获取备份目录路径
@@ -189,19 +173,9 @@ impl ConfigPaths {
         &self.backups_dir
     }
 
-    /// 获取配置备份文件路径
-    pub fn config_backup_file(&self, timestamp: &str) -> PathBuf {
-        self.backups_dir.join(format!("config_{}.toml", timestamp))
-    }
-
     /// 获取缓存目录路径
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
-    }
-
-    /// 获取配置缓存文件路径
-    pub fn config_cache_file(&self) -> PathBuf {
-        self.cache_dir.join("config.cache")
     }
 
     /// 获取主题缓存文件路径
@@ -212,11 +186,6 @@ impl ConfigPaths {
     /// 获取日志目录路径
     pub fn logs_dir(&self) -> &Path {
         &self.logs_dir
-    }
-
-    /// 获取配置日志文件路径
-    pub fn config_log_file(&self) -> PathBuf {
-        self.logs_dir.join("config.log")
     }
 
     /// 获取错误日志文件路径
@@ -397,7 +366,7 @@ impl ConfigPaths {
                     .map_err(|e| ConfigPathsError::directory_access(self.themes_dir.clone(), e))?;
 
                 let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
                     theme_files.push(path);
                 }
             }
@@ -419,7 +388,7 @@ impl ConfigPaths {
                     .map_err(|e| ConfigPathsError::directory_access(self.backups_dir.clone(), e))?;
 
                 let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
                     backup_files.push(path);
                 }
             }
@@ -480,7 +449,6 @@ impl ConfigPaths {
         Self {
             app_data_dir: base_dir.clone(),
             canonical_app_dir,
-            config_dir: base_dir.clone(),
             themes_dir: base_dir.join("themes"),
             backups_dir: base_dir.join("backups"),
             cache_dir: base_dir.join("cache"),

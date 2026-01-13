@@ -45,6 +45,5 @@ pub const DATA_DIR_NAME: &str = "data";
 pub const BACKUPS_DIR_NAME: &str = "backups";
 
 // 文件名称
-pub const CONFIG_FILE_NAME: &str = "config.toml";
 pub const SESSION_STATE_FILE_NAME: &str = "session_state.msgpack";
 pub const DATABASE_FILE_NAME: &str = "orbitx.db";

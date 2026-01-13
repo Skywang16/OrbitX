@@ -28,7 +28,8 @@ Example summary structure:
   - [Concept 2]
 4. Relevant Files and Code:
   - src/main.rs: Core application logic, modified function xyz()
-  - config/config.toml: Application configuration
+  - config.json: Application configuration
+  - settings.json: AI settings (permissions, MCP, rules)
 5. Tools Used:
   - read_file: Read src/main.rs (500 lines), src/lib.rs (300 lines)
   - list_files: Listed src/ directory (20 files)

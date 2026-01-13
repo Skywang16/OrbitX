@@ -642,8 +642,8 @@
 
   .context-usage-indicator {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: 10px;
+    right: 10px;
     z-index: 10;
   }
 

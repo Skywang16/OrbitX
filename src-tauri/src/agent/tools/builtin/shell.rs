@@ -9,8 +9,8 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::shell::{AgentShellExecutor, CommandStatus, ShellError};
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
+    ToolResultStatus,
 };
 
 /// 默认超时时间（毫秒）
@@ -21,6 +21,57 @@ static SHELL_EXECUTOR: OnceLock<AgentShellExecutor> = OnceLock::new();
 
 fn get_executor() -> &'static AgentShellExecutor {
     SHELL_EXECUTOR.get_or_init(AgentShellExecutor::new)
+}
+
+/// Git 安全协议验证
+fn validate_git_command(command: &str) -> Result<(), String> {
+    let cmd_lower = command.to_lowercase();
+
+    // 检查是否是 git 命令
+    if !cmd_lower.trim_start().starts_with("git ") {
+        return Ok(());
+    }
+
+    // 禁止的危险操作
+    if cmd_lower.contains("git config") {
+        return Err("NEVER update git config - this violates Git Safety Protocol".to_string());
+    }
+
+    if cmd_lower.contains("push --force") || cmd_lower.contains("push -f") {
+        return Err(
+            "NEVER force push without explicit user request - this violates Git Safety Protocol"
+                .to_string(),
+        );
+    }
+
+    if cmd_lower.contains("--no-verify") || cmd_lower.contains("--no-gpg-sign") {
+        return Err(
+            "NEVER skip hooks without explicit user request - this violates Git Safety Protocol"
+                .to_string(),
+        );
+    }
+
+    if cmd_lower.contains("reset --hard") {
+        return Err("NEVER run hard reset without explicit user request - this is destructive and violates Git Safety Protocol".to_string());
+    }
+
+    if (cmd_lower.contains("push") && cmd_lower.contains("main"))
+        || (cmd_lower.contains("push") && cmd_lower.contains("master"))
+    {
+        if cmd_lower.contains("--force") || cmd_lower.contains("-f") {
+            return Err(
+                "NEVER force push to main/master - this violates Git Safety Protocol".to_string(),
+            );
+        }
+    }
+
+    // 警告 amend 操作（但不完全禁止，因为有合理使用场景）
+    if cmd_lower.contains("commit --amend") || cmd_lower.contains("commit -a") {
+        // 这里可以添加更复杂的逻辑来检查是否满足 amend 的安全条件
+        // 但为了简化，我们先允许但在描述中给出详细指导
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +102,9 @@ impl RunnableTool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "Executes a shell command with support for background execution and custom timeout.
+        r#"Executes a shell command with support for background execution and custom timeout.
+
+IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 
 Usage:
 - command: The shell command to execute (required)
@@ -59,13 +112,52 @@ Usage:
 - background: Run in background without waiting (optional, default false)
 - timeout_ms: Custom timeout in milliseconds (optional, default 120000ms)
 
-Notes:
+Command Execution Guidelines:
+- Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
+- Examples of proper quoting:
+  - mkdir "/Users/name/My Documents" (correct)
+  - mkdir /Users/name/My Documents (incorrect - will fail)
+  - python "/path/with spaces/script.py" (correct)
+  - python /path/with spaces/script.py (incorrect - will fail)
 - For long-running commands (e.g., dev servers), use background=true
 - Background commands return immediately with a command ID
 - Use read_terminal to check output of background commands
-- Dangerous commands like 'rm -rf /', 'shutdown' are blocked
+
+Tool Usage Policy:
+- Avoid using shell with find, grep, cat, head, tail, sed, awk, or echo commands
+- Instead, use specialized tools:
+  - File search: Use orbit_search (NOT find or ls)
+  - Content search: Use orbit_search (NOT grep or rg)
+  - Read files: Use read_file (NOT cat/head/tail)
+  - Edit files: Use unified_edit (NOT sed/awk)
+  - Write files: Use write_file (NOT echo >/cat <<EOF)
+  - Communication: Output text directly (NOT echo/printf)
+
+Git Safety Protocol:
+- NEVER update the git config
+- NEVER run destructive/irreversible git commands (like push --force, hard reset, etc) unless the user explicitly requests them
+- NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it
+- NEVER run force push to main/master, warn the user if they request it
+- Avoid git commit --amend. ONLY use --amend when ALL conditions are met:
+  (1) User explicitly requested amend, OR commit SUCCEEDED but pre-commit hook auto-modified files that need including
+  (2) HEAD commit was created by you in this conversation (verify: git log -1 --format='%an %ae')
+  (3) Commit has NOT been pushed to remote (verify: git status shows "Your branch is ahead")
+- CRITICAL: If commit FAILED or was REJECTED by hook, NEVER amend - fix the issue and create a NEW commit
+- CRITICAL: If you already pushed to remote, NEVER amend unless user explicitly requests it (requires force push)
+- NEVER commit changes unless the user explicitly asks you to. It is VERY IMPORTANT to only commit when explicitly asked
+
+Git Commit Workflow (when user explicitly requests):
+1. Run git status, git diff, and git log commands in parallel to understand current state
+2. Analyze all staged changes and draft a commit message focusing on the "why" rather than the "what"
+3. Add relevant untracked files to staging area, create commit, then run git status to verify
+4. If commit fails due to pre-commit hook, fix the issue and create a NEW commit (never amend)
+
+Important Notes:
+- DO NOT push to remote repository unless user explicitly asks
+- Never use git commands with -i flag (interactive mode not supported)
+- If no changes to commit, do not create empty commit
 - Quote paths with spaces using double quotes
-- Avoid using cat/grep/find - use read_file/orbit_search instead"
+- Avoid using cat/grep/find - use read_file/orbit_search instead"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -103,10 +195,6 @@ Notes:
             .with_summary_key_arg("command")
     }
 
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::SystemCommand]
-    }
-
     async fn run(
         &self,
         context: &TaskContext,
@@ -114,6 +202,20 @@ Notes:
     ) -> ToolExecutorResult<ToolResult> {
         let args: ShellArgs = serde_json::from_value(args)?;
         let executor = get_executor();
+
+        // Git 安全检查
+        if let Err(validation_error) = validate_git_command(&args.command) {
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Error(validation_error)],
+                status: ToolResultStatus::Error,
+                cancel_reason: None,
+                execution_time_ms: None,
+                ext_info: Some(json!({
+                    "command": args.command,
+                    "error": "git_safety_violation",
+                })),
+            });
+        }
 
         // 确定工作目录
         let cwd = args.cwd.as_deref().unwrap_or(&context.cwd);
@@ -246,12 +348,6 @@ fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
             "aborted",
             ToolResultStatus::Cancelled,
             Some("aborted".to_string()),
-        ),
-        ShellError::DangerousCommand(cmd) => (
-            format!("Dangerous command blocked: {}", cmd),
-            "blocked",
-            ToolResultStatus::Cancelled,
-            Some("blocked".to_string()),
         ),
         ShellError::ValidationFailed(msg) => (
             format!("Validation failed: {}", msg),

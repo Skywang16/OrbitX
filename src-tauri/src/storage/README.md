@@ -40,12 +40,12 @@ use crate::storage::{CacheNamespace, UnifiedCache};
 let cache = UnifiedCache::new();
 
 // 带命名空间的 API
-cache.set_serialized_ns(CacheNamespace::Rules, "user_rules", &rules).await?;
-let rules: Option<String> = cache.get_deserialized_ns(CacheNamespace::Rules, "user_rules").await?;
+cache.set_serialized_ns(CacheNamespace::Rules, "global_rules", &rules).await?;
+let rules: Option<String> = cache.get_deserialized_ns(CacheNamespace::Rules, "global_rules").await?;
 
 // 便捷方法
-cache.set_user_rules(Some(rules)).await?;
-let rules = cache.get_user_rules().await;
+cache.set_global_rules(Some(rules)).await?;
+let rules = cache.get_global_rules().await;
 
 // 命名空间管理
 cache.clear_namespace(CacheNamespace::Session).await;
@@ -218,7 +218,7 @@ let models = AIModels::new(&database).find_all().await?;
 3. **使用便捷方法:**
 
 ```rust
-let rules = cache.get_user_rules().await;
+let rules = cache.get_global_rules().await;
 ```
 
 ### ❌ 不好的做法
@@ -242,10 +242,10 @@ AIModels::new(&database)
 
 ```rust
 // ❌ 不要另外创建 RulesManager
-struct RulesManager { user_rules: RwLock<...> }
+struct RulesManager { global_rules: RwLock<...> }
 
 // ✅ 直接用 cache
-cache.set_user_rules(rules).await
+cache.set_global_rules(rules).await
 ```
 
 3. **不要 Arc 套 Arc:**

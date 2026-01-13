@@ -5,8 +5,6 @@
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor, TaskSummary};
 use crate::agent::tools::registry::ToolConfirmationDecision;
 use crate::agent::types::TaskEvent;
-use crate::storage::repositories::AppPreferences;
-use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde::Deserialize;
@@ -104,44 +102,6 @@ pub async fn agent_list_tasks(
         Err(e) => {
             tracing::error!("Failed to list tasks: {}", e);
             Ok(api_error!("agent.list_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn agent_get_user_rules(
-    database: State<'_, Arc<DatabaseManager>>,
-    cache: State<'_, Arc<UnifiedCache>>,
-) -> TauriApiResult<Option<String>> {
-    match AppPreferences::new(&database).get("agent.user_rules").await {
-        Ok(value) => {
-            let _ = cache.set_user_rules(value.clone()).await;
-            Ok(api_success!(value))
-        }
-        Err(e) => {
-            tracing::error!("Failed to load user rules: {}", e);
-            Ok(api_error!("agent.rules.load_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn agent_set_user_rules(
-    rules: Option<String>,
-    database: State<'_, Arc<DatabaseManager>>,
-    cache: State<'_, Arc<UnifiedCache>>,
-) -> TauriApiResult<EmptyData> {
-    match AppPreferences::new(&database)
-        .set("agent.user_rules", rules.as_deref())
-        .await
-    {
-        Ok(_) => {
-            let _ = cache.set_user_rules(rules).await;
-            Ok(api_success!())
-        }
-        Err(e) => {
-            tracing::error!("Failed to save user rules: {}", e);
-            Ok(api_error!("agent.rules.save_failed"))
         }
     }
 }

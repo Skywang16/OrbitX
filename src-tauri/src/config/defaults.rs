@@ -220,18 +220,18 @@ mod tests {
     fn test_default_config_serialization() {
         let config = create_default_config();
 
-        let toml_string =
-            toml::to_string_pretty(&config).expect("Failed to serialize config to TOML");
+        let json_string =
+            serde_json::to_string_pretty(&config).expect("Failed to serialize config to JSON");
 
-        assert!(toml_string.contains("version = \"1.0.0\""));
-        assert!(toml_string.contains("[app]"));
-        assert!(toml_string.contains("language = \"zh-CN\""));
-        assert!(toml_string.contains("[appearance]"));
-        assert!(toml_string.contains("[terminal]"));
-        assert!(toml_string.contains("global") || toml_string.contains("shortcuts"));
+        assert!(json_string.contains("\"version\": \"1.0.0\""));
+        assert!(json_string.contains("\"app\""));
+        assert!(json_string.contains("\"language\""));
+        assert!(json_string.contains("\"appearance\""));
+        assert!(json_string.contains("\"terminal\""));
+        assert!(json_string.contains("\"shortcuts\""));
 
-        let _deserialized: AppConfig =
-            toml::from_str(&toml_string).expect("Failed to deserialize TOML back to config");
+        let _deserialized: AppConfig = serde_json::from_str(&json_string)
+            .expect("Failed to deserialize JSON back to config");
     }
 
     #[test]

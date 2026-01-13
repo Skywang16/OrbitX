@@ -27,6 +27,11 @@
       title: t('git.title'),
       badge: gitStore.changedCount > 0 ? gitStore.changedCount : undefined,
     },
+    {
+      id: 'config',
+      icon: 'config',
+      title: t('config.title'),
+    },
   ])
 
   const isActive = (id: LeftSidebarPanel) => {
@@ -61,6 +66,21 @@
           <circle cx="6" cy="5" r="2" />
           <circle cx="6" cy="15" r="2" />
           <circle cx="16" cy="21" r="2" />
+        </svg>
+
+        <!-- Config icon (AI sparkles) -->
+        <svg
+          v-else-if="item.icon === 'config'"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9.5 2l1 3.5L14 6.5l-3.5 1L9.5 11l-1-3.5L5 6.5l3.5-1L9.5 2z" />
+          <path d="M17 12l.75 2.25L20 15l-2.25.75L17 18l-.75-2.25L14 15l2.25-.75L17 12z" />
+          <path d="M6 15l.5 1.5L8 17l-1.5.5L6 19l-.5-1.5L4 17l1.5-.5L6 15z" />
         </svg>
 
         <span v-if="item.badge" class="activity-badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>

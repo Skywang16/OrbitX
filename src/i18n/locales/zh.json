@@ -3,6 +3,8 @@
     "cancel": "取消",
     "confirm": "确认",
     "save": "保存",
+    "refresh": "刷新",
+    "reload": "重载",
     "add": "添加",
     "select_placeholder": "请选择",
     "no_data": "无数据",
@@ -285,8 +287,10 @@
     "data_error": "数据错误"
   },
   "ai_feature": {
-    "user_rules": "用户规则",
-    "rules_placeholder": "在这里输入你的规则",
+    "user_rules": "全局规则",
+    "rules_placeholder": "在这里输入全局规则",
+    "mcp_servers": "MCP 服务器",
+    "mcp_servers_description": "全局 MCP 服务器配置（保存后对新启动的 Agent 任务生效）",
     "project_rules": "项目规则文件",
     "project_rules_description": "选择要优先使用的项目规则文件",
     "click_to_switch": "点击切换",
@@ -357,6 +361,15 @@
     "build_done_with_failures": "索引构建完成，但有 {count} 个文件失败",
     "build_channel_error": "索引构建通道错误",
     "embedding_model": "向量模型"
+  },
+  "config": {
+    "title": "配置",
+    "global": "全局",
+    "workspace": "工作区",
+    "no_workspace": "未选择工作区",
+    "rules": "规则",
+    "mcp_servers": "MCP 服务器",
+    "no_mcp_servers": "未配置 MCP 服务器"
   },
   "workspace": {
     "title": "工作区",

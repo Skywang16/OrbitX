@@ -22,11 +22,8 @@
   type TreeItem = { name: string; path: string; kind: TreeItemKind; depth: number; isIgnored: boolean }
   type Breadcrumb = { name: string; path: string }
 
-  // 侧边栏独立的路径状态
   const sidebarPath = ref<string>('')
   const terminalCwd = computed(() => terminalStore.activeTerminal?.cwd || '~')
-
-  // 当前显示的路径
   const currentPath = computed(() => sidebarPath.value || terminalCwd.value)
 
   const loading = ref(false)
@@ -36,7 +33,6 @@
   const childrenCache = ref<Map<string, FsEntry[]>>(new Map())
   const loadingDirs = ref<Set<string>>(new Set())
 
-  // 构建面包屑导航（不包含当前目录）
   const breadcrumbs = computed(() => {
     const path = currentPath.value
     if (!path || path === '~') return []
@@ -45,20 +41,17 @@
     const normalizedPath = path.replace(/\\/g, '/')
     const parts = normalizedPath.split('/').filter(Boolean)
 
-    if (parts.length <= 1) return [] // 只有一个部分时（根目录或单级目录），不显示面包屑
+    if (parts.length <= 1) return []
 
     const crumbs: Breadcrumb[] = []
     let buildPath = ''
     const isUnixPath = normalizedPath.startsWith('/')
 
-    // 只遍历到倒数第二个部分（排除当前目录）
     for (let i = 0; i < parts.length - 1; i++) {
       if (i === 0 && /^[A-Za-z]:$/.test(parts[0])) {
-        // Windows 驱动器
         buildPath = parts[0] + separator
         crumbs.push({ name: parts[0], path: buildPath })
       } else {
-        // Unix 路径以 / 开头
         if (i === 0 && isUnixPath) {
           buildPath = '/' + parts[i]
         } else {
@@ -140,33 +133,19 @@
     }
   }
 
-  const getRootLabel = (path: string): string => {
-    if (isRootPath(path)) return path
-    const separator = getPathSeparator(path)
-    const parts = path.split(separator).filter(Boolean)
-    if (parts.length === 0) return path
-    return parts[parts.length - 1]
-  }
-
   const buildTreeItems = (rootPath: string): TreeItem[] => {
-    const items: TreeItem[] = [
-      { name: getRootLabel(rootPath), path: rootPath, kind: 'dir', depth: 0, isIgnored: false },
-    ]
+    const rootLabel = isRootPath(rootPath)
+      ? rootPath
+      : rootPath.split(getPathSeparator(rootPath)).filter(Boolean).pop() || rootPath
+    const items: TreeItem[] = [{ name: rootLabel, path: rootPath, kind: 'dir', depth: 0, isIgnored: false }]
 
     const visit = (dirPath: string, depth: number, parentIgnored: boolean) => {
       const children = childrenCache.value.get(dirPath) || []
       for (const entry of children) {
         const childPath = joinPath(dirPath, entry.name)
         const kind: TreeItemKind = entry.isDirectory ? 'dir' : entry.isSymlink ? 'symlink' : 'file'
-        // 如果父目录被忽略，或者当前条目被忽略，则标记为 ignored
         const isIgnored = parentIgnored || entry.isIgnored || false
-        items.push({
-          name: entry.name,
-          path: childPath,
-          kind,
-          depth,
-          isIgnored,
-        })
+        items.push({ name: entry.name, path: childPath, kind, depth, isIgnored })
         if (entry.isDirectory && expandedDirs.value.has(childPath)) {
           visit(childPath, depth + 1, isIgnored)
         }
@@ -198,7 +177,6 @@
     await loadChildren(path)
   }
 
-  // 处理侧边栏路径导航
   const navigateToPath = async (path: string) => {
     sidebarPath.value = path
     resetTreeState()
@@ -220,7 +198,6 @@
     await editorStore.createTerminalTab({ directory: path, activate: true })
   }
 
-  // 处理文件夹双击（跳转到该目录）
   const handleDirectoryDoubleClick = async (path: string) => {
     await navigateToPath(path)
   }
@@ -242,7 +219,6 @@
     setTimeout(() => layoutStore.setDragPath(null), 100)
   }
 
-  // 当终端 cwd 改变时，如果侧边栏没有独立路径，则更新侧边栏
   watch(terminalCwd, () => {
     if (!sidebarPath.value) {
       ensureRootLoaded()
@@ -256,34 +232,36 @@
 
 <template>
   <div class="workspace-panel">
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
+    <div v-if="loading" class="workspace-panel__loading">
+      <div class="workspace-panel__spinner"></div>
     </div>
 
-    <div v-else-if="errorMessage" class="error-state">
+    <div v-else-if="errorMessage" class="workspace-panel__error">
       <span>{{ errorMessage }}</span>
     </div>
 
-    <div v-else-if="currentPath === '~'" class="empty-state">
-      <span>{{ t('workspace.no_folders') }}</span>
+    <div v-else-if="currentPath === '~'" class="workspace-panel__empty">
+      <svg class="workspace-panel__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+      <span class="workspace-panel__empty-text">{{ t('workspace.no_folders') }}</span>
     </div>
 
     <template v-else>
-      <!-- 面包屑导航栏 -->
-      <div v-if="breadcrumbs.length > 0" class="breadcrumb-bar">
-        <div class="breadcrumbs">
+      <div class="workspace-panel__header">
+        <div class="workspace-panel__path">
           <button
             v-for="(crumb, index) in breadcrumbs"
             :key="crumb.path"
-            class="breadcrumb-item"
+            class="workspace-panel__path-item"
             type="button"
             :title="crumb.path"
             @click="navigateToPath(crumb.path)"
           >
-            <span class="breadcrumb-name">{{ crumb.name }}</span>
+            <span>{{ crumb.name }}</span>
             <svg
               v-if="index < breadcrumbs.length - 1"
-              class="breadcrumb-separator"
+              class="workspace-panel__path-sep"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -295,46 +273,41 @@
         </div>
       </div>
 
-      <!-- 目录树 -->
-      <div class="tree-list">
+      <div class="workspace-panel__tree">
         <div
           v-for="item in treeItems"
           :key="item.path"
-          class="tree-row"
-          :class="{ dir: item.kind === 'dir', ignored: item.isIgnored }"
+          class="workspace-panel__item"
+          :class="{ 'workspace-panel__item--ignored': item.isIgnored }"
           :draggable="true"
           @dragstart="(e: DragEvent) => handleDragStart(e, item)"
           @dragend="handleDragEnd"
           @click="item.kind === 'dir' ? toggleDirectory(item.path) : undefined"
           @dblclick="item.kind === 'dir' ? handleDirectoryDoubleClick(item.path) : undefined"
         >
-          <span class="indent-spacer" :style="{ width: `${item.depth * 14}px` }"></span>
+          <span class="workspace-panel__item-indent" :style="{ width: `${item.depth * 14}px` }"></span>
 
           <button
             v-if="item.kind === 'dir'"
-            class="caret-button"
+            class="workspace-panel__item-caret"
             type="button"
-            :title="expandedDirs.has(item.path) ? 'Collapse' : 'Expand'"
             @click.stop="toggleDirectory(item.path)"
           >
             <svg
-              class="caret-icon"
-              :class="{ expanded: expandedDirs.has(item.path) }"
+              :class="{ 'workspace-panel__item-caret--open': expandedDirs.has(item.path) }"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
             >
               <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
-          <span v-else class="caret-placeholder"></span>
+          <span v-else class="workspace-panel__item-caret-placeholder"></span>
 
           <svg
             v-if="item.kind === 'dir'"
-            class="folder-icon"
+            class="workspace-panel__item-icon workspace-panel__item-icon--folder"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -342,29 +315,36 @@
           >
             <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
-          <svg v-else class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            v-else
+            class="workspace-panel__item-icon workspace-panel__item-icon--file"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
             <path d="M14 2v6h6" />
           </svg>
 
-          <span class="tree-name" :title="item.path">{{ item.name }}</span>
+          <span class="workspace-panel__item-name" :title="item.path">{{ item.name }}</span>
 
           <button
             v-if="item.kind === 'dir'"
-            class="new-terminal-button"
+            class="workspace-panel__item-action"
             type="button"
             title="New terminal here"
             @click.stop="handleDirectoryNewTerminal(item.path)"
           >
-            <svg class="new-terminal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14" />
               <path d="M5 12h14" />
             </svg>
           </button>
         </div>
 
-        <div v-if="isTreeEmpty" class="empty-state">
-          <span>{{ t('workspace.no_folders') }}</span>
+        <div v-if="isTreeEmpty" class="workspace-panel__empty workspace-panel__empty--inline">
+          <span class="workspace-panel__empty-text">{{ t('workspace.no_folders') }}</span>
         </div>
       </div>
     </template>
@@ -377,34 +357,32 @@
     flex-direction: column;
     height: 100%;
     background: var(--bg-50);
-    overflow-y: auto;
-    padding: 8px;
+    overflow: hidden;
   }
 
-  /* 面包屑导航栏 */
-  .breadcrumb-bar {
-    padding: 6px 8px;
-    margin-bottom: 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--border-radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+  /* Header */
+  .workspace-panel__header {
+    flex-shrink: 0;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-200);
+    background: var(--bg-100);
   }
 
-  .breadcrumbs {
+  .workspace-panel__path {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 1px;
+    gap: 2px;
   }
 
-  .breadcrumb-item {
+  .workspace-panel__path-item {
     display: flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 6px;
+    gap: 2px;
+    padding: 2px 4px;
     border: none;
     background: transparent;
-    color: var(--text-300);
+    color: var(--text-400);
     font-size: 11px;
     font-family: var(--font-mono, monospace);
     cursor: pointer;
@@ -412,147 +390,132 @@
     transition: all 0.15s ease;
   }
 
-  .breadcrumb-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-100);
+  .workspace-panel__path-item:hover {
+    background: var(--bg-200);
+    color: var(--text-200);
   }
 
-  .breadcrumb-name {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .breadcrumb-separator {
-    flex-shrink: 0;
+  .workspace-panel__path-sep {
     width: 12px;
     height: 12px;
     color: var(--text-500);
-    opacity: 0.6;
   }
 
-  .tree-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+  /* Tree */
+  .workspace-panel__tree {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 0;
   }
 
-  .tree-row {
+  .workspace-panel__tree::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .workspace-panel__tree::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .workspace-panel__tree::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 3px;
+  }
+
+  .workspace-panel__tree::-webkit-scrollbar-thumb:hover {
+    background: var(--border-400);
+  }
+
+  /* Tree Item */
+  .workspace-panel__item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 8px;
-    border-radius: var(--border-radius-sm);
+    padding: 4px 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
-    color: var(--text-200);
+    transition: background 0.15s ease;
+    color: var(--text-100);
     min-width: 0;
   }
 
-  .tree-row:hover {
+  .workspace-panel__item:hover {
     background: var(--color-hover);
-    color: var(--text-100);
   }
 
-  .tree-row.ignored {
-    color: #666 !important;
-    opacity: 0.5 !important;
+  .workspace-panel__item--ignored {
+    opacity: 0.5;
   }
 
-  .tree-row.ignored .tree-name {
-    color: #666 !important;
-  }
-
-  .tree-row.ignored .folder-icon,
-  .tree-row.ignored .file-icon {
-    opacity: 0.5 !important;
-    color: #666 !important;
-  }
-
-  .tree-row.ignored:hover {
-    color: #888 !important;
-    opacity: 0.7 !important;
-  }
-
-  .tree-row.ignored:hover .tree-name {
-    color: #888 !important;
-  }
-
-  .tree-row.ignored:hover .folder-icon,
-  .tree-row.ignored:hover .file-icon {
-    opacity: 0.7 !important;
-    color: #888 !important;
-  }
-
-  .folder-icon {
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    color: var(--accent-500);
-  }
-
-  .file-icon {
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    color: var(--text-400);
-  }
-
-  .tree-name {
-    font-size: 12px;
-    font-family: var(--font-mono, monospace);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-  }
-
-  .indent-spacer {
+  .workspace-panel__item-indent {
     flex-shrink: 0;
   }
 
-  .caret-button {
+  .workspace-panel__item-caret {
     flex-shrink: 0;
     width: 16px;
     height: 16px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     border: none;
     background: transparent;
-    color: var(--text-300);
+    color: var(--text-400);
     cursor: pointer;
     border-radius: 4px;
   }
 
-  .caret-button:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-100);
+  .workspace-panel__item-caret:hover {
+    background: var(--bg-200);
+    color: var(--text-200);
   }
 
-  .caret-placeholder {
+  .workspace-panel__item-caret svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.15s ease;
+  }
+
+  .workspace-panel__item-caret--open {
+    transform: rotate(90deg);
+  }
+
+  .workspace-panel__item-caret-placeholder {
     flex-shrink: 0;
     width: 16px;
     height: 16px;
   }
 
-  .caret-icon {
-    width: 14px;
-    height: 14px;
-    transition: transform 0.12s ease;
+  .workspace-panel__item-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
   }
 
-  .caret-icon.expanded {
-    transform: rotate(90deg);
+  .workspace-panel__item-icon--folder {
+    color: var(--accent-500);
   }
 
-  .new-terminal-button {
+  .workspace-panel__item-icon--file {
+    color: var(--text-300);
+  }
+
+  .workspace-panel__item-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .workspace-panel__item-action {
     flex-shrink: 0;
     width: 20px;
     height: 20px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
@@ -562,75 +525,81 @@
     cursor: pointer;
     border-radius: 4px;
     opacity: 0;
-    transition:
-      opacity 0.12s ease,
-      background 0.12s ease,
-      color 0.12s ease;
+    transition: all 0.15s ease;
   }
 
-  .tree-row:hover .new-terminal-button {
+  .workspace-panel__item:hover .workspace-panel__item-action {
     opacity: 1;
   }
 
-  .new-terminal-button:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-100);
+  .workspace-panel__item-action:hover {
+    background: var(--bg-200);
+    color: var(--text-200);
   }
 
-  .new-terminal-icon {
+  .workspace-panel__item-action svg {
     width: 14px;
     height: 14px;
   }
 
-  .loading-state {
+  /* States */
+  .workspace-panel__loading {
+    flex: 1;
     display: flex;
+    align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 24px;
   }
 
-  .spinner {
+  .workspace-panel__spinner {
     width: 20px;
     height: 20px;
     border: 2px solid var(--border-300);
     border-top-color: var(--color-primary);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: workspace-spin 0.8s linear infinite;
   }
 
-  @keyframes spin {
+  @keyframes workspace-spin {
     to {
       transform: rotate(360deg);
     }
   }
 
-  .error-state {
-    padding: 12px;
+  .workspace-panel__error {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
     font-size: 12px;
-    color: var(--color-error);
-    text-align: center;
+    color: #ef4444;
   }
 
-  .empty-state {
-    padding: 12px;
-    font-size: 12px;
+  .workspace-panel__empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
     color: var(--text-400);
-    text-align: center;
   }
 
-  .workspace-panel::-webkit-scrollbar {
-    width: 6px;
+  .workspace-panel__empty--inline {
+    padding: 16px;
   }
 
-  .workspace-panel::-webkit-scrollbar-track {
-    background: transparent;
+  .workspace-panel__empty-icon {
+    width: 48px;
+    height: 48px;
+    opacity: 0.4;
   }
 
-  .workspace-panel::-webkit-scrollbar-thumb {
-    background: var(--border-300);
-    border-radius: 3px;
-  }
-
-  .workspace-panel::-webkit-scrollbar-thumb:hover {
-    background: var(--border-400);
+  .workspace-panel__empty-text {
+    font-size: 13px;
   }
 </style>

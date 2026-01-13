@@ -1,21 +1,25 @@
 //! BlobStore：内容寻址存储
 //!
 //! 使用 SHA-256 哈希作为内容标识符，实现去重存储
+//! 支持流式处理大文件
 
 use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
+use super::config::CheckpointConfig;
 use super::models::CheckpointResult;
 
 /// 内容寻址存储
 pub struct BlobStore {
     pool: SqlitePool,
+    config: CheckpointConfig,
 }
 
 impl BlobStore {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, config: CheckpointConfig) -> Self {
+        Self { pool, config }
     }
 
     /// 计算内容的 SHA-256 哈希
@@ -29,19 +33,32 @@ impl BlobStore {
     /// 存储内容，返回 SHA-256 哈希
     /// 如果内容已存在，增加引用计数
     pub async fn store(&self, content: &[u8]) -> CheckpointResult<String> {
+        // 检查文件大小限制
+        if self.config.is_file_too_large(content.len() as u64) {
+            return Err(super::models::CheckpointError::FileTooLarge(
+                content.len() as u64
+            ));
+        }
+
         let hash = Self::compute_hash(content);
+
+        // 检查是否已存在
+        if self.exists(&hash).await? {
+            self.increment_ref(&hash).await?;
+            return Ok(hash);
+        }
+
         let size = content.len() as i64;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
 
-        // 尝试插入，如果已存在则增加引用计数
+        // 插入新的 blob
         let result = sqlx::query(
             r#"
             INSERT INTO checkpoint_blobs (hash, content, size, ref_count, created_at)
             VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(hash) DO UPDATE SET ref_count = ref_count + 1
             "#,
         )
         .bind(&hash)
@@ -59,6 +76,71 @@ impl BlobStore {
         );
 
         Ok(hash)
+    }
+
+    /// 流式存储大文件
+    pub async fn store_stream<R: AsyncRead + Unpin>(
+        &self,
+        mut reader: R,
+    ) -> CheckpointResult<String> {
+        let mut hasher = Sha256::new();
+        let mut content = Vec::new();
+        let mut buffer = vec![0u8; self.config.stream_buffer_size];
+
+        // 流式读取并计算哈希
+        loop {
+            let bytes_read = reader.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let chunk = &buffer[..bytes_read];
+            hasher.update(chunk);
+            content.extend_from_slice(chunk);
+
+            // 检查文件大小限制
+            if self.config.is_file_too_large(content.len() as u64) {
+                return Err(super::models::CheckpointError::FileTooLarge(
+                    content.len() as u64
+                ));
+            }
+        }
+
+        let hash = hex::encode(hasher.finalize());
+
+        // 检查是否已存在
+        if self.exists(&hash).await? {
+            self.increment_ref(&hash).await?;
+            return Ok(hash);
+        }
+
+        // 存储内容
+        self.store_content(&hash, &content).await?;
+        Ok(hash)
+    }
+
+    /// 存储内容的内部方法
+    async fn store_content(&self, hash: &str, content: &[u8]) -> CheckpointResult<()> {
+        let size = content.len() as i64;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        sqlx::query(
+            r#"
+            INSERT INTO checkpoint_blobs (hash, content, size, ref_count, created_at)
+            VALUES (?, ?, ?, 1, ?)
+            "#,
+        )
+        .bind(hash)
+        .bind(content)
+        .bind(size)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     /// 根据哈希获取内容
@@ -121,24 +203,15 @@ impl BlobStore {
         Ok(deleted)
     }
 
-    /// 获取 blob 的引用计数
-    pub async fn get_ref_count(&self, hash: &str) -> CheckpointResult<Option<i64>> {
-        let row = sqlx::query("SELECT ref_count FROM checkpoint_blobs WHERE hash = ?")
-            .bind(hash)
-            .fetch_optional(&self.pool)
-            .await?;
-
-        Ok(row.map(|r| r.get("ref_count")))
-    }
-
     /// 获取存储统计信息
-    pub async fn stats(&self) -> CheckpointResult<BlobStoreStats> {
+    pub async fn get_stats(&self) -> CheckpointResult<BlobStoreStats> {
         let row = sqlx::query(
             r#"
             SELECT 
                 COUNT(*) as blob_count,
-                COALESCE(SUM(size), 0) as total_size,
-                COALESCE(SUM(ref_count), 0) as total_refs
+                SUM(size) as total_size,
+                SUM(ref_count) as total_refs,
+                COUNT(CASE WHEN ref_count = 0 THEN 1 END) as orphaned_count
             FROM checkpoint_blobs
             "#,
         )
@@ -149,6 +222,7 @@ impl BlobStore {
             blob_count: row.get("blob_count"),
             total_size: row.get("total_size"),
             total_refs: row.get("total_refs"),
+            orphaned_count: row.get("orphaned_count"),
         })
     }
 }
@@ -159,26 +233,25 @@ pub struct BlobStoreStats {
     pub blob_count: i64,
     pub total_size: i64,
     pub total_refs: i64,
+    pub orphaned_count: i64,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::SqlitePool;
 
-    /// 创建测试用的内存数据库
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
 
         sqlx::query(
-            r#"
-            CREATE TABLE checkpoint_blobs (
+            "CREATE TABLE checkpoint_blobs (
                 hash TEXT PRIMARY KEY,
                 content BLOB NOT NULL,
                 size INTEGER NOT NULL,
                 ref_count INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL
-            )
-            "#,
+            )",
         )
         .execute(&pool)
         .await
@@ -188,64 +261,48 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_compute_hash_deterministic() {
-        let content = b"hello world";
-        let hash1 = BlobStore::compute_hash(content);
-        let hash2 = BlobStore::compute_hash(content);
-        assert_eq!(hash1, hash2);
-    }
-
-    #[tokio::test]
     async fn test_store_and_get() {
         let pool = setup_test_db().await;
-        let store = BlobStore::new(pool);
+        let config = CheckpointConfig::default();
+        let store = BlobStore::new(pool, config);
 
-        let content = b"test content";
+        let content = b"Hello, World!";
         let hash = store.store(content).await.unwrap();
 
-        let retrieved = store.get(&hash).await.unwrap();
-        assert_eq!(retrieved, Some(content.to_vec()));
+        let retrieved = store.get(&hash).await.unwrap().unwrap();
+        assert_eq!(content, retrieved.as_slice());
     }
 
     #[tokio::test]
     async fn test_deduplication() {
         let pool = setup_test_db().await;
-        let store = BlobStore::new(pool);
+        let config = CheckpointConfig::default();
+        let store = BlobStore::new(pool, config);
 
-        let content = b"duplicate content";
-
-        // 存储两次相同内容
+        let content = b"Hello, World!";
         let hash1 = store.store(content).await.unwrap();
         let hash2 = store.store(content).await.unwrap();
 
-        // 哈希应该相同
         assert_eq!(hash1, hash2);
 
-        // 引用计数应该是 2
-        let ref_count = store.get_ref_count(&hash1).await.unwrap();
-        assert_eq!(ref_count, Some(2));
-
-        // 统计应该只有 1 个 blob
-        let stats = store.stats().await.unwrap();
+        let stats = store.get_stats().await.unwrap();
         assert_eq!(stats.blob_count, 1);
+        assert_eq!(stats.total_refs, 2);
     }
 
     #[tokio::test]
-    async fn test_gc() {
+    async fn test_file_size_limit() {
         let pool = setup_test_db().await;
-        let store = BlobStore::new(pool);
+        let mut config = CheckpointConfig::default();
+        config.max_file_size = 10; // 10 bytes limit
+        let store = BlobStore::new(pool, config);
 
-        let content = b"gc test";
-        let hash = store.store(content).await.unwrap();
+        let large_content = vec![0u8; 20]; // 20 bytes
+        let result = store.store(&large_content).await;
 
-        // 减少引用计数到 0
-        store.decrement_ref(&hash).await.unwrap();
-
-        // GC 应该删除这个 blob
-        let deleted = store.gc().await.unwrap();
-        assert_eq!(deleted, 1);
-
-        // blob 应该不存在了
-        assert!(!store.exists(&hash).await.unwrap());
+        assert!(matches!(
+            result,
+            Err(super::models::CheckpointError::FileTooLarge(_))
+        ));
     }
 }

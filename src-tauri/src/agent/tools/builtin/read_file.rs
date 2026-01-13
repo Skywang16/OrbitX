@@ -12,8 +12,8 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
+    ToolResultStatus,
 };
 use crate::vector_db::core::Language;
 
@@ -606,19 +606,32 @@ impl RunnableTool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Reads a file from the local filesystem with multiple reading modes.
+        r#"Reads a file from the local filesystem with multiple reading modes. You can access any file directly by using this tool.
 
 Reading Modes:
-- mode=\"full\" (default): Read the full file content with optional offset/limit
-- mode=\"outline\": Show code structure (classes, functions, methods) with line numbers - ideal for understanding file organization
-- mode=\"symbol\": Read a specific function/class/method by name - prevents code truncation
+- mode="full" (default): Read the full file content with optional offset/limit
+- mode="outline": Show code structure (classes, functions, methods) - ideal for understanding file organization before editing
+- mode="symbol": Read a specific function/class/method by name - prevents code truncation and gets complete code blocks
 
 Usage:
-- The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
-- For large files, use mode=\"outline\" first to see the structure, then read specific symbols
-- When reading specific functions, use mode=\"symbol\" with symbol=\"functionName\" to get complete code blocks
+- The path parameter must be an absolute path, not a relative path (e.g., '/Users/user/project/src/main.ts')
+- Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid
+- It is okay to read a file that does not exist; an error will be returned
+- By default, it reads up to 2000 lines starting from the beginning of the file
+- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
+- Any lines longer than 2000 characters will be truncated with "... [truncated]" indicator
+- Results are returned for easy reference when editing
+- For large files, use mode="outline" first to see the structure, then read specific symbols with mode="symbol"
+- When reading specific functions, use mode="symbol" with symbol="functionName" to get complete code blocks without truncation
 - Binary files are automatically detected and rejected with an error message
-- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful."
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents
+
+Examples:
+- Read entire file: {"path": "/path/to/file.js", "mode": "full"}
+- Get file structure: {"path": "/path/to/file.js", "mode": "outline"}
+- Read specific function: {"path": "/path/to/file.js", "mode": "symbol", "symbol": "myFunction"}
+- Read with pagination: {"path": "/path/to/file.js", "mode": "full", "offset": 100, "limit": 50}"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -632,7 +645,7 @@ Usage:
                 "mode": {
                     "type": "string",
                     "enum": ["full", "outline", "symbol"],
-                    "description": "Reading mode: 'full' (default) reads file content, 'outline' shows code structure with line numbers, 'symbol' reads a specific function/class by name."
+                    "description": "Reading mode: 'full' (default) reads file content, 'outline' shows code structure, 'symbol' reads a specific function/class by name."
                 },
                 "symbol": {
                     "type": "string",
@@ -641,7 +654,7 @@ Usage:
                 "offset": {
                     "type": "number",
                     "minimum": 0,
-                    "description": "Only for mode='full': The 0-based line number to start reading from. Leave empty to read from the beginning."
+                    "description": "Only for mode='full': The 0-based offset to start reading from. Leave empty to read from the beginning."
                 },
                 "limit": {
                     "type": "number",
@@ -657,10 +670,6 @@ Usage:
         ToolMetadata::new(ToolCategory::FileRead, ToolPriority::Standard)
             .with_tags(vec!["filesystem".into(), "read".into()])
             .with_summary_key_arg("path")
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
     }
 
     async fn run(

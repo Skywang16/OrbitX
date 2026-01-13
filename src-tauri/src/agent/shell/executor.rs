@@ -16,20 +16,6 @@ use super::config::ShellExecutorConfig;
 use super::error::ShellError;
 use super::types::*;
 
-/// 危险命令列表
-const DANGEROUS_COMMANDS: &[&str] = &[
-    "rm -rf /",
-    "sudo rm -rf",
-    "format",
-    "fdisk",
-    "mkfs",
-    "dd if=/dev/",
-    "shutdown",
-    "reboot",
-    "halt",
-    "poweroff",
-];
-
 /// Agent Shell 执行器
 pub struct AgentShellExecutor {
     /// 配置
@@ -73,13 +59,6 @@ impl AgentShellExecutor {
                 "Command too long (max {} bytes)",
                 self.config.max_command_length
             )));
-        }
-
-        let lower = command.to_lowercase();
-        for danger in DANGEROUS_COMMANDS {
-            if lower.contains(&danger.to_lowercase()) {
-                return Err(ShellError::DangerousCommand(command.to_string()));
-            }
         }
 
         Ok(())

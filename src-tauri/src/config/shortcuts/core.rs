@@ -11,15 +11,15 @@ use super::actions::ActionRegistry;
 use super::types::*;
 use crate::config::{
     error::{ShortcutsError, ShortcutsResult},
+    manager::ConfigManager,
     types::{ShortcutBinding, ShortcutsConfig},
-    TomlConfigManager,
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::warn;
 
 pub struct ShortcutManager {
-    config_manager: Arc<TomlConfigManager>,
+    config_manager: Arc<ConfigManager>,
     action_registry: Arc<RwLock<ActionRegistry>>,
     cached_config: Arc<RwLock<Option<ShortcutsConfig>>>,
     cached_validation: Arc<RwLock<Option<ValidationResult>>>,
@@ -27,7 +27,7 @@ pub struct ShortcutManager {
 }
 
 impl ShortcutManager {
-    pub async fn new(config_manager: Arc<TomlConfigManager>) -> ShortcutsResult<Self> {
+    pub async fn new(config_manager: Arc<ConfigManager>) -> ShortcutsResult<Self> {
         let action_registry = Arc::new(RwLock::new(ActionRegistry::new()));
 
         let manager = Self {
@@ -455,8 +455,6 @@ impl ShortcutManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // 测试需要创建mock的TomlConfigManager
 
     #[tokio::test]
     async fn test_key_combination_equality() {

@@ -15,7 +15,7 @@ pub struct OpacityChangedPayload {
 pub async fn window_state_get(
     refresh: Option<bool>,
     state: State<'_, WindowState>,
-    config_state: State<'_, crate::config::ConfigManagerState>,
+    config_state: State<'_, std::sync::Arc<crate::config::ConfigManager>>,
 ) -> TauriApiResult<WindowStateSnapshot> {
     let refresh = refresh.unwrap_or(false);
 
@@ -86,7 +86,7 @@ pub async fn window_state_get(
         }
     };
 
-    let opacity = match config_state.toml_manager.config_get().await {
+    let opacity = match config_state.config_get().await {
         Ok(config) => config.appearance.opacity,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
@@ -109,7 +109,7 @@ pub async fn window_state_update<R: Runtime>(
     update: WindowStateUpdate,
     app: AppHandle<R>,
     state: State<'_, WindowState>,
-    config_state: State<'_, crate::config::ConfigManagerState>,
+    config_state: State<'_, std::sync::Arc<crate::config::ConfigManager>>,
 ) -> TauriApiResult<WindowStateSnapshot> {
     let needs_window = update.always_on_top.is_some() || update.opacity.is_some();
     let window = if needs_window {
@@ -154,7 +154,6 @@ pub async fn window_state_update<R: Runtime>(
         }
 
         if config_state
-            .toml_manager
             .config_update(|config| {
                 config.appearance.opacity = opacity;
                 Ok(())

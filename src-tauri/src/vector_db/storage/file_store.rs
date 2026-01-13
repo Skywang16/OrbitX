@@ -27,7 +27,7 @@ pub struct FileStore {
 impl FileStore {
     /// 创建新的文件存储
     pub fn new(project_root: &Path) -> Result<Self> {
-        let root_path = project_root.join(".oxi");
+        let root_path = project_root.join(".orbitx").join("index");
         let vectors_path = root_path.join("vectors");
         let metadata_path = root_path.join("metadata");
         let cache_path = root_path.join("cache");

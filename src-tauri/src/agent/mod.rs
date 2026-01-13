@@ -10,6 +10,7 @@ pub mod context; // 会话上下文追踪器与摘要器（阶段二）
 pub mod core; // 执行器核心（仅执行器，不含工具相关）
 pub mod llm; // LLM 集成与解析
 pub mod mcp; // MCP 适配（预留）
+pub mod permissions; // settings.json permissions (allow/deny/ask)
 pub mod persistence; // 持久化与仓库抽象
 pub mod react; // ReAct 策略与解析(预留)
 pub mod shell; // Shell 执行模块

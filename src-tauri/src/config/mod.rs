@@ -7,18 +7,17 @@ pub mod paths;
 pub mod shortcuts;
 pub mod terminal_commands;
 pub mod theme;
-pub mod toml;
 pub mod types;
+pub mod manager;
 
 pub use commands::{
-    config_get, config_open_folder, config_reset_to_defaults, config_set, ConfigManagerState,
+    config_get, config_open_folder, config_reset_to_defaults, config_set,
 };
 pub use defaults::*;
 pub use error::{
     ConfigCommandError, ConfigCommandResult, ConfigError, ConfigPathsError, ConfigPathsResult,
     ConfigResult, ShortcutsActionError, ShortcutsActionResult, ShortcutsError, ShortcutsResult,
     TerminalConfigError, TerminalConfigResult, ThemeConfigError, ThemeConfigResult,
-    TomlConfigError, TomlConfigResult,
 };
 pub use paths::ConfigPaths;
 pub use shortcuts::{
@@ -34,19 +33,18 @@ pub use terminal_commands::{
 pub use theme::{
     handle_system_theme_change, theme_get_available, theme_get_config_status, theme_get_current,
     theme_set_follow_system, theme_set_terminal, SystemThemeDetector, ThemeConfigStatus,
-    ThemeIndex, ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
+    ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
     ThemeValidationResult, ThemeValidator,
 };
-pub use toml::{ConfigEvent, TomlConfigManager};
+pub use manager::ConfigManager;
 pub use types::*;
 
 /// 配置系统版本
 pub const CONFIG_VERSION: &str = "1.0.0";
 
 /// 配置文件名
-pub const CONFIG_DIR_NAME: &str = "config";
 pub const THEMES_DIR_NAME: &str = "themes";
-pub const CONFIG_FILE_NAME: &str = "config.toml";
+pub const CONFIG_FILE_NAME: &str = "config.json";
 
 /// 备份目录名
 pub const BACKUPS_DIR_NAME: &str = "backups";

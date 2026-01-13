@@ -58,7 +58,7 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    cursor: help;
+    cursor: default;
   }
 
   .ring-svg {

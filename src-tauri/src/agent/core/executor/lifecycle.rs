@@ -7,12 +7,14 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tokio::task;
 use tracing::{error, warn};
+use uuid::Uuid;
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::types::{ErrorBlock, TaskEvent};
+use crate::agent::tools::{ToolResultContent, ToolResultStatus};
+use crate::agent::types::{Block, ErrorBlock, TaskEvent, ToolBlock, ToolOutput, ToolStatus};
 use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
 
 impl TaskExecutor {
@@ -27,6 +29,9 @@ impl TaskExecutor {
         let ctx = self
             .build_or_restore_context(&params, Some(progress_channel))
             .await?;
+
+        // 清空上次任务残留的 agent edit 集合，避免“诊断到旧文件”这种愚蠢行为。
+        let _ = ctx.file_tracker().take_recent_agent_edits().await;
 
         ctx.emit_event(TaskEvent::TaskCreated {
             task_id: ctx.task_id.to_string(),
@@ -94,45 +99,85 @@ impl TaskExecutor {
         ctx: Arc<TaskContext>,
         model_id: String,
     ) -> TaskExecutorResult<()> {
-        // 直接调用ReactOrchestrator，传递self作为ReactHandler
-        // 编译器会为TaskExecutor生成特化代码，完全内联
-        let result = self
-            .react_orchestrator()
-            .run_react_loop(&ctx, &model_id, self)
-            .await;
+        const MAX_SYNTAX_REPAIR_ROUNDS: usize = 2;
 
-        match result {
-            Ok(()) => {
-                ctx.set_status(AgentTaskStatus::Completed).await?;
-                let context_usage = ctx.calculate_context_usage(&model_id).await;
-                ctx.finish_assistant_message(
-                    crate::agent::types::MessageStatus::Completed,
-                    None,
-                    context_usage,
-                )
-                .await?;
-                ctx.emit_event(TaskEvent::TaskCompleted {
-                    task_id: ctx.task_id.to_string(),
-                })
-                .await?;
-            }
-            Err(e) => {
-                error!("Task failed: {}", e);
-                ctx.set_status(AgentTaskStatus::Error).await?;
+        let mut repair_round = 0usize;
 
-                let error_block = ErrorBlock {
-                    code: "task.execution_error".to_string(),
-                    message: e.to_string(),
-                    details: None,
-                };
+        loop {
+            // 直接调用ReactOrchestrator，传递self作为ReactHandler
+            // 编译器会为TaskExecutor生成特化代码，完全内联
+            let result = self
+                .react_orchestrator()
+                .run_react_loop(&ctx, &model_id, self)
+                .await;
 
-                let _ = ctx.fail_assistant_message(error_block.clone()).await;
-                let _ = ctx
-                    .emit_event(TaskEvent::TaskError {
-                        task_id: ctx.task_id.to_string(),
-                        error: error_block,
-                    })
-                    .await;
+            match result {
+                Ok(()) => {
+                    let syntax_ok = self
+                        .run_syntax_diagnostics_and_maybe_request_fix(&ctx, repair_round)
+                        .await?;
+
+                    if syntax_ok {
+                        ctx.set_status(AgentTaskStatus::Completed).await?;
+                        let context_usage = ctx.calculate_context_usage(&model_id).await;
+                        ctx.finish_assistant_message(
+                            crate::agent::types::MessageStatus::Completed,
+                            None,
+                            context_usage,
+                        )
+                        .await?;
+                        ctx.emit_event(TaskEvent::TaskCompleted {
+                            task_id: ctx.task_id.to_string(),
+                        })
+                        .await?;
+                        break;
+                    }
+
+                    repair_round = repair_round.saturating_add(1);
+                    if repair_round > MAX_SYNTAX_REPAIR_ROUNDS {
+                        let error_block = ErrorBlock {
+                            code: "task.syntax_diagnostics_failed".to_string(),
+                            message:
+                                "Agent introduced syntax errors and failed to repair them".to_string(),
+                            details: Some(
+                                "syntax_diagnostics reported errors after max repair rounds"
+                                    .to_string(),
+                            ),
+                        };
+
+                        error!("Task failed: {}", error_block.message);
+                        ctx.set_status(AgentTaskStatus::Error).await?;
+                        let _ = ctx.fail_assistant_message(error_block.clone()).await;
+                        let _ = ctx
+                            .emit_event(TaskEvent::TaskError {
+                                task_id: ctx.task_id.to_string(),
+                                error: error_block,
+                            })
+                            .await;
+                        break;
+                    }
+
+                    continue;
+                }
+                Err(e) => {
+                    error!("Task failed: {}", e);
+                    ctx.set_status(AgentTaskStatus::Error).await?;
+
+                    let error_block = ErrorBlock {
+                        code: "task.execution_error".to_string(),
+                        message: e.to_string(),
+                        details: None,
+                    };
+
+                    let _ = ctx.fail_assistant_message(error_block.clone()).await;
+                    let _ = ctx
+                        .emit_event(TaskEvent::TaskError {
+                            task_id: ctx.task_id.to_string(),
+                            error: error_block,
+                        })
+                        .await;
+                    break;
+                }
             }
         }
 
@@ -140,6 +185,97 @@ impl TaskExecutor {
         self.active_tasks().remove(ctx.task_id.as_ref());
 
         Ok(())
+    }
+
+    async fn run_syntax_diagnostics_and_maybe_request_fix(
+        &self,
+        ctx: &TaskContext,
+        repair_round: usize,
+    ) -> TaskExecutorResult<bool> {
+        let edited = ctx.file_tracker().take_recent_agent_edits().await;
+        if edited.is_empty() {
+            return Ok(true);
+        }
+
+        let abs_paths: Vec<String> = edited
+            .into_iter()
+            .map(|p| std::path::PathBuf::from(ctx.cwd.as_ref()).join(p).display().to_string())
+            .collect();
+
+        let tool_args = serde_json::json!({ "paths": abs_paths });
+        let tool_input = tool_args.clone();
+        let tool_id = format!("syntax_diagnostics:{}", Uuid::new_v4());
+        let started_at = chrono::Utc::now();
+
+        ctx.assistant_append_block(Block::Tool(ToolBlock {
+            id: tool_id.clone(),
+            name: "syntax_diagnostics".to_string(),
+            status: ToolStatus::Running,
+            input: tool_args.clone(),
+            output: None,
+            compacted_at: None,
+            started_at,
+            finished_at: None,
+            duration_ms: None,
+        }))
+        .await?;
+
+        let result = ctx
+            .tool_registry()
+            .execute_tool("syntax_diagnostics", ctx, tool_args)
+            .await;
+
+        let finished_at = chrono::Utc::now();
+        let status = match result.status {
+            ToolResultStatus::Success => ToolStatus::Completed,
+            ToolResultStatus::Error => ToolStatus::Error,
+            ToolResultStatus::Cancelled => ToolStatus::Cancelled,
+        };
+
+        let preview = tool_result_preview_text(&result);
+        ctx.assistant_update_block(
+            &tool_id,
+            Block::Tool(ToolBlock {
+                id: tool_id.clone(),
+                name: "syntax_diagnostics".to_string(),
+                status,
+                input: tool_input,
+                output: Some(ToolOutput {
+                    content: serde_json::json!(preview.clone()),
+                    cancel_reason: result.cancel_reason.clone(),
+                    ext: result.ext_info.clone(),
+                }),
+                compacted_at: None,
+                started_at,
+                finished_at: Some(finished_at),
+                duration_ms: Some(
+                    finished_at
+                        .signed_duration_since(started_at)
+                        .num_milliseconds()
+                        .max(0) as i64,
+                ),
+            }),
+        )
+        .await?;
+
+        let error_count = result
+            .ext_info
+            .as_ref()
+            .and_then(|v| v.get("errorCount"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        if error_count == 0 {
+            return Ok(true);
+        }
+
+        ctx.add_user_message(format!(
+            "The agent modified files but introduced syntax errors. Fix them and ensure syntax_diagnostics reports no errors.\nrepairRound={}\n{}",
+            repair_round, preview
+        ))
+        .await?;
+
+        Ok(false)
     }
 
     pub async fn cancel_task(
@@ -256,4 +392,15 @@ impl TaskExecutor {
 
         Ok(params)
     }
+}
+
+fn tool_result_preview_text(result: &crate::agent::tools::ToolResult) -> String {
+    result
+        .content
+        .iter()
+        .map(|c| match c {
+            ToolResultContent::Success(s) | ToolResultContent::Error(s) => s.as_str(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

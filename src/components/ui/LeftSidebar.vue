@@ -4,6 +4,7 @@
   import ResizeHandle from '@/components/AIChatSidebar/components/layout/ResizeHandle.vue'
   import WorkspacePanel from './WorkspacePanel.vue'
   import GitPanel from '@/components/GitPanel/index.vue'
+  import ConfigPanel from './ConfigPanel.vue'
 
   const layoutStore = useLayoutStore()
 
@@ -52,6 +53,7 @@
     <div class="sidebar-content">
       <WorkspacePanel v-if="layoutStore.activeLeftPanel === 'workspace'" />
       <GitPanel v-else-if="layoutStore.activeLeftPanel === 'git'" />
+      <ConfigPanel v-else-if="layoutStore.activeLeftPanel === 'config'" />
     </div>
 
     <ResizeHandle

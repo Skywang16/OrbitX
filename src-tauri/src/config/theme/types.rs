@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 主题配置 (对应 TOML 中的 [appearance.theme_config] 节)
+/// 主题配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeConfig {

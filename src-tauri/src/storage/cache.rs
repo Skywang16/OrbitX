@@ -60,7 +60,7 @@ pub struct CacheEntrySnapshot {
 /// 缓存命名空间 - 避免不同模块的 key 冲突
 #[derive(Debug, Clone, Copy)]
 pub enum CacheNamespace {
-    Rules,      // 用户规则、项目规则
+    Rules,      // 全局规则、项目规则
     Session,    // 会话状态
     UI,         // UI 状态
     Agent,      // Agent 临时数据
@@ -226,21 +226,21 @@ impl UnifiedCache {
 
     // ==================== 便捷方法（常用的快捷方式）====================
 
-    /// Rules: 获取用户规则
-    pub async fn get_user_rules(&self) -> Option<String> {
-        self.get_deserialized_ns(CacheNamespace::Rules, "user_rules")
+    /// Rules: 获取全局规则
+    pub async fn get_global_rules(&self) -> Option<String> {
+        self.get_deserialized_ns(CacheNamespace::Rules, "global_rules")
             .await
             .ok()
             .flatten()
     }
 
-    /// Rules: 设置用户规则
-    pub async fn set_user_rules(&self, rules: Option<String>) -> CacheResult<()> {
+    /// Rules: 设置全局规则
+    pub async fn set_global_rules(&self, rules: Option<String>) -> CacheResult<()> {
         if let Some(r) = rules {
-            self.set_serialized_ns(CacheNamespace::Rules, "user_rules", &r)
+            self.set_serialized_ns(CacheNamespace::Rules, "global_rules", &r)
                 .await
         } else {
-            self.remove_ns(CacheNamespace::Rules, "user_rules").await;
+            self.remove_ns(CacheNamespace::Rules, "global_rules").await;
             Ok(())
         }
     }

@@ -53,11 +53,6 @@ impl StoragePaths {
         Ok(paths)
     }
 
-    /// 获取配置文件路径
-    pub fn config_file(&self) -> PathBuf {
-        self.config_dir.join(super::CONFIG_FILE_NAME)
-    }
-
     /// 获取会话状态文件路径
     pub fn session_state_file(&self) -> PathBuf {
         self.state_dir.join(super::SESSION_STATE_FILE_NAME)

@@ -19,7 +19,7 @@ export const restoreLeftSidebarState = (ui: UiState | undefined | null): Partial
   }
 
   const panel = ui.leftSidebarActivePanel
-  if (panel === 'workspace' || panel === 'git' || panel === null) {
+  if (panel === 'workspace' || panel === 'git' || panel === 'config' || panel === null) {
     restored.leftSidebarActivePanel = panel
   }
 

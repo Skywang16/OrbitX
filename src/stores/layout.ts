@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { persistLeftSidebarState, restoreLeftSidebarState } from '@/persistence/session'
 
-export type LeftSidebarPanel = 'workspace' | 'git' | null
+export type LeftSidebarPanel = 'workspace' | 'git' | 'config' | null
 
 export const useLayoutStore = defineStore('layout', () => {
   const sessionStore = useSessionStore()

@@ -2,7 +2,7 @@
  * 存储系统 Tauri 命令模块
  *
  * 职责边界：只提供“State(Data/Runtime)”相关能力（msgpack 会话状态、Mux 运行时终端状态）。
- * Config(TOML) 走 crate::config::* 命令入口，避免两套 API 造成写入分叉。
+ * Config(JSON) 走 crate::config::* 命令入口，避免两套 API 造成写入分叉。
  */
 
 use crate::storage::messagepack::MessagePackManager;

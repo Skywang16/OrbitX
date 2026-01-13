@@ -99,6 +99,22 @@
     return props.block.name || ''
   })
 
+  // MCP 工具检测和解析
+  const isMcpTool = computed(() => toolName.value.startsWith('mcp__'))
+
+  const mcpToolInfo = computed(() => {
+    if (!isMcpTool.value) return null
+    // 格式: mcp__{server}__{tool}
+    const parts = toolName.value.split('__')
+    if (parts.length >= 3) {
+      return {
+        server: parts[1],
+        tool: parts.slice(2).join('__'), // 处理工具名中可能有 __ 的情况
+      }
+    }
+    return null
+  })
+
   // todowrite 特殊处理
   const isTodoWrite = computed(() => toolName.value === 'todowrite')
 
@@ -200,6 +216,10 @@
   })
 
   const toolPrefix = computed(() => {
+    // MCP 工具：显示 "MCP server_name "
+    if (isMcpTool.value && mcpToolInfo.value) {
+      return `MCP ${mcpToolInfo.value.server} `
+    }
     switch (toolName.value) {
       case 'read_file':
         return 'Read '
@@ -211,6 +231,8 @@
         return 'Shell '
       case 'edit_file':
         return 'Edited '
+      case 'syntax_diagnostics':
+        return 'Diagnosed '
       case 'write_file':
       case 'write_to_file':
         return 'Wrote to '
@@ -233,6 +255,15 @@
     const cancelReason = props.block.output?.cancelReason
 
     let baseText = ''
+
+    // MCP 工具：显示工具名
+    if (isMcpTool.value && mcpToolInfo.value) {
+      baseText = mcpToolInfo.value.tool
+      if (isCancelled.value) {
+        return cancelReason ? `${baseText} (${cancelReason})` : `${baseText} (cancelled)`
+      }
+      return baseText
+    }
 
     switch (toolName.value) {
       case 'read_file': {
@@ -282,6 +313,9 @@
         break
       case 'apply_diff':
         baseText = `${(params?.files as { path: string }[])?.length || 0} files`
+        break
+      case 'syntax_diagnostics':
+        baseText = `${(params?.paths as string[])?.length || 0} files`
         break
       default:
         baseText = toolName.value || 'Unknown'

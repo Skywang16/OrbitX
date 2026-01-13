@@ -26,6 +26,12 @@ pub enum CheckpointError {
     #[error("Blob not found: {0}")]
     BlobNotFound(String),
 
+    #[error("File too large: {0} bytes")]
+    FileTooLarge(u64),
+
+    #[error("Concurrent modification detected")]
+    ConcurrentModification,
+
     #[error("Parse error: {0}")]
     Parse(String),
 }

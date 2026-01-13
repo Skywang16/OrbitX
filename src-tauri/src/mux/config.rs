@@ -1,7 +1,6 @@
 //! Terminal multiplexer configuration management
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tracing::warn;
@@ -177,44 +176,6 @@ impl Default for CleanupConfig {
 }
 
 impl TerminalSystemConfig {
-    /// Load configuration from a file
-    pub fn from_file<P: AsRef<Path>>(path: P) -> MuxConfigResult<Self> {
-        let path = path.as_ref();
-
-        let content = std::fs::read_to_string(path).map_err(|err| MuxConfigError::ReadFile {
-            path: path.display().to_string(),
-            source: err,
-        })?;
-        let config: Self = toml::from_str(&content).map_err(|err| MuxConfigError::Parse {
-            path: path.display().to_string(),
-            source: err,
-        })?;
-
-        Ok(config)
-    }
-
-    /// Persist configuration to a file
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> MuxConfigResult<()> {
-        let path = path.as_ref();
-
-        let content = toml::to_string_pretty(self).map_err(|err| {
-            MuxConfigError::Serialize(format!("Failed to serialize mux config: {err}"))
-        })?;
-
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|err| MuxConfigError::WriteFile {
-                path: parent.display().to_string(),
-                source: err,
-            })?;
-        }
-
-        std::fs::write(path, content).map_err(|err| MuxConfigError::WriteFile {
-            path: path.display().to_string(),
-            source: err,
-        })?;
-        Ok(())
-    }
-
     /// Apply environment variable overrides
     pub fn override_from_env(&mut self) {
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_MAX_SIZE") {
@@ -353,28 +314,6 @@ impl ConfigManager {
     fn load_config() -> MuxConfigResult<TerminalSystemConfig> {
         let mut config = TerminalSystemConfig::default();
 
-        // Attempt to load configuration from predefined files
-        let config_paths = [
-            "terminal-config.toml",
-            "config/terminal.toml",
-            "~/.config/terminal/config.toml",
-            "/etc/terminal/config.toml",
-        ];
-
-        for path in &config_paths {
-            if Path::new(path).exists() {
-                match TerminalSystemConfig::from_file(path) {
-                    Ok(file_config) => {
-                        config = file_config;
-                        break;
-                    }
-                    Err(e) => {
-                        warn!("Failed to load terminal mux config from {}: {}", path, e);
-                    }
-                }
-            }
-        }
-
         // Apply environment overrides
         config.override_from_env();
 
@@ -392,16 +331,6 @@ impl ConfigManager {
             .lock()
             .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
         *config = new_config;
-        Ok(())
-    }
-
-    /// Persist the current configuration state to disk
-    pub fn save_to_file<P: AsRef<Path>>(path: P) -> MuxConfigResult<()> {
-        let config_guard = Self::get();
-        let config = config_guard
-            .lock()
-            .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
-        config.save_to_file(path)?;
         Ok(())
     }
 

@@ -8,9 +8,6 @@ pub enum ShellError {
     #[error("Command validation failed: {0}")]
     ValidationFailed(String),
 
-    #[error("Dangerous command blocked: {0}")]
-    DangerousCommand(String),
-
     #[error("Command timed out after {0}ms")]
     Timeout(u64),
 

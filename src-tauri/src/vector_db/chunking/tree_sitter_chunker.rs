@@ -1,6 +1,7 @@
 use crate::vector_db::core::{Chunk, ChunkType, Language, Result, Span, VectorDbError};
 use std::path::Path;
 use tree_sitter::{Parser, TreeCursor};
+use crate::code_intel::tree_sitter::configure_parser_for_language;
 
 /// Tree-sitter 智能分块器
 pub struct TreeSitterChunker {
@@ -19,111 +20,9 @@ impl TreeSitterChunker {
         let mut parser = Parser::new();
 
         // 设置语言解析器
-        match language {
-            Language::Python => {
-                parser
-                    .set_language(&tree_sitter_python::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!(
-                            "Failed to set Python language: {}",
-                            e
-                        ))
-                    })?;
-            }
-            Language::TypeScript => {
-                let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                let ts_lang = if ext.eq_ignore_ascii_case("tsx") {
-                    tree_sitter_typescript::LANGUAGE_TSX
-                } else {
-                    tree_sitter_typescript::LANGUAGE_TYPESCRIPT
-                };
-                parser.set_language(&ts_lang.into()).map_err(|e| {
-                    VectorDbError::ChunkingError(format!(
-                        "Failed to set TypeScript language: {}",
-                        e
-                    ))
-                })?;
-            }
-            Language::JavaScript => {
-                parser
-                    .set_language(&tree_sitter_javascript::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!(
-                            "Failed to set JavaScript language: {}",
-                            e
-                        ))
-                    })?;
-            }
-            Language::Rust => {
-                parser
-                    .set_language(&tree_sitter_rust::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set Rust language: {}", e))
-                    })?;
-            }
-            Language::Go => {
-                parser
-                    .set_language(&tree_sitter_go::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set Go language: {}", e))
-                    })?;
-            }
-            Language::Java => {
-                parser
-                    .set_language(&tree_sitter_java::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set Java language: {}", e))
-                    })?;
-            }
-            Language::C => {
-                parser
-                    .set_language(&tree_sitter_c::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set C language: {}", e))
-                    })?;
-            }
-            Language::Cpp => {
-                parser
-                    .set_language(&tree_sitter_cpp::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set C++ language: {}", e))
-                    })?;
-            }
-            Language::CSharp => {
-                parser
-                    .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set C# language: {}", e))
-                    })?;
-            }
-            Language::Ruby => {
-                parser
-                    .set_language(&tree_sitter_ruby::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set Ruby language: {}", e))
-                    })?;
-            }
-            Language::Php => {
-                parser
-                    .set_language(&tree_sitter_php::LANGUAGE_PHP.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set PHP language: {}", e))
-                    })?;
-            }
-            Language::Swift => {
-                parser
-                    .set_language(&tree_sitter_swift::LANGUAGE.into())
-                    .map_err(|e| {
-                        VectorDbError::ChunkingError(format!("Failed to set Swift language: {}", e))
-                    })?;
-            }
-            _ => {
-                return Err(VectorDbError::ChunkingError(format!(
-                    "Language {:?} not supported for tree-sitter parsing",
-                    language
-                )))
-            }
-        }
+        configure_parser_for_language(&mut parser, file_path, language).map_err(|e| {
+            VectorDbError::ChunkingError(format!("Failed to configure tree-sitter language: {}", e))
+        })?;
 
         // 解析代码
         let tree = parser.parse(content, None).ok_or_else(|| {

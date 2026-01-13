@@ -1,4 +1,5 @@
 use crate::config::error::{ConfigError, ConfigPathsError, ShortcutsError, ThemeConfigError};
+use crate::settings::SettingsError;
 use crate::storage::error::MessagePackError;
 use crate::window::error::WindowStateError;
 use thiserror::Error;
@@ -15,6 +16,8 @@ pub enum SetupError {
     Config(#[from] ConfigError),
     #[error("Shortcut manager initialization failed: {0}")]
     Shortcuts(#[from] ShortcutsError),
+    #[error("Settings manager initialization failed: {0}")]
+    Settings(#[from] SettingsError),
     #[error("Storage paths initialization failed: {0}")]
     StoragePaths(#[from] crate::storage::error::StoragePathsError),
     #[error("Database error: {0}")]

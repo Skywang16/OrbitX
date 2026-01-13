@@ -62,7 +62,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["../config/themes/*", "../config/config.toml", "sql/*"],
+    "resources": ["../config/themes/*", "../config/config.json", "sql/*"],
     "fileAssociations": [
       {
         "ext": ["*"],

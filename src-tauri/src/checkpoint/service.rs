@@ -9,6 +9,7 @@ use diffy::{create_patch, PatchFormatter};
 use tokio::fs;
 
 use super::blob_store::BlobStore;
+use super::config::CheckpointConfig;
 use super::models::{
     Checkpoint, CheckpointError, CheckpointResult, CheckpointSummary, FileChangeType, FileDiff,
     NewCheckpoint, NewFileSnapshot, RollbackResult,
@@ -19,6 +20,7 @@ use super::storage::CheckpointStorage;
 pub struct CheckpointService {
     storage: Arc<CheckpointStorage>,
     blob_store: Arc<BlobStore>,
+    config: CheckpointConfig,
 }
 
 impl CheckpointService {
@@ -26,6 +28,19 @@ impl CheckpointService {
         Self {
             storage,
             blob_store,
+            config: CheckpointConfig::default(),
+        }
+    }
+
+    pub fn with_config(
+        storage: Arc<CheckpointStorage>,
+        blob_store: Arc<BlobStore>,
+        config: CheckpointConfig,
+    ) -> Self {
+        Self {
+            storage,
+            blob_store,
+            config,
         }
     }
 
@@ -77,6 +92,12 @@ impl CheckpointService {
     ) -> CheckpointResult<()> {
         let resolved = resolve_file_path(file_path, workspace_root).await?;
 
+        // 检查是否应该忽略这个文件
+        if self.config.should_ignore_file(&resolved.relative) {
+            tracing::debug!("Ignoring file: {}", resolved.relative);
+            return Ok(());
+        }
+
         if self
             .storage
             .has_file_snapshot(checkpoint_id, &resolved.relative)
@@ -87,6 +108,16 @@ impl CheckpointService {
 
         match fs::read(&resolved.absolute).await {
             Ok(content) => {
+                // 检查文件大小限制
+                if self.config.is_file_too_large(content.len() as u64) {
+                    tracing::warn!(
+                        "Skipping large file: {} ({} bytes)",
+                        resolved.relative,
+                        content.len()
+                    );
+                    return Ok(());
+                }
+
                 let blob_hash = self.blob_store.store(&content).await?;
                 let snapshot = NewFileSnapshot {
                     checkpoint_id,

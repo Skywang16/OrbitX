@@ -8,7 +8,7 @@
 use super::service::{SystemThemeDetector, ThemeService};
 use super::types::{Theme, ThemeConfig};
 use crate::config::error::{ConfigCommandError, ConfigCommandResult};
-use crate::config::TomlConfigManager;
+use crate::config::ConfigManager;
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ pub struct ThemeConfigStatus {
 /// 获取当前主题配置状态
 #[tauri::command]
 pub async fn theme_get_config_status(
-    config_manager: State<'_, Arc<TomlConfigManager>>,
+    config_manager: State<'_, Arc<ConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<ThemeConfigStatus> {
     let config = match config_manager.config_get().await {
@@ -87,7 +87,7 @@ pub async fn theme_get_config_status(
 /// 获取当前主题数据
 #[tauri::command]
 pub async fn theme_get_current(
-    config_manager: State<'_, Arc<TomlConfigManager>>,
+    config_manager: State<'_, Arc<ConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<Theme> {
     let config = match config_manager.config_get().await {
@@ -112,7 +112,7 @@ pub async fn theme_get_current(
 pub async fn theme_set_terminal<R: Runtime>(
     theme_name: String,
     app_handle: AppHandle<R>,
-    config_manager: State<'_, Arc<TomlConfigManager>>,
+    config_manager: State<'_, Arc<ConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<EmptyData> {
     // 验证主题是否存在
@@ -147,7 +147,7 @@ pub async fn theme_set_follow_system<R: Runtime>(
     light_theme: Option<String>,
     dark_theme: Option<String>,
     app_handle: AppHandle<R>,
-    config_manager: State<'_, Arc<TomlConfigManager>>,
+    config_manager: State<'_, Arc<ConfigManager>>,
     theme_service: State<'_, Arc<ThemeService>>,
 ) -> TauriApiResult<EmptyData> {
     // 验证主题是否存在
@@ -228,7 +228,7 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     app_handle: &AppHandle<R>,
     is_dark: bool,
 ) -> ConfigCommandResult<()> {
-    let config_manager = app_handle.state::<Arc<TomlConfigManager>>();
+    let config_manager = app_handle.state::<Arc<ConfigManager>>();
     let theme_service = app_handle.state::<Arc<ThemeService>>();
 
     let config = config_manager

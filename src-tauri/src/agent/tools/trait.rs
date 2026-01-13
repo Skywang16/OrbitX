@@ -50,15 +50,6 @@ pub struct ToolResult {
     pub ext_info: Option<Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ToolPermission {
-    ReadOnly,
-    FileSystem,
-    SystemCommand,
-    Network,
-    Terminal,
-}
-
 #[async_trait]
 pub trait RunnableTool: Send + Sync {
     fn name(&self) -> &str;
@@ -73,10 +64,6 @@ pub trait RunnableTool: Send + Sync {
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::default()
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::ReadOnly]
     }
     fn tags(&self) -> Vec<String> {
         self.metadata().tags
@@ -108,11 +95,5 @@ pub trait RunnableTool: Send + Sync {
             description: self.description().to_string(),
             parameters: self.parameters_schema(),
         }
-    }
-
-    /// Default: ensure all required permissions are present in granted list
-    fn check_permissions(&self, granted: &Vec<ToolPermission>) -> bool {
-        let required = self.required_permissions();
-        required.into_iter().all(|r| granted.contains(&r))
     }
 }

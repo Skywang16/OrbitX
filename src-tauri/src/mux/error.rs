@@ -116,14 +116,6 @@ pub enum MuxConfigError {
         #[source]
         source: std::io::Error,
     },
-    #[error("Failed to parse config file {path}: {source}")]
-    Parse {
-        path: String,
-        #[source]
-        source: toml::de::Error,
-    },
-    #[error("Failed to serialize config: {0}")]
-    Serialize(String),
     #[error("Configuration validation failed: {reason}")]
     Validation { reason: String },
     #[error("Mux config internal error: {0}")]

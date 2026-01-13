@@ -8,12 +8,14 @@
 
 mod blob_store;
 pub mod commands;
+mod config;
 mod models;
 mod service;
 mod storage;
 
-pub use blob_store::BlobStore;
+pub use blob_store::{BlobStore, BlobStoreStats};
 pub use commands::CheckpointState;
+pub use config::CheckpointConfig;
 pub use models::{
     Checkpoint, CheckpointError, CheckpointResult, CheckpointSummary, FileChangeType, FileDiff,
     FileSnapshot, NewCheckpoint, NewFileSnapshot, RollbackResult,

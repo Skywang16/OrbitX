@@ -5,8 +5,8 @@ use serde_json::json;
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
+    ToolResultStatus,
 };
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::singleton::get_mux;
@@ -33,14 +33,47 @@ impl RunnableTool for ReadTerminalTool {
     }
 
     fn description(&self) -> &str {
-        "Reads the current visible content from the active terminal pane.
+        r#"Reads the current visible content from the active terminal pane for analysis and debugging.
 
 Usage:
 - Returns the terminal output buffer that the user is currently viewing
+- Includes recent command outputs, error messages, and terminal history
+- Preserves ANSI escape codes and terminal formatting for accurate representation
 - Useful for analyzing terminal errors, command outputs, or debugging issues
+
+When to Use:
+- User asks you to analyze what they see in the terminal
+- Debugging command failures or error messages
+- Checking the output of recently executed commands
+- Understanding the current terminal state before running new commands
+
+When NOT to Use:
 - This is NOT for general code editing - use read_file for reading source files
-- Use this when the user asks you to analyze what they see in the terminal
-- The content includes ANSI escape codes and terminal formatting"
+- Don't use for reading file contents - terminal output may be truncated or formatted
+- Not suitable for reading large files that were displayed with cat/less
+
+Terminal Content Analysis:
+- Content may include ANSI color codes and formatting
+- Command prompts and user input are included
+- Output may be truncated if it exceeds terminal buffer size
+- Recent content appears at the bottom of the output
+
+Parameters:
+- maxLines: Controls how much terminal history to retrieve (default: 1000)
+- Use lower values (100-500) for recent output analysis
+- Use higher values (1000-5000) for comprehensive history review
+
+Examples:
+- Check recent output: {"maxLines": 100}
+- Full terminal history: {"maxLines": 2000}
+- Default analysis: {} (uses 1000 lines)
+
+Common Use Cases:
+- Analyzing compilation errors from build commands
+- Checking test results and failure messages
+- Understanding why a command failed
+- Reviewing the output of deployment or installation scripts
+- Debugging shell script execution"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -60,10 +93,6 @@ Usage:
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::Terminal, ToolPriority::Standard)
             .with_tags(vec!["terminal".into(), "debug".into()])
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::Terminal]
     }
 
     async fn run(

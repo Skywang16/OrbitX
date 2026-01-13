@@ -3,6 +3,8 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "save": "Save",
+    "refresh": "Refresh",
+    "reload": "Reload",
     "add": "Add",
     "select_placeholder": "Please select",
     "no_data": "No data",
@@ -285,8 +287,10 @@
     "data_error": "Data Error"
   },
   "ai_feature": {
-    "user_rules": "User Rules",
-    "rules_placeholder": "Enter your rules here",
+    "user_rules": "Global Rules",
+    "rules_placeholder": "Enter global rules here",
+    "mcp_servers": "MCP Servers",
+    "mcp_servers_description": "Global MCP server config (applies to new Agent tasks)",
     "project_rules": "Project Rules File",
     "project_rules_description": "Select which project rules file to prioritize",
     "click_to_switch": "Click to switch",
@@ -357,6 +361,15 @@
     "build_done_with_failures": "Index build completed, but {count} file(s) failed",
     "build_channel_error": "Index build channel error",
     "embedding_model": "Embedding Model"
+  },
+  "config": {
+    "title": "Config",
+    "global": "Global",
+    "workspace": "Workspace",
+    "no_workspace": "No workspace selected",
+    "rules": "Rules",
+    "mcp_servers": "MCP Servers",
+    "no_mcp_servers": "No MCP servers configured"
   },
   "workspace": {
     "title": "Workspace",

@@ -11,8 +11,8 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
+    ToolResultStatus,
 };
 
 use super::file_utils::{ensure_absolute, is_probably_binary};
@@ -110,77 +110,242 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     prev_row[b_len]
 }
 
-/// 模糊搜索结果
-struct FuzzySearchResult {
-    best_score: f64,
-    best_match_index: Option<usize>,
-    best_match_content: String,
+/// 匹配策略枚举
+#[derive(Debug, Clone)]
+enum MatchStrategy {
+    Exact,                // 精确匹配
+    LineTrimmed,          // 忽略行首空白
+    WhitespaceNormalized, // 空白规范化
+    IndentationFlexible,  // 缩进弹性匹配
+    BlockAnchor,          // 首尾行锚定 + 模糊匹配
 }
 
-/// 中间向外模糊搜索
-/// 参考 Roo-Code 的 fuzzySearch 函数
-fn fuzzy_search(
-    lines: &[&str],
-    search_chunk: &str,
-    start_index: usize,
-    end_index: usize,
-) -> FuzzySearchResult {
-    let mut best_score = 0.0;
-    let mut best_match_index = None;
-    let mut best_match_content = String::new();
+/// 匹配结果
+#[derive(Debug, Clone)]
+struct MatchResult {
+    strategy: MatchStrategy,
+    score: f64,
+    match_index: usize,
+    match_content: String,
+}
 
-    let search_lines: Vec<&str> = search_chunk.lines().collect();
-    let search_len = search_lines.len();
+/// 多策略匹配器
+struct MultiStrategyMatcher;
 
-    if search_len == 0 || end_index <= start_index {
-        return FuzzySearchResult {
-            best_score,
-            best_match_index,
-            best_match_content,
-        };
-    }
+impl MultiStrategyMatcher {
+    /// 按优先级顺序尝试多种匹配策略
+    fn find_best_match(lines: &[&str], search_text: &str, threshold: f64) -> Option<MatchResult> {
+        let strategies = [
+            MatchStrategy::Exact,
+            MatchStrategy::LineTrimmed,
+            MatchStrategy::WhitespaceNormalized,
+            MatchStrategy::IndentationFlexible,
+            MatchStrategy::BlockAnchor,
+        ];
 
-    // 从中点开始向两边搜索
-    let mid_point = (start_index + end_index) / 2;
-    let mut left_index = mid_point as isize;
-    let mut right_index = mid_point + 1;
-
-    while left_index >= start_index as isize || right_index <= end_index.saturating_sub(search_len)
-    {
-        // 向左搜索
-        if left_index >= start_index as isize {
-            let idx = left_index as usize;
-            if idx + search_len <= lines.len() {
-                let original_chunk = lines[idx..idx + search_len].join("\n");
-                let similarity = get_similarity(&original_chunk, search_chunk);
-                if similarity > best_score {
-                    best_score = similarity;
-                    best_match_index = Some(idx);
-                    best_match_content = original_chunk;
+        for strategy in &strategies {
+            if let Some(result) = Self::try_strategy(lines, search_text, strategy.clone()) {
+                if result.score >= threshold {
+                    return Some(result);
                 }
             }
-            left_index -= 1;
         }
 
-        // 向右搜索
-        if right_index <= end_index.saturating_sub(search_len) {
-            if right_index + search_len <= lines.len() {
-                let original_chunk = lines[right_index..right_index + search_len].join("\n");
-                let similarity = get_similarity(&original_chunk, search_chunk);
-                if similarity > best_score {
-                    best_score = similarity;
-                    best_match_index = Some(right_index);
-                    best_match_content = original_chunk;
-                }
+        None
+    }
+
+    /// 尝试特定策略
+    fn try_strategy(
+        lines: &[&str],
+        search_text: &str,
+        strategy: MatchStrategy,
+    ) -> Option<MatchResult> {
+        match strategy {
+            MatchStrategy::Exact => Self::exact_match(lines, search_text),
+            MatchStrategy::LineTrimmed => Self::line_trimmed_match(lines, search_text),
+            MatchStrategy::WhitespaceNormalized => {
+                Self::whitespace_normalized_match(lines, search_text)
             }
-            right_index += 1;
+            MatchStrategy::IndentationFlexible => {
+                Self::indentation_flexible_match(lines, search_text)
+            }
+            MatchStrategy::BlockAnchor => Self::block_anchor_match(lines, search_text),
         }
     }
 
-    FuzzySearchResult {
-        best_score,
-        best_match_index,
-        best_match_content,
+    /// 策略1: 精确匹配
+    fn exact_match(lines: &[&str], search_text: &str) -> Option<MatchResult> {
+        let full_text = lines.join("\n");
+        if let Some(start) = full_text.find(search_text) {
+            // 计算匹配的行索引
+            let before_match = &full_text[..start];
+            let match_line_start = before_match.lines().count().saturating_sub(1);
+
+            return Some(MatchResult {
+                strategy: MatchStrategy::Exact,
+                score: 1.0,
+                match_index: match_line_start,
+                match_content: search_text.to_string(),
+            });
+        }
+        None
+    }
+
+    /// 策略2: 忽略行首空白匹配
+    fn line_trimmed_match(lines: &[&str], search_text: &str) -> Option<MatchResult> {
+        let search_lines: Vec<&str> = search_text.lines().collect();
+        if search_lines.is_empty() {
+            return None;
+        }
+
+        let search_trimmed: Vec<&str> = search_lines.iter().map(|line| line.trim_start()).collect();
+
+        for (i, window) in lines.windows(search_lines.len()).enumerate() {
+            let window_trimmed: Vec<&str> = window.iter().map(|line| line.trim_start()).collect();
+
+            if window_trimmed == search_trimmed {
+                return Some(MatchResult {
+                    strategy: MatchStrategy::LineTrimmed,
+                    score: 0.95, // 略低于精确匹配
+                    match_index: i,
+                    match_content: window.join("\n"),
+                });
+            }
+        }
+        None
+    }
+
+    /// 策略3: 空白规范化匹配
+    fn whitespace_normalized_match(lines: &[&str], search_text: &str) -> Option<MatchResult> {
+        let normalize_whitespace = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        let search_normalized = normalize_whitespace(search_text);
+        let search_lines: Vec<&str> = search_text.lines().collect();
+
+        for (i, window) in lines.windows(search_lines.len()).enumerate() {
+            let window_text = window.join("\n");
+            let window_normalized = normalize_whitespace(&window_text);
+
+            if window_normalized == search_normalized {
+                return Some(MatchResult {
+                    strategy: MatchStrategy::WhitespaceNormalized,
+                    score: 0.90,
+                    match_index: i,
+                    match_content: window_text,
+                });
+            }
+        }
+        None
+    }
+
+    /// 策略4: 缩进弹性匹配
+    fn indentation_flexible_match(lines: &[&str], search_text: &str) -> Option<MatchResult> {
+        let search_lines: Vec<&str> = search_text.lines().collect();
+        if search_lines.is_empty() {
+            return None;
+        }
+
+        // 获取搜索文本的相对缩进模式
+        let search_indents = Self::get_relative_indents(&search_lines);
+
+        for (i, window) in lines.windows(search_lines.len()).enumerate() {
+            let window_indents = Self::get_relative_indents(window);
+
+            // 比较相对缩进模式和内容
+            if Self::indents_match(&search_indents, &window_indents)
+                && Self::content_matches_ignoring_indent(&search_lines, window)
+            {
+                return Some(MatchResult {
+                    strategy: MatchStrategy::IndentationFlexible,
+                    score: 0.85,
+                    match_index: i,
+                    match_content: window.join("\n"),
+                });
+            }
+        }
+        None
+    }
+
+    /// 策略5: 首尾行锚定 + 模糊匹配
+    fn block_anchor_match(lines: &[&str], search_text: &str) -> Option<MatchResult> {
+        let search_lines: Vec<&str> = search_text.lines().collect();
+        if search_lines.len() < 2 {
+            return None; // 需要至少2行才能做首尾锚定
+        }
+
+        let first_search_line = search_lines[0].trim();
+        let last_search_line = search_lines[search_lines.len() - 1].trim();
+
+        for (i, window) in lines.windows(search_lines.len()).enumerate() {
+            let first_window_line = window[0].trim();
+            let last_window_line = window[window.len() - 1].trim();
+
+            // 首尾行必须匹配
+            if first_search_line == first_window_line && last_search_line == last_window_line {
+                // 计算中间内容的相似度
+                let middle_similarity = if search_lines.len() > 2 {
+                    let search_middle = search_lines[1..search_lines.len() - 1].join("\n");
+                    let window_middle = window[1..window.len() - 1].join("\n");
+                    get_similarity(&window_middle, &search_middle)
+                } else {
+                    1.0 // 只有首尾两行，直接匹配
+                };
+
+                if middle_similarity >= 0.7 {
+                    // 中间内容70%相似度即可
+                    return Some(MatchResult {
+                        strategy: MatchStrategy::BlockAnchor,
+                        score: 0.8 + (middle_similarity * 0.15), // 0.8-0.95之间
+                        match_index: i,
+                        match_content: window.join("\n"),
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// 获取相对缩进级别
+    fn get_relative_indents(lines: &[&str]) -> Vec<usize> {
+        lines
+            .iter()
+            .map(|line| line.len() - line.trim_start().len())
+            .collect()
+    }
+
+    /// 比较缩进模式是否匹配
+    fn indents_match(search_indents: &[usize], window_indents: &[usize]) -> bool {
+        if search_indents.len() != window_indents.len() {
+            return false;
+        }
+
+        // 计算相对缩进差异
+        let search_base = search_indents.get(0).copied().unwrap_or(0);
+        let window_base = window_indents.get(0).copied().unwrap_or(0);
+
+        for (&search_indent, &window_indent) in search_indents.iter().zip(window_indents.iter()) {
+            let search_relative = search_indent.saturating_sub(search_base);
+            let window_relative = window_indent.saturating_sub(window_base);
+
+            if search_relative != window_relative {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// 比较内容是否匹配（忽略缩进）
+    fn content_matches_ignoring_indent(search_lines: &[&str], window_lines: &[&str]) -> bool {
+        if search_lines.len() != window_lines.len() {
+            return false;
+        }
+
+        for (search_line, window_line) in search_lines.iter().zip(window_lines.iter()) {
+            if search_line.trim() != window_line.trim() {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -307,16 +472,45 @@ impl RunnableTool for UnifiedEditTool {
     }
 
     fn description(&self) -> &str {
-        "Performs smart string replacements or insertions in files with fuzzy matching and intelligent indentation preservation.
+        r#"Performs smart string replacements, insertions, or diff applications in files with advanced multi-strategy matching and intelligent indentation preservation.
 
 Usage:
+- You MUST use the read_file tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file first
 - The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
-- You MUST use the read_file tool at least once before editing. This tool will error if you attempt an edit without reading the file first.
-- The tool uses fuzzy matching (90% similarity threshold) to find the target text, tolerating minor whitespace differences
+- When editing text from read_file tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file content
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required
+- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked
+
+Edit Modes:
+- mode="replace": Find and replace text with advanced multi-strategy matching
+- mode="insert": Insert content at a specific position
+- mode="diff": Apply unified diff patches to files
+
+Replace Mode Guidelines:
+- Uses 5 intelligent matching strategies in order: Exact → LineTrimmed → WhitespaceNormalized → IndentationFlexible → BlockAnchor
+- Exact: Perfect string match (100% accuracy)
+- LineTrimmed: Ignores leading whitespace differences (95% accuracy)
+- WhitespaceNormalized: Normalizes all whitespace (90% accuracy)  
+- IndentationFlexible: Matches content with flexible indentation (85% accuracy)
+- BlockAnchor: Matches first/last lines exactly, fuzzy matches middle content (80-95% accuracy)
+- Include enough surrounding context to make the old_text unique in the file
 - Indentation is automatically preserved: the tool detects the original file's indentation style and applies it to replacements
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
-- For replace mode, include enough surrounding context to make the old_text unique"
+- For renaming variables/functions across a file, consider using multiple replace operations
+
+Insert Mode Guidelines:
+- Use after_line parameter (0-based line index) to specify insertion point
+- Use 0 to insert at the beginning of the file
+- Content will be inserted with appropriate indentation
+
+Diff Mode Guidelines:
+- Provide unified diff format patches
+- Useful for complex multi-location changes
+- The tool will validate and apply the patch safely
+
+Examples:
+- Replace text: {"path": "/path/file.js", "mode": "replace", "old_text": "function oldName() {\n  return true;\n}", "new_text": "function newName() {\n  return false;\n}"}
+- Insert at position: {"path": "/path/file.js", "mode": "insert", "after_line": 10, "content": "// New comment\nconst newVar = 'value';"}
+- Apply diff: {"path": "/path/file.js", "mode": "diff", "diff_content": "--- a/file.js\n+++ b/file.js\n@@ -1,3 +1,3 @@\n-old line\n+new line"}"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -330,7 +524,7 @@ Usage:
                 "mode": {
                     "type": "string",
                     "enum": ["replace", "insert", "diff"],
-                    "description": "Edit mode: 'replace' for find-and-replace, 'insert' for inserting at a line number, 'diff' for applying unified diffs"
+                    "description": "Edit mode: 'replace' for find-and-replace, 'insert' for inserting at a position, 'diff' for applying unified diffs"
                 },
                 "old_text": {
                     "type": "string",
@@ -343,11 +537,11 @@ Usage:
                 "after_line": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "[insert mode only] 0-based line number after which to insert content. Use 0 to insert at the beginning of the file."
+                    "description": "[insert mode only] 0-based line index after which to insert content. Use 0 to insert at the beginning of the file."
                 },
                 "content": {
                     "type": "string",
-                    "description": "[insert mode only] The content to insert at the specified line."
+                    "description": "[insert mode only] The content to insert at the specified position."
                 },
                 "diff_content": {
                     "type": "string",
@@ -363,10 +557,6 @@ Usage:
             .with_confirmation()
             .with_tags(vec!["filesystem".into(), "edit".into()])
             .with_summary_key_arg("path")
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -468,94 +658,84 @@ Usage:
                     ));
                 }
 
-                // 2. 精确匹配失败，尝试模糊匹配
-                let search_chunk = old_text.clone();
-                let fuzzy_result = fuzzy_search(&lines, &search_chunk, 0, lines.len());
+                // 2. 精确匹配失败，尝试多策略模糊匹配
+                if let Some(match_result) = MultiStrategyMatcher::find_best_match(
+                    &lines,
+                    &old_text,
+                    DEFAULT_FUZZY_THRESHOLD,
+                ) {
+                    let match_index = match_result.match_index;
 
-                if fuzzy_result.best_score >= DEFAULT_FUZZY_THRESHOLD {
-                    if let Some(match_index) = fuzzy_result.best_match_index {
-                        // 获取匹配的行
-                        let matched_lines: Vec<&str> = lines
-                            .iter()
-                            .skip(match_index)
-                            .take(search_lines.len())
-                            .copied()
-                            .collect();
+                    // 获取匹配的行
+                    let matched_lines: Vec<&str> = lines
+                        .iter()
+                        .skip(match_index)
+                        .take(search_lines.len())
+                        .copied()
+                        .collect();
 
-                        // 应用智能缩进替换
-                        let indented_replace = apply_replacement_with_indent(
-                            &matched_lines,
-                            &search_lines,
-                            &replace_lines,
-                        );
+                    // 应用智能缩进替换
+                    let indented_replace = apply_replacement_with_indent(
+                        &matched_lines,
+                        &search_lines,
+                        &replace_lines,
+                    );
 
-                        // 构建最终内容
-                        let before_match: Vec<&str> =
-                            lines.iter().take(match_index).copied().collect();
-                        let after_match: Vec<&str> = lines
-                            .iter()
-                            .skip(match_index + search_lines.len())
-                            .copied()
-                            .collect();
+                    // 构建最终内容
+                    let before_match: Vec<&str> = lines.iter().take(match_index).copied().collect();
+                    let after_match: Vec<&str> = lines
+                        .iter()
+                        .skip(match_index + search_lines.len())
+                        .copied()
+                        .collect();
 
-                        let mut result_lines: Vec<String> =
-                            before_match.iter().map(|s| s.to_string()).collect();
-                        result_lines.extend(indented_replace);
-                        result_lines.extend(after_match.iter().map(|s| s.to_string()));
+                    let mut result_lines: Vec<String> =
+                        before_match.iter().map(|s| s.to_string()).collect();
+                    result_lines.extend(indented_replace);
+                    result_lines.extend(after_match.iter().map(|s| s.to_string()));
 
-                        let updated = result_lines.join(line_ending);
+                    let updated = result_lines.join(line_ending);
 
-                        snapshot_before_edit(context, self.name(), path.as_path()).await?;
+                    snapshot_before_edit(context, self.name(), path.as_path()).await?;
 
-                        if let Err(err) = fs::write(&path, &updated).await {
-                            return Ok(error_result(format!(
-                                "Failed to write file {}: {}",
-                                path.display(),
-                                err
-                            )));
-                        }
-
-                        return Ok(success_result(
-                            format!(
-                                "edit_file applied\nmode=replace\nfile={}\nmatch=fuzzy ({}% similar)",
-                                path.display(),
-                                (fuzzy_result.best_score * 100.0) as u32
-                            ),
-                            json!({
-                                "file": path.display().to_string(),
-                                "mode": "replace",
-                                "matchType": "fuzzy",
-                                "similarity": fuzzy_result.best_score,
-                                "old": fuzzy_result.best_match_content,
-                                "new": new_text
-                            }),
-                        ));
+                    if let Err(err) = fs::write(&path, &updated).await {
+                        return Ok(error_result(format!(
+                            "Failed to write file {}: {}",
+                            path.display(),
+                            err
+                        )));
                     }
+
+                    return Ok(success_result(
+                        format!(
+                            "edit_file applied\nmode=replace\nfile={}\nmatch={:?} ({}% similar)",
+                            path.display(),
+                            match_result.strategy,
+                            (match_result.score * 100.0) as u32
+                        ),
+                        json!({
+                            "file": path.display().to_string(),
+                            "mode": "replace",
+                            "matchType": format!("{:?}", match_result.strategy).to_lowercase(),
+                            "similarity": match_result.score,
+                            "old": match_result.match_content,
+                            "new": new_text
+                        }),
+                    ));
                 }
 
-                // 3. 模糊匹配也失败
-                let similarity_pct = (fuzzy_result.best_score * 100.0) as u32;
+                // 3. 所有匹配策略都失败
                 let threshold_pct = (DEFAULT_FUZZY_THRESHOLD * 100.0) as u32;
 
                 let error_msg = format!(
-                    "No sufficiently similar match found ({}% similar, needs {}%)\n\n\
+                    "No sufficiently similar match found (needs {}% similarity)\n\n\
+                    Tried strategies: Exact, LineTrimmed, WhitespaceNormalized, IndentationFlexible, BlockAnchor\n\n\
                     Suggestions:\n\
                     1. Use read_file to verify the file's current content\n\
                     2. Check for exact whitespace/indentation match\n\
-                    3. Provide more context to make the match unique\n\n\
-                    Best match found:\n{}",
-                    similarity_pct,
-                    threshold_pct,
-                    if fuzzy_result.best_match_content.is_empty() {
-                        "(no match)".to_string()
-                    } else {
-                        fuzzy_result
-                            .best_match_content
-                            .lines()
-                            .take(5)
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    }
+                    3. Provide more context to make the match unique\n\
+                    4. Try using mode='outline' to see file structure first",
+                    threshold_pct
                 );
 
                 return Ok(error_result(error_msg));

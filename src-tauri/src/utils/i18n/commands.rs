@@ -1,14 +1,13 @@
-use crate::config::TomlConfigManager;
+use crate::config::ConfigManager;
 use crate::utils::{EmptyData, Language, LanguageManager, TauriApiResult};
 use crate::{api_error, api_success};
-use serde_json::Value;
 use std::sync::Arc;
 use tauri::{Emitter, State};
 
 #[tauri::command]
 pub async fn language_set_app_language<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    config: State<'_, Arc<TomlConfigManager>>,
+    config: State<'_, Arc<ConfigManager>>,
     language: String,
 ) -> TauriApiResult<EmptyData> {
     let lang = Language::from_str(&language);
@@ -18,8 +17,10 @@ pub async fn language_set_app_language<R: tauri::Runtime>(
     }
 
     if let Err(_) = config
-        .inner()
-        .update_section("app.language", Value::String(language.clone()))
+        .config_update(|cfg| {
+            cfg.app.language = language.clone();
+            Ok(())
+        })
         .await
     {
         return Ok(api_error!("config.update_failed"));

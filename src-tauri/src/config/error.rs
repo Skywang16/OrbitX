@@ -5,7 +5,6 @@ use thiserror::Error;
 
 pub type ConfigResult<T> = Result<T, ConfigError>;
 pub type ConfigPathsResult<T> = Result<T, ConfigPathsError>;
-pub type TomlConfigResult<T> = Result<T, TomlConfigError>;
 pub type ThemeConfigResult<T> = Result<T, ThemeConfigError>;
 pub type ShortcutsResult<T> = Result<T, ShortcutsError>;
 pub type ShortcutsActionResult<T> = Result<T, ShortcutsActionError>;
@@ -16,8 +15,6 @@ pub type ConfigCommandResult<T> = Result<T, ConfigCommandError>;
 pub enum ConfigError {
     #[error(transparent)]
     Paths(#[from] ConfigPathsError),
-    #[error(transparent)]
-    Toml(#[from] TomlConfigError),
     #[error(transparent)]
     Theme(#[from] ThemeConfigError),
     #[error(transparent)]
@@ -77,38 +74,11 @@ impl ConfigPathsError {
 }
 
 #[derive(Debug, Error)]
-pub enum TomlConfigError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("TOML parse error: {0}")]
-    Parse(#[from] toml::de::Error),
-    #[error("TOML serialization error: {0}")]
-    Serialize(#[from] toml::ser::Error),
-    #[error("Configuration path is invalid")]
-    InvalidPath,
-    #[error("Bundled configuration file not found")]
-    BundledConfigMissing,
-    #[error("Configuration backup failed: {reason}")]
-    BackupFailed { reason: String },
-    #[error("Configuration validation error: {reason}")]
-    Validation { reason: String },
-    #[error("Configuration watcher error: {reason}")]
-    Watcher { reason: String },
-    #[error("TOML manager lock poisoned: {source}")]
-    LockPoisoned {
-        #[source]
-        source: PoisonError<()>,
-    },
-    #[error("Toml configuration internal error: {0}")]
-    Internal(String),
-}
-
-#[derive(Debug, Error)]
 pub enum ThemeConfigError {
     #[error("Theme file I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Theme parse error: {0}")]
-    Parse(#[from] toml::de::Error),
+    Parse(#[from] serde_json::Error),
     #[error("Theme index lock poisoned: {source}")]
     LockPoisoned {
         #[source]
@@ -130,8 +100,6 @@ pub enum ShortcutsError {
     Action(#[from] ShortcutsActionError),
     #[error("Shortcuts file I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Shortcuts parse error: {0}")]
-    Parse(#[from] toml::de::Error),
     #[error("Shortcuts validation error: {reason}")]
     Validation { reason: String },
     #[error("Shortcut action not registered: {action}")]
@@ -175,14 +143,6 @@ pub enum ConfigCommandError {
     Dialog { reason: String },
     #[error("Configuration command internal error: {0}")]
     Internal(String),
-}
-
-impl TomlConfigError {
-    pub fn from_poison<T>(_err: PoisonError<T>) -> Self {
-        TomlConfigError::LockPoisoned {
-            source: PoisonError::new(()),
-        }
-    }
 }
 
 impl ThemeConfigError {

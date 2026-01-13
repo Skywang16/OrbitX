@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "app": {
+    "language": "zh-CN",
+    "confirmOnExit": true,
+    "startupBehavior": "restore"
+  },
+  "appearance": {
+    "uiScale": 100,
+    "animationsEnabled": true,
+    "themeConfig": {
+      "autoSwitchTime": "18:00",
+      "terminalTheme": "tokyo-night",
+      "lightTheme": "light",
+      "darkTheme": "dark",
+      "followSystem": false
+    },
+    "font": {
+      "family": "Menlo, Monaco, \"SF Mono\", \"Microsoft YaHei UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Source Han Sans CN\", \"WenQuanYi Micro Hei\", \"Courier New\", monospace",
+      "size": 14,
+      "weight": "normal",
+      "style": "normal",
+      "lineHeight": 1.2,
+      "letterSpacing": 0
+    },
+    "opacity": 1
+  },
+  "terminal": {
+    "scrollback": 1000,
+    "shell": {
+      "default": "zsh",
+      "args": [],
+      "workingDirectory": "~"
+    },
+    "cursor": {
+      "style": "block",
+      "blink": true,
+      "color": "#ffffff",
+      "thickness": 0.15
+    },
+    "behavior": {
+      "closeOnExit": true,
+      "confirmClose": false
+    }
+  },
+  "shortcuts": [
+    { "key": "c", "modifiers": ["cmd"], "action": "copy_to_clipboard" },
+    { "key": "v", "modifiers": ["cmd"], "action": "paste_from_clipboard" },
+    { "key": "f", "modifiers": ["cmd"], "action": "terminal_search" },
+    { "key": "s", "modifiers": ["cmd"], "action": "open_settings" },
+    { "key": "t", "modifiers": ["cmd"], "action": "new_tab" },
+    { "key": "w", "modifiers": ["cmd"], "action": "close_tab" },
+    { "key": "1", "modifiers": ["cmd"], "action": "switch_to_tab_1" },
+    { "key": "2", "modifiers": ["cmd"], "action": "switch_to_tab_2" },
+    { "key": "3", "modifiers": ["cmd"], "action": "switch_to_tab_3" },
+    { "key": "4", "modifiers": ["cmd"], "action": "switch_to_tab_4" },
+    { "key": "5", "modifiers": ["cmd"], "action": "switch_to_tab_5" },
+    { "key": "9", "modifiers": ["cmd"], "action": "switch_to_last_tab" },
+    { "key": "right", "modifiers": ["cmd"], "action": "accept_completion" },
+    { "key": "k", "modifiers": ["cmd"], "action": "clear_terminal" },
+    { "key": "=", "modifiers": ["cmd"], "action": "increase_font_size" },
+    { "key": "-", "modifiers": ["cmd"], "action": "decrease_font_size" },
+    { "key": "i", "modifiers": ["cmd"], "action": "toggle_ai_sidebar" },
+    { "key": "p", "modifiers": ["cmd"], "action": "toggle_window_pin" }
+  ]
+}

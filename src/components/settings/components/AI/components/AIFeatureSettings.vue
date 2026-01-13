@@ -1,20 +1,22 @@
 <script setup lang="ts">
   import { onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { aiApi } from '@/api'
+  import { settingsApi } from '@/api'
   import { debounce } from 'lodash-es'
   import SettingsCard from '../../../SettingsCard.vue'
 
   const { t } = useI18n()
 
-  const userRules = ref<string>('')
+  const globalRules = ref<string>('')
   const isLoadingRules = ref(false)
+  const globalSettings = ref<Awaited<ReturnType<typeof settingsApi.getGlobal>> | null>(null)
 
-  const loadUserRules = async () => {
+  const loadGlobalRules = async () => {
     isLoadingRules.value = true
     try {
-      const rules = await aiApi.getUserRules()
-      userRules.value = rules || ''
+      const settings = await settingsApi.getGlobal()
+      globalSettings.value = settings
+      globalRules.value = settings.rules?.content || ''
     } catch (error) {
       // Error handled silently
     } finally {
@@ -22,23 +24,27 @@
     }
   }
 
-  const saveUserRules = async (value: string) => {
+  const saveGlobalRules = async (value: string) => {
     try {
-      const rulesToSave = value.trim() || null
-      await aiApi.setUserRules(rulesToSave)
+      const rulesToSave = value.trim()
+      const settings = globalSettings.value || (await settingsApi.getGlobal())
+      settings.rules = settings.rules || { content: '', rulesFiles: [] }
+      settings.rules.content = rulesToSave
+      await settingsApi.updateGlobal(settings)
+      globalSettings.value = settings
     } catch (error) {
       // Error handled silently
     }
   }
 
-  const debouncedSaveUserRules = debounce((newValue: string) => {
-    saveUserRules(newValue)
+  const debouncedSaveGlobalRules = debounce((newValue: string) => {
+    saveGlobalRules(newValue)
   }, 500)
 
-  watch(userRules, debouncedSaveUserRules)
+  watch(globalRules, debouncedSaveGlobalRules)
 
   onMounted(() => {
-    loadUserRules()
+    loadGlobalRules()
   })
 </script>
 
@@ -56,7 +62,7 @@
 
       <div style="padding: 20px">
         <textarea
-          v-model="userRules"
+          v-model="globalRules"
           class="settings-textarea"
           :placeholder="t('ai_feature.rules_placeholder')"
           :aria-label="t('ai_feature.user_rules')"

@@ -2,16 +2,17 @@
  * 终端配置相关的 Tauri 命令
  *
  * 提供终端配置的获取、更新、验证等功能。
- * 使用新的TomlConfigManager作为底层实现。
+ * 使用 JSON ConfigManager 作为底层实现。
  */
 
 use crate::config::{
-    commands::ConfigManagerState, defaults::create_default_terminal_config, types::TerminalConfig,
+    defaults::create_default_terminal_config, manager::ConfigManager, types::TerminalConfig,
 };
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
 
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tauri::State;
 use tracing::warn;
 
@@ -32,9 +33,9 @@ pub struct TerminalConfigValidationResult {
 /// 获取终端配置
 #[tauri::command]
 pub async fn terminal_config_get(
-    state: State<'_, ConfigManagerState>,
+    state: State<'_, Arc<ConfigManager>>,
 ) -> TauriApiResult<TerminalConfig> {
-    match state.toml_manager.config_get().await {
+    match state.config_get().await {
         Ok(config) => {
             let terminal_config = config.terminal.clone();
             Ok(api_success!(terminal_config))
@@ -47,10 +48,9 @@ pub async fn terminal_config_get(
 #[tauri::command]
 pub async fn terminal_config_set(
     terminal_config: TerminalConfig,
-    state: State<'_, ConfigManagerState>,
+    state: State<'_, Arc<ConfigManager>>,
 ) -> TauriApiResult<EmptyData> {
     let result = state
-        .toml_manager
         .config_update(|config| {
             config.terminal = terminal_config.clone();
             Ok(())
@@ -66,9 +66,9 @@ pub async fn terminal_config_set(
 /// 验证终端配置
 #[tauri::command]
 pub async fn terminal_config_validate(
-    state: State<'_, ConfigManagerState>,
+    state: State<'_, Arc<ConfigManager>>,
 ) -> TauriApiResult<TerminalConfigValidationResult> {
-    let config = match state.toml_manager.config_get().await {
+    let config = match state.config_get().await {
         Ok(c) => c,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
@@ -122,13 +122,12 @@ pub async fn terminal_config_validate(
 /// 重置终端配置为默认值
 #[tauri::command]
 pub async fn terminal_config_reset_to_defaults(
-    state: State<'_, ConfigManagerState>,
+    state: State<'_, Arc<ConfigManager>>,
 ) -> TauriApiResult<EmptyData> {
     let default_terminal_config = create_default_terminal_config();
 
     // 更新配置
     let result = state
-        .toml_manager
         .config_update(|config| {
             config.terminal = default_terminal_config.clone();
             Ok(())

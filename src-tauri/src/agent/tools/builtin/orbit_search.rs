@@ -17,8 +17,8 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
-    RunnableTool, ToolCategory, ToolDescriptionContext, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent, ToolResultStatus,
+    RunnableTool, ToolCategory, ToolDescriptionContext, ToolMetadata, ToolPriority, ToolResult,
+    ToolResultContent, ToolResultStatus,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,18 +66,49 @@ impl RunnableTool for OrbitSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Code search tool with two modes: grep and semantic.
+        r#"A powerful semantic and pattern-based code search tool that works with any codebase size.
 
-Modes:
-  - 'grep': Regex pattern search via ripgrep. Always available.
-    Examples: 'fn main', 'class.*Controller', 'import.*from', 'TODO|FIXME'
-  - 'semantic': AI-powered conceptual search. Requires vector index.
-    Examples: 'authentication logic', 'error handling', 'database connection'
+IMPORTANT: ALWAYS use orbit_search for finding code. NEVER invoke `grep` or `find` as shell commands.
 
-Usage:
-  - Use grep for exact patterns (function names, class names, imports)
-  - Use semantic for conceptual searches
-  - Pattern syntax: ripgrep regex (same as grep -E)"
+Search Modes:
+- 'semantic' (AI-powered, requires vector index): Use natural language to find code by concept or functionality
+- 'hybrid' (semantic + keyword, requires index): Combines AI understanding with keyword matching for precise results  
+- 'regex' (pattern-based, always available): Fast regex pattern search using ripgrep engine
+
+Usage Guidelines:
+- Use semantic/hybrid modes for conceptual searches when index is available
+- Use regex mode for exact patterns (function names, class names, imports, specific syntax)
+- Returns file paths, line ranges, code snippets, and relevance scores
+- Results are sorted by relevance score (semantic/hybrid) or modification time (regex)
+- Limited to 50 results to maintain performance
+
+Pattern Syntax (regex mode):
+- Supports full ripgrep regex syntax (same as grep -E)
+- Examples: "fn.*async", "class\\s+\\w+", "import.*from", "TODO|FIXME"
+- Use word boundaries: "\\bfunction\\b" (matches 'function' but not 'myfunction')
+- Case insensitive by default
+
+Semantic Search Examples:
+- "authentication logic" - finds auth-related code
+- "error handling" - locates error management code
+- "database connection" - finds DB connection code
+- "user input validation" - locates validation logic
+
+Regex Search Examples:
+- "fn main" - find main functions
+- "class.*Controller" - find controller classes
+- "import.*React" - find React imports
+- "TODO|FIXME" - find code comments
+
+When to Use Each Mode:
+- Semantic: When you know what the code does but not exact syntax
+- Hybrid: When you want both conceptual and keyword matching
+- Regex: When you know exact patterns, names, or syntax to find
+
+Performance Notes:
+- Semantic/hybrid modes require vector index (build with index command)
+- Regex mode is always available and very fast
+- Use specific patterns to reduce result count for better performance"#
     }
 
     fn description_with_context(&self, context: &ToolDescriptionContext) -> Option<String> {
@@ -122,10 +153,6 @@ Usage:
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::CodeAnalysis, ToolPriority::Expensive)
             .with_tags(vec!["search".into(), "code".into()])
-    }
-
-    fn required_permissions(&self) -> Vec<ToolPermission> {
-        vec![ToolPermission::FileSystem]
     }
 
     async fn run(
@@ -486,11 +513,7 @@ fn resolve_to_absolute(path: Option<&str>, cwd: &str) -> Result<PathBuf, ToolRes
 }
 
 fn resolve_index_dir(base: &Path) -> PathBuf {
-    let oxi = base.join(".oxi");
-    if oxi.exists() {
-        return oxi;
-    }
-    base.join(".ck")
+    base.join(".orbitx").join("index")
 }
 
 fn is_index_ready(search_path: &Path) -> bool {
@@ -498,14 +521,7 @@ fn is_index_ready(search_path: &Path) -> bool {
     if !idx_dir.exists() {
         return false;
     }
-
-    let building_lock = idx_dir.join("building.lock");
-    if building_lock.exists() {
-        return false;
-    }
-
-    let ready_marker = idx_dir.join("ready.marker");
-    ready_marker.exists()
+    idx_dir.join("manifest.json").exists()
 }
 
 fn validation_error(message: impl Into<String>) -> ToolResult {

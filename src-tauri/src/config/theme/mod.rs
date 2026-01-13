@@ -17,8 +17,7 @@ pub use commands::{
 };
 pub use defaults::create_default_theme_config;
 pub use manager::{
-    ThemeIndex, ThemeIndexEntry, ThemeManager, ThemeManagerOptions, ThemeValidationResult,
-    ThemeValidator,
+    ThemeIndexEntry, ThemeManager, ThemeManagerOptions, ThemeValidationResult, ThemeValidator,
 };
 pub use service::{SystemThemeDetector, ThemeService};
 pub use types::{AnsiColors, SyntaxHighlight, Theme, ThemeConfig, ThemeType, UIColors};

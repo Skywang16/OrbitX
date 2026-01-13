@@ -1,6 +1,5 @@
 use crate::llm::types::LLMProviderConfig;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 /// 远程向量模型配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,20 +73,6 @@ impl Default for VectorDbConfig {
 }
 
 impl VectorDbConfig {
-    pub fn from_file(path: &Path) -> crate::vector_db::core::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
-        let config: Self = toml::from_str(&content)
-            .map_err(|e| crate::vector_db::core::VectorDbError::Config(e.to_string()))?;
-        Ok(config)
-    }
-
-    pub fn save_to_file(&self, path: &Path) -> crate::vector_db::core::Result<()> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| crate::vector_db::core::VectorDbError::Config(e.to_string()))?;
-        std::fs::write(path, content)?;
-        Ok(())
-    }
-
     pub fn validate(&self) -> crate::vector_db::core::Result<()> {
         if self.embedding.model_name.is_empty() {
             return Err(crate::vector_db::core::VectorDbError::Config(

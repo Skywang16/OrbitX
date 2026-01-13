@@ -14,24 +14,34 @@ pub use metadata::{
 };
 pub use parallel::{execute_batch, ToolCall, ToolCallResult};
 pub use r#trait::{
-    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent,
-    ToolResultStatus, ToolSchema,
+    RunnableTool, ToolDescriptionContext, ToolResult, ToolResultContent, ToolResultStatus,
+    ToolSchema,
 };
-pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
+pub use registry::{ToolExecutionStats, ToolRegistry};
 
 // Builtin tool type re-exports
 pub use builtin::{
     ListFilesTool, OrbitSearchTool, ReadFileTool, ReadTerminalTool, ShellTool, TodoWriteTool,
-    UnifiedEditTool, WebFetchTool, WriteFileTool,
+    SyntaxDiagnosticsTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
 
-pub async fn create_tool_registry(chat_mode: &str) -> Arc<ToolRegistry> {
-    let permissions = get_permissions_for_mode(chat_mode);
-    let registry = Arc::new(ToolRegistry::new(permissions));
+pub async fn create_tool_registry(
+    chat_mode: &str,
+    permission_rules: crate::settings::types::PermissionRules,
+    extra_tools: Vec<Arc<dyn RunnableTool>>,
+) -> Arc<ToolRegistry> {
+    let checker = Arc::new(crate::agent::permissions::PermissionChecker::new(&permission_rules));
+    let registry = Arc::new(ToolRegistry::new(Some(checker)));
     let is_chat = chat_mode == "chat";
     register_builtin_tools(&registry, is_chat).await;
+
+    for tool in extra_tools {
+        let name = tool.name().to_string();
+        registry.register(&name, tool, is_chat).await.ok();
+    }
+
     registry
 }
 
@@ -81,6 +91,15 @@ async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
         .register(
             "read_terminal",
             Arc::new(ReadTerminalTool::new()),
+            is_chat_mode,
+        )
+        .await
+        .ok();
+
+    registry
+        .register(
+            "syntax_diagnostics",
+            Arc::new(SyntaxDiagnosticsTool::new()),
             is_chat_mode,
         )
         .await
