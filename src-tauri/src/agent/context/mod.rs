@@ -6,7 +6,9 @@ pub mod project_context;
 
 pub use crate::agent::config::ContextBuilderConfig;
 pub use builder::ContextBuilder;
-pub use file_tracker::{FileContextTracker, FileOperationRecord};
+pub use file_tracker::{
+    FileContextTracker, FileOperationRecord, FileRecordSource, FileRecordState, TrackedFileRecord,
+};
 pub use project_context::{ProjectContext, ProjectContextLoader};
 
 // get_available_rules_files 已迁移到 crate::workspace::rules

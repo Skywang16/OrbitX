@@ -33,6 +33,9 @@ impl TaskExecutor {
         // 清空上次任务残留的 agent edit 集合，避免“诊断到旧文件”这种愚蠢行为。
         let _ = ctx.file_tracker().take_recent_agent_edits().await;
 
+        // 恢复会话历史（基于 messages 表）。
+        self.restore_session_history(&ctx, ctx.session_id).await?;
+
         ctx.emit_event(TaskEvent::TaskCreated {
             task_id: ctx.task_id.to_string(),
             session_id: ctx.session_id,
@@ -63,19 +66,6 @@ impl TaskExecutor {
             .await?;
 
         ctx.set_system_prompt(system_prompt).await?;
-
-        // 自动检测会话是否有历史执行记录，有则恢复上下文
-        let has_history = self
-            .agent_persistence()
-            .agent_executions()
-            .list_recent_by_session(ctx.session_id, 2)
-            .await
-            .map(|execs| execs.len() > 1) // 当前执行 + 至少一个历史执行
-            .unwrap_or(false);
-
-        if has_history {
-            self.restore_session_history(&ctx, ctx.session_id).await?;
-        }
 
         ctx.add_user_message_with_images(params.user_prompt, params.images.as_deref())
             .await?;
@@ -214,6 +204,7 @@ impl TaskExecutor {
 
         ctx.assistant_append_block(Block::Tool(ToolBlock {
             id: tool_id.clone(),
+            call_id: tool_id.clone(),
             name: "syntax_diagnostics".to_string(),
             status: ToolStatus::Running,
             input: tool_args.clone(),
@@ -242,13 +233,15 @@ impl TaskExecutor {
             &tool_id,
             Block::Tool(ToolBlock {
                 id: tool_id.clone(),
+                call_id: tool_id.clone(),
                 name: "syntax_diagnostics".to_string(),
                 status,
                 input: tool_input,
                 output: Some(ToolOutput {
                     content: serde_json::json!(preview.clone()),
+                    title: None,
+                    metadata: result.ext_info.clone(),
                     cancel_reason: result.cancel_reason.clone(),
-                    ext: result.ext_info.clone(),
                 }),
                 compacted_at: None,
                 started_at,
@@ -313,57 +306,40 @@ impl TaskExecutor {
         ctx: &TaskContext,
         session_id: i64,
     ) -> TaskExecutorResult<()> {
-        use crate::agent::persistence::MessageRole;
         use crate::llm::anthropic_types::{
             MessageContent, MessageParam, MessageRole as AnthropicRole,
         };
 
-        let executions = self
+        let stored = self
             .agent_persistence()
-            .agent_executions()
-            .list_recent_by_session(session_id, 10)
+            .messages()
+            .list_by_session(session_id)
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        if executions.is_empty() {
+        if stored.is_empty() {
             return Ok(());
         }
 
-        let current_task_id = ctx.task_id.to_string();
-        let mut all_messages = Vec::new();
-
-        for execution in executions.iter().rev() {
-            if execution.execution_id == current_task_id {
+        let mut restored = Vec::new();
+        for msg in stored {
+            let Some(text) = extract_prompt_text(&msg.blocks, &msg.role) else {
                 continue;
-            }
+            };
 
-            let messages = self
-                .agent_persistence()
-                .execution_messages()
-                .list_by_execution(&execution.execution_id)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            let role = match msg.role {
+                crate::agent::types::MessageRole::User => AnthropicRole::User,
+                crate::agent::types::MessageRole::Assistant => AnthropicRole::Assistant,
+            };
 
-            if messages.is_empty() {
-                continue;
-            }
-
-            for msg in messages {
-                let role = match msg.role {
-                    MessageRole::User => AnthropicRole::User,
-                    MessageRole::Assistant => AnthropicRole::Assistant,
-                    MessageRole::Tool | MessageRole::System => continue,
-                };
-
-                all_messages.push(MessageParam {
-                    role,
-                    content: MessageContent::Text(msg.content),
-                });
-            }
+            restored.push(MessageParam {
+                role,
+                content: MessageContent::Text(text),
+            });
         }
 
-        if !all_messages.is_empty() {
-            ctx.restore_messages(all_messages).await?;
+        if !restored.is_empty() {
+            ctx.restore_messages(restored).await?;
         }
 
         Ok(())
@@ -407,4 +383,46 @@ fn tool_result_preview_text(result: &crate::agent::tools::ToolResult) -> String 
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn extract_prompt_text(blocks: &[Block], role: &crate::agent::types::MessageRole) -> Option<String> {
+    let mut parts = Vec::new();
+
+    match role {
+        crate::agent::types::MessageRole::User => {
+            for block in blocks {
+                if let Block::UserText(b) = block {
+                    if !b.content.trim().is_empty() {
+                        parts.push(b.content.trim().to_string());
+                    }
+                }
+            }
+        }
+        crate::agent::types::MessageRole::Assistant => {
+            for block in blocks {
+                match block {
+                    Block::Text(b) => {
+                        if !b.content.trim().is_empty() {
+                            parts.push(b.content.trim().to_string());
+                        }
+                    }
+                    Block::Subtask(b) => {
+                        if let Some(summary) = &b.summary {
+                            if !summary.trim().is_empty() {
+                                parts.push(summary.trim().to_string());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let out = parts.join("\n");
+    if out.trim().is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }

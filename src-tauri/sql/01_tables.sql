@@ -88,128 +88,89 @@ CREATE TABLE IF NOT EXISTS workspaces (
     last_accessed_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
+-- ===========================
+-- Agent system
+-- ===========================
+-- This schema is intentionally NOT backward-compatible. Old tables are dropped.
+
+DROP TRIGGER IF EXISTS trg_agent_executions_completed_at;
+DROP TABLE IF EXISTS execution_events;
+DROP TABLE IF EXISTS tool_executions;
+DROP TABLE IF EXISTS execution_messages;
+DROP TABLE IF EXISTS agent_executions;
+DROP TABLE IF EXISTS workspace_file_context;
+DROP TABLE IF EXISTS tool_outputs;
+DROP TABLE IF EXISTS checkpoint_file_snapshots;
+DROP TABLE IF EXISTS checkpoints;
+DROP TABLE IF EXISTS checkpoint_blobs;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS sessions;
+
+CREATE TABLE sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
+    workspace_path TEXT NOT NULL REFERENCES workspaces(path) ON DELETE CASCADE,
+
+    parent_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
+    agent_type TEXT NOT NULL DEFAULT 'coder',
+    spawned_by_tool_call TEXT,
+
     title TEXT,
+    model_id TEXT,
+    provider_id TEXT,
+
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'completed', 'error', 'cancelled')),
+    is_archived INTEGER NOT NULL DEFAULT 0,
+
+    total_messages INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0,
+
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
+    last_message_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    status TEXT NOT NULL CHECK (status IN ('streaming', 'completed', 'cancelled', 'error')),
-    blocks_json TEXT NOT NULL,
+    agent_type TEXT NOT NULL DEFAULT 'coder',
+    parent_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+
+    blocks TEXT NOT NULL DEFAULT '[]',
+
+    status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('streaming', 'completed', 'error', 'cancelled')),
     is_summary INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    finished_at INTEGER,
-    duration_ms INTEGER,
+
+    model_id TEXT,
+    provider_id TEXT,
+
     input_tokens INTEGER,
     output_tokens INTEGER,
     cache_read_tokens INTEGER,
     cache_write_tokens INTEGER,
-    context_tokens_used INTEGER,
-    context_window INTEGER,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    duration_ms INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS tool_outputs (
+CREATE TABLE tool_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL,
-    message_id INTEGER NOT NULL,
-    block_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+
+    call_id TEXT NOT NULL,
     tool_name TEXT NOT NULL,
-    output_content TEXT NOT NULL,
-    compacted_at INTEGER,
-    created_at INTEGER NOT NULL,
-    UNIQUE(message_id, block_id),
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
-);
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'error', 'cancelled')),
 
-CREATE TABLE IF NOT EXISTS workspace_file_context (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
-    relative_path TEXT NOT NULL,
-    record_state TEXT NOT NULL CHECK (record_state IN ('active', 'stale')),
-    record_source TEXT NOT NULL CHECK (
-        record_source IN ('read_tool', 'user_edited', 'agent_edited', 'file_mentioned')
-    ),
-    agent_read_at INTEGER,
-    agent_edit_at INTEGER,
-    user_edit_at INTEGER,
-    created_at INTEGER NOT NULL,
-    UNIQUE (workspace_path, relative_path),
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS agent_executions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_id TEXT NOT NULL UNIQUE,
-    session_id INTEGER NOT NULL,
-    user_request TEXT NOT NULL,
-    system_prompt_used TEXT NOT NULL,
-    execution_config TEXT,
-    has_conversation_context INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'error', 'cancelled')),
-    current_iteration INTEGER NOT NULL DEFAULT 0,
-    error_count INTEGER NOT NULL DEFAULT 0,
-    max_iterations INTEGER NOT NULL DEFAULT 50,
-    total_input_tokens INTEGER NOT NULL DEFAULT 0,
-    total_output_tokens INTEGER NOT NULL DEFAULT 0,
-    total_cost REAL NOT NULL DEFAULT 0.0,
-    context_tokens INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    started_at INTEGER,
-    completed_at INTEGER,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS execution_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool')),
-    content TEXT NOT NULL,
-    tokens INTEGER NOT NULL DEFAULT 0,
-    is_summary INTEGER NOT NULL DEFAULT 0,
-    iteration INTEGER NOT NULL DEFAULT 0,
-    sequence INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS tool_executions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_id TEXT NOT NULL,
-    tool_call_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    tool_arguments TEXT NOT NULL,
-    tool_result TEXT,
-    error_message TEXT,
-    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'error')),
-    files_read TEXT NOT NULL DEFAULT '[]',
-    files_written TEXT NOT NULL DEFAULT '[]',
-    directories_accessed TEXT NOT NULL DEFAULT '[]',
     started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    duration_ms INTEGER,
-    FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
+    finished_at INTEGER,
+    duration_ms INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS execution_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    event_data TEXT NOT NULL,
-    iteration INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS checkpoint_blobs (
+CREATE TABLE checkpoint_blobs (
     hash TEXT PRIMARY KEY,
     content BLOB NOT NULL,
     size INTEGER NOT NULL,
@@ -217,64 +178,46 @@ CREATE TABLE IF NOT EXISTS checkpoint_blobs (
     created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS checkpoints (
+CREATE TABLE checkpoints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL,
-    session_id INTEGER NOT NULL,
-    message_id INTEGER NOT NULL,
-    parent_id INTEGER,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_id) REFERENCES checkpoints(id) ON DELETE SET NULL
+    workspace_path TEXT NOT NULL REFERENCES workspaces(path) ON DELETE CASCADE,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    parent_id INTEGER REFERENCES checkpoints(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS checkpoint_file_snapshots (
+CREATE TABLE checkpoint_file_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    checkpoint_id INTEGER NOT NULL,
+    checkpoint_id INTEGER NOT NULL REFERENCES checkpoints(id) ON DELETE CASCADE,
     relative_path TEXT NOT NULL,
-    blob_hash TEXT NOT NULL,
+    blob_hash TEXT NOT NULL REFERENCES checkpoint_blobs(hash),
     change_type TEXT NOT NULL CHECK (change_type IN ('added', 'modified', 'deleted')),
     file_size INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
-    UNIQUE (checkpoint_id, relative_path),
-    FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id) ON DELETE CASCADE,
-    FOREIGN KEY (blob_hash) REFERENCES checkpoint_blobs(hash)
+    UNIQUE (checkpoint_id, relative_path)
 );
 
-CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
+CREATE INDEX idx_workspaces_last_accessed
     ON workspaces(last_accessed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sessions_workspace
-    ON sessions(workspace_path, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_session
-    ON messages(session_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS idx_workspace_file_context_state
-    ON workspace_file_context(workspace_path, record_state);
-CREATE INDEX IF NOT EXISTS idx_agent_executions_session
-    ON agent_executions(session_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_agent_executions_status
-    ON agent_executions(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_execution_messages_iter
-    ON execution_messages(execution_id, iteration, sequence);
-CREATE INDEX IF NOT EXISTS idx_tool_executions_started
-    ON tool_executions(execution_id, started_at);
-CREATE INDEX IF NOT EXISTS idx_execution_events_iter
-    ON execution_events(execution_id, iteration);
-CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace
-    ON checkpoints(workspace_path, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_checkpoints_session
-    ON checkpoints(session_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_checkpoints_message
-    ON checkpoints(message_id);
-CREATE INDEX IF NOT EXISTS idx_checkpoints_parent
-    ON checkpoints(parent_id);
-CREATE INDEX IF NOT EXISTS idx_checkpoint_files_checkpoint
-    ON checkpoint_file_snapshots(checkpoint_id);
-CREATE INDEX IF NOT EXISTS idx_checkpoint_files_blob
-    ON checkpoint_file_snapshots(blob_hash);
-CREATE INDEX IF NOT EXISTS idx_blob_refcount
-    ON checkpoint_blobs(ref_count);
+CREATE INDEX idx_sessions_workspace ON sessions(workspace_path);
+CREATE INDEX idx_sessions_parent ON sessions(parent_id);
+CREATE INDEX idx_sessions_agent ON sessions(agent_type);
+CREATE INDEX idx_sessions_status ON sessions(workspace_path, status);
+CREATE INDEX idx_messages_session ON messages(session_id);
+CREATE INDEX idx_messages_session_role ON messages(session_id, role);
+CREATE INDEX idx_messages_parent ON messages(parent_message_id);
+CREATE INDEX idx_tool_executions_message ON tool_executions(message_id);
+CREATE INDEX idx_tool_executions_session ON tool_executions(session_id);
+CREATE INDEX idx_tool_executions_tool ON tool_executions(tool_name);
+CREATE INDEX idx_tool_executions_status ON tool_executions(status);
+CREATE INDEX idx_checkpoints_workspace ON checkpoints(workspace_path, created_at DESC);
+CREATE INDEX idx_checkpoints_session ON checkpoints(session_id, created_at DESC);
+CREATE INDEX idx_checkpoints_message ON checkpoints(message_id);
+CREATE INDEX idx_checkpoints_parent ON checkpoints(parent_id);
+CREATE INDEX idx_checkpoint_files_checkpoint ON checkpoint_file_snapshots(checkpoint_id);
+CREATE INDEX idx_checkpoint_files_blob ON checkpoint_file_snapshots(blob_hash);
+CREATE INDEX idx_blob_refcount ON checkpoint_blobs(ref_count);
 
 -- ===========================
 -- Completion learning model (offline, small footprint)
@@ -311,12 +254,4 @@ CREATE TABLE IF NOT EXISTS completion_entity_stats (
     PRIMARY KEY (entity_type, value)
 );
 
-CREATE TRIGGER IF NOT EXISTS trg_agent_executions_completed_at
-AFTER UPDATE OF status ON agent_executions
-FOR EACH ROW
-WHEN NEW.status IN ('completed', 'error', 'cancelled')
-BEGIN
-    UPDATE agent_executions
-    SET completed_at = COALESCE(NEW.completed_at, strftime('%s','now'))
-    WHERE id = NEW.id;
-END;
+-- Legacy triggers removed with legacy tables.

@@ -148,7 +148,7 @@
   })
 
   const hasResult = computed(() => {
-    return props.block.status !== 'running' && Boolean(toolResult.value)
+    return props.block.status !== 'running' && props.block.status !== 'pending' && Boolean(toolResult.value)
   })
 
   const isEditResult = computed(() => {
@@ -174,7 +174,7 @@
       } as EditResultData
     }
     return (
-      (props.block.output?.ext as EditResultData) ||
+      (props.block.output?.metadata as EditResultData) ||
       ({
         file: '',
         replacedCount: 0,
@@ -194,7 +194,7 @@
   })
 
   const isRunning = computed(() => {
-    return props.block.status === 'running'
+    return props.block.status === 'running' || props.block.status === 'pending'
   })
 
   const isCancelled = computed(() => {
@@ -202,8 +202,8 @@
   })
 
   const diffStats = computed(() => {
-    if (toolName.value !== 'edit_file' || !props.block.output?.ext) return null
-    const extInfo = props.block.output.ext as EditResultData
+    if (toolName.value !== 'edit_file' || !props.block.output?.metadata) return null
+    const extInfo = props.block.output.metadata as EditResultData
     if (extInfo.old && extInfo.new) {
       const oldLines = extInfo.old.split('\n').length
       const newLines = extInfo.new.split('\n').length
@@ -251,7 +251,7 @@
 
   const getDisplayText = () => {
     const params = toolParams.value
-    const extInfo = props.block.output?.ext as Record<string, unknown> | undefined
+    const extInfo = props.block.output?.metadata as Record<string, unknown> | undefined
     const cancelReason = props.block.output?.cancelReason
 
     let baseText = ''

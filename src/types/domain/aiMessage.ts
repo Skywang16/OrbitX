@@ -1,6 +1,6 @@
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'streaming' | 'completed' | 'cancelled' | 'error'
-export type ToolStatus = 'running' | 'completed' | 'cancelled' | 'error'
+export type ToolStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'error'
 
 export interface TokenUsage {
   inputTokens: number
@@ -18,9 +18,13 @@ export interface Message {
   id: number
   sessionId: number
   role: MessageRole
+  agentType: string
+  parentMessageId?: number
   status: MessageStatus
   blocks: Block[]
   isSummary: boolean
+  modelId?: string
+  providerId?: string
   createdAt: string
   finishedAt?: string
   durationMs?: number
@@ -36,6 +40,7 @@ export type Block =
   | {
       type: 'tool'
       id: string
+      callId: string
       name: string
       status: ToolStatus
       input: unknown
@@ -45,11 +50,21 @@ export type Block =
       finishedAt?: string
       durationMs?: number
     }
+  | { type: 'agent_switch'; fromAgent: string; toAgent: string; reason?: string }
+  | {
+      type: 'subtask'
+      childSessionId: number
+      agentType: string
+      description: string
+      status: 'pending' | 'running' | 'completed' | 'error'
+      summary?: string
+    }
   | { type: 'error'; code: string; message: string; details?: string }
 
 export interface ToolOutput {
   content: unknown
-  ext?: unknown
+  title?: string
+  metadata?: unknown
   cancelReason?: string
 }
 

@@ -3,9 +3,7 @@
  */
 
 use crate::agent::core::context::ToolCallResult;
-use crate::agent::persistence::ExecutionMessage;
 use crate::agent::tools::{ToolResult, ToolResultContent, ToolResultStatus};
-use crate::llm::anthropic_types::{MessageContent, MessageParam};
 
 /// 去重工具调用 - 检测同一iteration内的重复调用
 pub fn deduplicate_tool_uses(
@@ -77,18 +75,4 @@ pub fn tail_vec<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
         let split_at = items.len() - limit;
         items.split_off(split_at)
     }
-}
-
-/// 将数据库存储的ExecutionMessage转换为Anthropic原生MessageParam
-pub fn convert_execution_messages(messages: &[ExecutionMessage]) -> Vec<MessageParam> {
-    messages
-        .iter()
-        .map(|msg| MessageParam {
-            role: match msg.role.as_str() {
-                "user" => crate::llm::anthropic_types::MessageRole::User,
-                _ => crate::llm::anthropic_types::MessageRole::Assistant,
-            },
-            content: MessageContent::Text(msg.content.clone()),
-        })
-        .collect()
 }

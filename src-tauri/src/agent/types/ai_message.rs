@@ -9,9 +9,13 @@ pub struct Message {
     pub id: i64,
     pub session_id: i64,
     pub role: MessageRole,
+    pub agent_type: String,
+    pub parent_message_id: Option<i64>,
     pub status: MessageStatus,
     pub blocks: Vec<Block>,
     pub is_summary: bool,
+    pub model_id: Option<String>,
+    pub provider_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<i64>,
@@ -63,6 +67,8 @@ pub enum Block {
     Thinking(ThinkingBlock),
     Text(TextBlock),
     Tool(ToolBlock),
+    AgentSwitch(AgentSwitchBlock),
+    Subtask(SubtaskBlock),
     Error(ErrorBlock),
 }
 
@@ -101,6 +107,7 @@ pub struct TextBlock {
 #[serde(rename_all = "camelCase")]
 pub struct ToolBlock {
     pub id: String,
+    pub call_id: String,
     pub name: String,
     pub status: ToolStatus,
     pub input: Value,
@@ -114,6 +121,7 @@ pub struct ToolBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolStatus {
+    Pending,
     Running,
     Completed,
     Cancelled,
@@ -124,8 +132,36 @@ pub enum ToolStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ToolOutput {
     pub content: Value,
+    pub title: Option<String>,
+    pub metadata: Option<Value>,
     pub cancel_reason: Option<String>,
-    pub ext: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSwitchBlock {
+    pub from_agent: String,
+    pub to_agent: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtaskBlock {
+    pub child_session_id: i64,
+    pub agent_type: String,
+    pub description: String,
+    pub status: SubtaskStatus,
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubtaskStatus {
+    Pending,
+    Running,
+    Completed,
+    Error,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

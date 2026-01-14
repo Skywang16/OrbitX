@@ -1,13 +1,31 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::agent::error::AgentResult;
-use crate::agent::persistence::{
-    AgentPersistence, FileRecordSource, FileRecordState, WorkspaceFileRecord,
-};
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FileRecordState {
+    Active,
+    Stale,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FileRecordSource {
+    ReadTool,
+    UserEdited,
+    AgentEdited,
+    FileMentioned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackedFileRecord {
+    pub relative_path: String,
+    pub record_state: FileRecordState,
+    pub recorded_at: DateTime<Utc>,
+}
 
 #[derive(Debug, Clone)]
 pub struct FileOperationRecord<'a> {
@@ -40,19 +58,25 @@ impl<'a> FileOperationRecord<'a> {
 
 #[derive(Debug)]
 pub struct FileContextTracker {
-    persistence: Arc<AgentPersistence>,
     workspace_path: String,
     workspace_root: Option<PathBuf>,
-    recently_modified: RwLock<HashSet<String>>, // user edits that require refresh
-    recently_agent_edits: RwLock<HashSet<String>>, // agent changes to suppress stale warnings
+
+    active: RwLock<HashSet<String>>,
+    stale: RwLock<HashSet<String>>,
+    recently_modified: RwLock<HashSet<String>>,
+    recently_agent_edits: RwLock<HashSet<String>>,
 }
 
 impl FileContextTracker {
-    pub fn new(persistence: Arc<AgentPersistence>, workspace_path: impl Into<String>) -> Self {
+    pub fn new(
+        _persistence: std::sync::Arc<crate::agent::persistence::AgentPersistence>,
+        workspace_path: impl Into<String>,
+    ) -> Self {
         Self {
-            persistence,
             workspace_path: workspace_path.into(),
             workspace_root: None,
+            active: RwLock::new(HashSet::new()),
+            stale: RwLock::new(HashSet::new()),
             recently_modified: RwLock::new(HashSet::new()),
             recently_agent_edits: RwLock::new(HashSet::new()),
         }
@@ -70,100 +94,77 @@ impl FileContextTracker {
     pub async fn track_file_operation(
         &self,
         record: FileOperationRecord<'_>,
-    ) -> AgentResult<WorkspaceFileRecord> {
+    ) -> AgentResult<TrackedFileRecord> {
         let normalized_path = self.normalized_path(record.path);
-        let repo = self.persistence.file_context();
-        let existing = repo
-            .find_by_path(&self.workspace_path, &normalized_path)
-            .await?;
-
         let now = record.recorded_at;
-        let mut agent_read_ts = existing.as_ref().and_then(|entry| entry.agent_read_at);
-        let mut agent_edit_ts = existing.as_ref().and_then(|entry| entry.agent_edit_at);
-        let mut user_edit_ts = existing.as_ref().and_then(|entry| entry.user_edit_at);
 
-        let mut mark_user_modified = false;
-        let mut mark_agent_edit = false;
-        let mut clear_user_modified = false;
+        let state = record
+            .state_override
+            .unwrap_or_else(|| match record.source {
+                FileRecordSource::ReadTool | FileRecordSource::AgentEdited => FileRecordState::Active,
+                FileRecordSource::UserEdited => FileRecordState::Stale,
+                FileRecordSource::FileMentioned => FileRecordState::Active,
+            });
 
-        let mut state = match record.source {
-            FileRecordSource::ReadTool => {
-                agent_read_ts = Some(now);
-                clear_user_modified = true;
-                FileRecordState::Active
+        match state {
+            FileRecordState::Active => {
+                self.active.write().await.insert(normalized_path.clone());
+                self.stale.write().await.remove(&normalized_path);
+                self.recently_modified.write().await.remove(&normalized_path);
             }
-            FileRecordSource::AgentEdited => {
-                agent_read_ts = Some(now);
-                agent_edit_ts = Some(now);
-                mark_agent_edit = true;
-                clear_user_modified = true;
-                FileRecordState::Active
+            FileRecordState::Stale => {
+                self.stale.write().await.insert(normalized_path.clone());
+                self.active.write().await.remove(&normalized_path);
+                self.recently_modified.write().await.insert(normalized_path.clone());
             }
-            FileRecordSource::UserEdited => {
-                user_edit_ts = Some(now);
-                mark_user_modified = true;
-                FileRecordState::Stale
-            }
-            FileRecordSource::FileMentioned => state_or(existing.as_ref(), FileRecordState::Active),
-        };
-
-        if let Some(override_state) = record.state_override {
-            state = override_state;
         }
 
-        let entry = repo
-            .upsert_entry(
-                &self.workspace_path,
-                &normalized_path,
-                state,
-                record.source,
-                agent_read_ts,
-                agent_edit_ts,
-                user_edit_ts,
-            )
-            .await?;
-
-        self.persistence
-            .workspaces()
-            .touch(&self.workspace_path)
-            .await?;
-
-        if mark_user_modified {
-            let mut guard = self.recently_modified.write().await;
-            guard.insert(normalized_path.clone());
+        if matches!(record.source, FileRecordSource::AgentEdited) {
+            self.recently_agent_edits
+                .write()
+                .await
+                .insert(normalized_path.clone());
         }
 
-        if mark_agent_edit {
-            let mut guard = self.recently_agent_edits.write().await;
-            guard.insert(normalized_path.clone());
-        }
-
-        if clear_user_modified {
-            let mut guard = self.recently_modified.write().await;
-            guard.remove(&normalized_path);
-        }
-
-        Ok(entry)
+        Ok(TrackedFileRecord {
+            relative_path: normalized_path,
+            record_state: state,
+            recorded_at: now,
+        })
     }
 
-    pub async fn get_active_files(&self) -> AgentResult<Vec<WorkspaceFileRecord>> {
-        self.persistence
-            .file_context()
-            .list_by_state(&self.workspace_path, FileRecordState::Active)
-            .await
+    pub async fn get_active_files(&self) -> AgentResult<Vec<TrackedFileRecord>> {
+        let now = Utc::now();
+        let guard = self.active.read().await;
+        Ok(guard
+            .iter()
+            .cloned()
+            .map(|relative_path| TrackedFileRecord {
+                relative_path,
+                record_state: FileRecordState::Active,
+                recorded_at: now,
+            })
+            .collect())
     }
 
-    pub async fn get_stale_files(&self) -> AgentResult<Vec<WorkspaceFileRecord>> {
-        self.persistence
-            .file_context()
-            .list_by_state(&self.workspace_path, FileRecordState::Stale)
-            .await
+    pub async fn get_stale_files(&self) -> AgentResult<Vec<TrackedFileRecord>> {
+        let now = Utc::now();
+        let guard = self.stale.read().await;
+        Ok(guard
+            .iter()
+            .cloned()
+            .map(|relative_path| TrackedFileRecord {
+                relative_path,
+                record_state: FileRecordState::Stale,
+                recorded_at: now,
+            })
+            .collect())
     }
 
     pub async fn mark_file_as_stale(
         &self,
         path: impl AsRef<Path>,
-    ) -> AgentResult<WorkspaceFileRecord> {
+    ) -> AgentResult<TrackedFileRecord> {
         let record = FileOperationRecord::new(path.as_ref(), FileRecordSource::UserEdited)
             .with_state(FileRecordState::Stale);
         self.track_file_operation(record).await
@@ -205,8 +206,4 @@ impl FileContextTracker {
             .trim_start_matches(std::path::MAIN_SEPARATOR)
             .replace('\\', "/")
     }
-}
-
-fn state_or(existing: Option<&WorkspaceFileRecord>, fallback: FileRecordState) -> FileRecordState {
-    existing.map(|entry| entry.record_state).unwrap_or(fallback)
 }

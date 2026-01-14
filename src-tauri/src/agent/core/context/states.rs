@@ -6,7 +6,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent::core::context::ToolCallResult;
 use crate::agent::core::status::AgentTaskStatus;
-use crate::agent::persistence::AgentExecution;
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::types::{Message, TaskEvent};
 use crate::llm::anthropic_types::{MessageParam, SystemPrompt};
@@ -15,24 +14,26 @@ use super::chain::Chain;
 
 /// 执行状态
 pub(crate) struct ExecutionState {
-    pub(crate) record: AgentExecution,
     pub(crate) runtime_status: AgentTaskStatus,
     pub(crate) system_prompt: Option<SystemPrompt>,
     /// 简化：用 Vec 替代 MessageRingBuffer
     pub(crate) messages: Vec<MessageParam>,
     pub(crate) message_sequence: i64,
     pub(crate) tool_results: Vec<ToolCallResult>,
+    pub(crate) current_iteration: u32,
+    pub(crate) error_count: u32,
 }
 
 impl ExecutionState {
-    pub fn new(record: AgentExecution, runtime_status: AgentTaskStatus) -> Self {
+    pub fn new(runtime_status: AgentTaskStatus) -> Self {
         Self {
-            record,
             runtime_status,
             system_prompt: None,
             messages: Vec::new(),
             message_sequence: 0,
             tool_results: Vec::new(),
+            current_iteration: 0,
+            error_count: 0,
         }
     }
 

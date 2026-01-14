@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod prompt;
 pub mod types;
+pub mod agents;
 
 pub mod common; // 公共工具与模板等
 pub mod compaction; // 上下文工程：Prune/Compact/断点加载

@@ -5,9 +5,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use chrono::Utc;
+
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{FileContextStatus, TaskExecutor, TaskSummary};
-use crate::agent::core::types::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 
 impl TaskExecutor {
@@ -23,10 +24,10 @@ impl TaskExecutor {
             .batch_read_state(|exec| {
                 (
                     exec.runtime_status,
-                    exec.record.current_iteration,
-                    exec.record.error_count,
-                    exec.record.created_at,
-                    exec.record.updated_at,
+                    exec.current_iteration as i64,
+                    exec.error_count as i64,
+                    Utc::now(),
+                    Utc::now(),
                 )
             })
             .await;
@@ -147,45 +148,29 @@ impl TaskExecutor {
         }
     }
 
-    /// 列出任务
+    /// 任务列表：新设计只暴露内存中的活跃任务（不持久化 task 记录）。
     pub async fn list_tasks(
         &self,
         session_id: Option<i64>,
         status_filter: Option<String>,
     ) -> TaskExecutorResult<Vec<TaskSummary>> {
-        let persistence = self.agent_persistence();
-        let executions = if let Some(session_id) = session_id {
-            persistence
-                .agent_executions()
-                .list_recent_by_session(session_id, 50)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
-        } else {
-            persistence
-                .agent_executions()
-                .list_recent(50)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
-        };
-
         let mut summaries = Vec::new();
-        for execution in executions {
-            let status = AgentTaskStatus::from(execution.status);
-            if let Some(filter) = &status_filter {
-                if status.as_str() != filter {
+
+        for entry in self.active_tasks().iter() {
+            let ctx = entry.value();
+            if let Some(target_session) = session_id {
+                if ctx.session_id != target_session {
                     continue;
                 }
             }
 
-            summaries.push(TaskSummary {
-                task_id: execution.execution_id,
-                session_id: execution.session_id,
-                status: status.as_str().to_string(),
-                current_iteration: execution.current_iteration as i32,
-                error_count: execution.error_count as i32,
-                created_at: execution.created_at.to_rfc3339(),
-                updated_at: execution.updated_at.to_rfc3339(),
-            });
+            let summary = self.get_task_summary(entry.key()).await?;
+            if let Some(filter) = &status_filter {
+                if summary.status != *filter {
+                    continue;
+                }
+            }
+            summaries.push(summary);
         }
 
         Ok(summaries)

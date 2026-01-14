@@ -5,59 +5,35 @@
  * `tool_executions` 表，同时保留原有的事件输出能力。
  */
 
-use chrono::Utc;
 use serde_json::Value as JsonValue;
-use std::sync::Arc;
 use tracing::error;
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::AgentResult;
-use crate::agent::persistence::{AgentPersistence, ToolExecutionStatus};
 use crate::agent::tools::ToolResult;
-use crate::storage::DatabaseManager;
 
 pub struct ToolExecutionLogger {
-    persistence: Arc<AgentPersistence>,
     verbose: bool,
-    #[allow(unused)]
-    repositories: Arc<DatabaseManager>,
 }
 
 impl ToolExecutionLogger {
     pub fn new(
-        repositories: Arc<DatabaseManager>,
-        persistence: Arc<AgentPersistence>,
         verbose: bool,
     ) -> Self {
         Self {
-            persistence,
             verbose,
-            repositories,
         }
     }
 
     /// 记录工具执行开始
     pub async fn log_start(
         &self,
-        context: &TaskContext,
+        _context: &TaskContext,
         call_id: &str,
         tool_name: &str,
         arguments: &JsonValue,
     ) -> AgentResult<String> {
-        let args_str = serde_json::to_string(arguments)?;
-        self.persistence
-            .tool_executions()
-            .record_execution(
-                &context.task_id,
-                call_id,
-                tool_name,
-                &args_str,
-                ToolExecutionStatus::Running,
-                "[]",
-                "[]",
-                "[]",
-            )
-            .await?;
+        let _ = (tool_name, arguments);
 
         Ok(call_id.to_string())
     }
@@ -66,22 +42,10 @@ impl ToolExecutionLogger {
     pub async fn log_success(
         &self,
         log_id: &str,
-        result: &ToolResult,
+        _result: &ToolResult,
         duration_ms: u64,
     ) -> AgentResult<()> {
-        let result_json = serde_json::to_string(result)?;
-        self.persistence
-            .tool_executions()
-            .update_status(
-                log_id,
-                ToolExecutionStatus::Completed,
-                Some(&result_json),
-                None,
-                Some(Utc::now()),
-                Some(duration_ms as i64),
-            )
-            .await?;
-
+        let _ = (log_id, duration_ms);
         Ok(())
     }
 
@@ -92,18 +56,6 @@ impl ToolExecutionLogger {
         error_message: &str,
         duration_ms: u64,
     ) -> AgentResult<()> {
-        self.persistence
-            .tool_executions()
-            .update_status(
-                log_id,
-                ToolExecutionStatus::Error,
-                None,
-                Some(error_message),
-                Some(Utc::now()),
-                Some(duration_ms as i64),
-            )
-            .await?;
-
         if self.verbose {
             error!(
                 "工具执行失败: log_id={}, 错误={}, 耗时={}ms",
@@ -115,17 +67,7 @@ impl ToolExecutionLogger {
 
     /// 记录工具执行取消
     pub async fn log_cancelled(&self, log_id: &str) -> AgentResult<()> {
-        self.persistence
-            .tool_executions()
-            .update_status(
-                log_id,
-                ToolExecutionStatus::Error,
-                None,
-                Some("cancelled"),
-                Some(Utc::now()),
-                None,
-            )
-            .await?;
+        let _ = log_id;
         Ok(())
     }
 }

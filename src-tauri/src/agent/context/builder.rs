@@ -80,16 +80,9 @@ impl ContextBuilder {
             for entry in &relevant_active {
                 content.push_str("- ");
                 content.push_str(&entry.relative_path);
-                if let Some(ts) = entry.agent_read_at {
-                    content.push_str(" (read ");
-                    content.push_str(&format_elapsed(ts));
-                    content.push(')');
-                }
-                if let Some(ts) = entry.agent_edit_at {
-                    content.push_str(" (edited ");
-                    content.push_str(&format_elapsed(ts));
-                    content.push(')');
-                }
+                content.push_str(" (seen ");
+                content.push_str(&format_elapsed(entry.recorded_at));
+                content.push(')');
                 content.push('\n');
             }
             content.push('\n');
@@ -100,11 +93,9 @@ impl ContextBuilder {
             for entry in &relevant_stale {
                 content.push_str("- ");
                 content.push_str(&entry.relative_path);
-                if let Some(ts) = entry.user_edit_at {
-                    content.push_str(" (user updated ");
-                    content.push_str(&format_elapsed(ts));
-                    content.push(')');
-                }
+                content.push_str(" (seen ");
+                content.push_str(&format_elapsed(entry.recorded_at));
+                content.push(')');
                 content.push_str(" -> re-read with read_file\n");
             }
             content.push('\n');

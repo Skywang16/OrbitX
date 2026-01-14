@@ -1,7 +1,6 @@
 pub mod chain;
 pub mod states;
 
-use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
@@ -20,7 +19,7 @@ use crate::agent::context::FileContextTracker;
 use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::persistence::{AgentExecution, AgentPersistence, ExecutionStatus, MessageRole};
+use crate::agent::persistence::AgentPersistence;
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
 use crate::agent::state::manager::{StateManager, TaskState, TaskStatus, TaskThresholds};
@@ -30,7 +29,6 @@ use crate::agent::types::{
     Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, TaskEvent, TokenUsage,
     ToolStatus, UserImageBlock, UserTextBlock,
 };
-use crate::agent::utils::tokenizer::count_text_tokens;
 use crate::agent::workspace_changes::WorkspaceChangeJournal;
 use crate::checkpoint::CheckpointService;
 use crate::llm::anthropic_types::{
@@ -52,6 +50,7 @@ pub struct TaskContext {
     pub task_id: Arc<str>,
     pub session_id: i64,
     pub user_prompt: Arc<str>,
+    pub agent_type: Arc<str>,
     pub cwd: Arc<str>,
     config: TaskExecutionConfig,
 
@@ -72,7 +71,10 @@ pub struct TaskContext {
 impl TaskContext {
     /// Construct a fresh context for a new task.
     pub async fn new(
-        execution: AgentExecution,
+        task_id: String,
+        session_id: i64,
+        user_prompt: String,
+        agent_type: String,
         config: TaskExecutionConfig,
         workspace_path: String,
         progress_channel: Option<Channel<TaskEvent>>,
@@ -89,13 +91,9 @@ impl TaskContext {
             max_iterations: agent_config.max_react_num,
         };
 
-        let record = execution;
-        let task_id = record.execution_id.clone();
-        let session_id = record.session_id;
-        let user_prompt = record.user_request.clone();
-        let task_status = AgentTaskStatus::from(record.status);
-        let current_iteration = record.current_iteration as u32;
-        let error_count = record.error_count as u32;
+        let task_status = AgentTaskStatus::Created;
+        let current_iteration = 0u32;
+        let error_count = 0u32;
 
         let mut task_state = TaskState::new(task_id.clone(), thresholds);
         task_state.iterations = current_iteration;
@@ -116,7 +114,7 @@ impl TaskContext {
             Arc::clone(&deps.agent_persistence),
         ));
 
-        let execution = ExecutionState::new(record, task_status);
+        let execution = ExecutionState::new(task_status);
         let react_runtime = ReactRuntime::new(runtime_config);
 
         let states = TaskStates::new(execution, react_runtime, progress_channel);
@@ -125,6 +123,7 @@ impl TaskContext {
             task_id: Arc::from(task_id.as_str()),
             session_id,
             user_prompt: Arc::from(user_prompt.as_str()),
+            agent_type: Arc::from(agent_type.as_str()),
             cwd: Arc::from(normalized_workspace.as_str()),
             config,
             session,
@@ -221,38 +220,23 @@ impl TaskContext {
     }
 
     pub async fn set_status(&self, status: AgentTaskStatus) -> TaskExecutorResult<()> {
-        let (execution_status, current_iteration, error_count) = {
+        let session_status = {
             let mut exec = self.states.execution.write().await;
             exec.runtime_status = status;
-            exec.record.status = ExecutionStatus::from(&status);
-            (
-                exec.record.status,
-                exec.record.current_iteration,
-                exec.record.error_count,
-            )
+            match status {
+                AgentTaskStatus::Created | AgentTaskStatus::Paused => "idle",
+                AgentTaskStatus::Running => "running",
+                AgentTaskStatus::Completed => "completed",
+                AgentTaskStatus::Error => "error",
+                AgentTaskStatus::Cancelled => "cancelled",
+            }
         };
 
-        if matches!(
-            status,
-            AgentTaskStatus::Completed | AgentTaskStatus::Cancelled | AgentTaskStatus::Error
-        ) {
-            self.agent_persistence()
-                .agent_executions()
-                .mark_finished(&self.task_id, execution_status)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-        } else {
-            self.agent_persistence()
-                .agent_executions()
-                .update_status(
-                    &self.task_id,
-                    execution_status,
-                    current_iteration,
-                    error_count,
-                )
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-        }
+        self.agent_persistence()
+            .sessions()
+            .update_status(self.session_id, session_status)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         self.state_manager
             .update_task_status(map_status(&status), None)
@@ -262,23 +246,12 @@ impl TaskContext {
 
     /// Increment iteration counter and sync to storage.
     pub async fn increment_iteration(&self) -> TaskExecutorResult<u32> {
-        let (current, current_raw, status, errors) = {
+        let current = {
             let mut exec = self.states.execution.write().await;
-            exec.record.current_iteration = exec.record.current_iteration.saturating_add(1);
+            exec.current_iteration = exec.current_iteration.saturating_add(1);
             exec.message_sequence = 0;
-            (
-                exec.record.current_iteration as u32,
-                exec.record.current_iteration,
-                exec.record.status,
-                exec.record.error_count,
-            )
+            exec.current_iteration
         };
-
-        self.agent_persistence()
-            .agent_executions()
-            .update_status(&self.task_id, status, current_raw, errors)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         self.state_manager.increment_iteration().await;
         Ok(current)
@@ -286,41 +259,25 @@ impl TaskContext {
 
     /// Current iteration number.
     pub async fn current_iteration(&self) -> u32 {
-        self.states.execution.read().await.record.current_iteration as u32
+        self.states.execution.read().await.current_iteration
     }
 
     /// Increase error counter and persist.
     pub async fn increment_error_count(&self) -> TaskExecutorResult<u32> {
-        let (count, status, iteration, errors) = {
+        let count = {
             let mut exec = self.states.execution.write().await;
-            exec.record.error_count = exec.record.error_count.saturating_add(1);
-            (
-                exec.record.error_count as u32,
-                exec.record.status,
-                exec.record.current_iteration,
-                exec.record.error_count,
-            )
+            exec.error_count = exec.error_count.saturating_add(1);
+            exec.error_count
         };
-        self.agent_persistence()
-            .agent_executions()
-            .update_status(&self.task_id, status, iteration, errors)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         self.state_manager.increment_error_count().await;
         Ok(count)
     }
 
     pub async fn reset_error_count(&self) -> TaskExecutorResult<()> {
-        let (status, iteration) = {
+        {
             let mut exec = self.states.execution.write().await;
-            exec.record.error_count = 0;
-            (exec.record.status, exec.record.current_iteration)
+            exec.error_count = 0;
         };
-        self.agent_persistence()
-            .agent_executions()
-            .update_status(&self.task_id, status, iteration, 0)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         self.state_manager.reset_error_count().await;
         Ok(())
     }
@@ -331,8 +288,8 @@ impl TaskContext {
             let exec = self.states.execution.read().await;
             (
                 exec.runtime_status,
-                exec.record.current_iteration as u32,
-                exec.record.error_count as u32,
+                exec.current_iteration,
+                exec.error_count,
             )
         };
         if matches!(
@@ -473,11 +430,6 @@ impl TaskContext {
                 content: content.clone(),
             });
         }
-
-        // Persist assistant visible content only as a string; do not modify DB schema.
-        let rendered = render_message_content(&content);
-        self.append_message(MessageRole::Assistant, &rendered, false)
-            .await?;
         Ok(())
     }
 
@@ -493,14 +445,6 @@ impl TaskContext {
                 is_error: Some(r.status != crate::agent::tools::ToolResultStatus::Success),
             })
             .collect();
-
-        // Persist each tool result as its own Tool message entry
-        for result in &results {
-            if let Ok(serialized) = serde_json::to_string(result) {
-                self.append_message(MessageRole::Tool, &serialized, false)
-                    .await?;
-            }
-        }
 
         {
             let mut exec = self.states.execution.write().await;
@@ -589,7 +533,6 @@ impl TaskContext {
                 content,
             });
         }
-        self.append_message(MessageRole::User, &text, false).await?;
         Ok(())
     }
 
@@ -599,12 +542,6 @@ impl TaskContext {
             exec.messages.clear();
             exec.message_sequence = 0;
         }
-
-        self.agent_persistence()
-            .execution_messages()
-            .delete_for_execution(&self.task_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
         Ok(())
     }
 
@@ -629,36 +566,6 @@ impl TaskContext {
         }
         // 不修改 runtime_status，保持当前状态
         Ok(())
-    }
-
-    async fn append_message(
-        &self,
-        role: MessageRole,
-        content: &str,
-        is_summary: bool,
-    ) -> TaskExecutorResult<()> {
-        let (iteration, seq) = {
-            let mut exec = self.states.execution.write().await;
-            let iteration = exec.record.current_iteration;
-            let seq = exec.message_sequence;
-            exec.message_sequence = seq.saturating_add(1);
-            (iteration, seq)
-        };
-
-        self.agent_persistence()
-            .execution_messages()
-            .append_message(
-                &self.task_id,
-                role,
-                content,
-                i64::try_from(count_text_tokens(content)).unwrap_or(i64::MAX),
-                is_summary,
-                iteration,
-                seq,
-            )
-            .await
-            .map(|_| ())
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))
     }
 
     pub async fn emit_event(&self, event: TaskEvent) -> TaskExecutorResult<()> {
@@ -694,6 +601,10 @@ impl TaskContext {
                 MessageStatus::Completed,
                 user_blocks,
                 false,
+                self.agent_type.as_ref(),
+                None,
+                None,
+                None,
             )
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
@@ -712,6 +623,10 @@ impl TaskContext {
                 MessageStatus::Streaming,
                 Vec::new(),
                 false,
+                self.agent_type.as_ref(),
+                Some(user_message.id),
+                None,
+                None,
             )
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
@@ -814,29 +729,9 @@ impl TaskContext {
     /// 计算当前会话的上下文占用
     pub async fn calculate_context_usage(
         &self,
-        model_id: &str,
+        _model_id: &str,
     ) -> Option<crate::agent::types::ContextUsage> {
-        use crate::agent::compaction::SessionMessageLoader;
-        use crate::agent::utils::{count_message_param_tokens, get_model_context_window};
-
-        // 获取模型的 context_window
-        let context_window =
-            get_model_context_window(&self.session.repositories(), model_id).await?;
-
-        // 加载当前会话的消息（带断点）
-        let loader = SessionMessageLoader::new(Arc::clone(&self.session.agent_persistence()));
-        let messages = loader.load_for_llm(self.session_id).await.ok()?;
-
-        // 计算 tokens_used
-        let tokens_used = messages
-            .iter()
-            .map(|m| count_message_param_tokens(m) as u32)
-            .fold(0u32, |acc, n| acc.saturating_add(n));
-
-        Some(crate::agent::types::ContextUsage {
-            tokens_used,
-            context_window,
-        })
+        None
     }
 
     pub async fn finish_assistant_message(
@@ -989,13 +884,6 @@ fn map_status(status: &AgentTaskStatus) -> TaskStatus {
         AgentTaskStatus::Completed => TaskStatus::Done,
         AgentTaskStatus::Error => TaskStatus::Error,
         AgentTaskStatus::Cancelled => TaskStatus::Aborted,
-    }
-}
-
-fn render_message_content(content: &MessageContent) -> String {
-    match content {
-        MessageContent::Text(text) => text.clone(),
-        MessageContent::Blocks(blocks) => serde_json::to_string(blocks).unwrap_or_default(),
     }
 }
 

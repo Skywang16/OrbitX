@@ -1,7 +1,5 @@
-pub mod compactor;
 pub mod config;
 pub mod loader;
-pub mod pruner;
 pub mod result;
 pub mod service;
 

@@ -122,6 +122,7 @@ impl ReactHandler for TaskExecutor {
             context
                 .assistant_append_block(Block::Tool(ToolBlock {
                     id: call_id.clone(),
+                    call_id: call_id.clone(),
                     name: tool_name.clone(),
                     status: ToolStatus::Running,
                     input: params.clone(),
@@ -146,7 +147,7 @@ impl ReactHandler for TaskExecutor {
         let mut results = Vec::with_capacity(responses.len());
         for resp in responses {
             let (result_status, result_value) = convert_result(&resp.result);
-            let output_content = extract_tool_output_content(&result_value);
+            let _output_content = extract_tool_output_content(&result_value);
             let preview_value =
                 truncate_tool_output_value(&result_value, TOOL_OUTPUT_PREVIEW_MAX_CHARS);
             let finished_at = chrono::Utc::now();
@@ -162,33 +163,20 @@ impl ReactHandler for TaskExecutor {
                 ToolResultStatus::Cancelled => ToolStatus::Cancelled,
             };
 
-            // Update the existing tool block (created on ToolUse).
-            if let Some(message_id) = context.active_assistant_message_id().await {
-                context
-                    .agent_persistence()
-                    .tool_outputs()
-                    .upsert(
-                        context.session_id,
-                        message_id,
-                        &resp.id,
-                        &resp.name,
-                        &output_content,
-                    )
-                    .await?;
-            }
-
             context
                 .assistant_update_block(
                     &resp.id,
                     Block::Tool(ToolBlock {
                         id: resp.id.clone(),
+                        call_id: resp.id.clone(),
                         name: resp.name.clone(),
                         status,
                         input,
                         output: Some(ToolOutput {
                             content: preview_value.clone(),
+                            title: None,
+                            metadata: resp.result.ext_info.clone(),
                             cancel_reason: resp.result.cancel_reason.clone(),
-                            ext: resp.result.ext_info.clone(),
                         }),
                         compacted_at: None,
                         started_at,

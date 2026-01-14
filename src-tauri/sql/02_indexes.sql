@@ -26,15 +26,17 @@ CREATE INDEX IF NOT EXISTS idx_completion_transitions_last_used
 CREATE INDEX IF NOT EXISTS idx_completion_entities_type_last_used
     ON completion_entity_stats(entity_type, last_used_ts DESC);
 
--- Agent session message indexes
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-CREATE INDEX IF NOT EXISTS idx_messages_summary
-    ON messages(session_id, is_summary)
-    WHERE is_summary = 1;
+-- Agent system (new design) indexes
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_path);
+CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_type);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(workspace_path, status);
 
--- Tool output indexes
-CREATE INDEX IF NOT EXISTS idx_tool_outputs_session ON tool_outputs(session_id);
-CREATE INDEX IF NOT EXISTS idx_tool_outputs_message ON tool_outputs(message_id);
-CREATE INDEX IF NOT EXISTS idx_tool_outputs_compacted
-    ON tool_outputs(compacted_at)
-    WHERE compacted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role);
+CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_message_id);
+
+CREATE INDEX IF NOT EXISTS idx_tool_executions_message ON tool_executions(message_id);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_session ON tool_executions(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_tool ON tool_executions(tool_name);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_status ON tool_executions(status);

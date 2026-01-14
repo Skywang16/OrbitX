@@ -12,9 +12,9 @@ use serde_json::json;
 
 use super::file_utils::{ensure_absolute, normalize_path};
 use crate::agent::context::FileOperationRecord;
+use crate::agent::context::FileRecordSource;
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
-use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
     ToolResultStatus,
