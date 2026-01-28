@@ -19,7 +19,7 @@
     submitError.value = null
 
     try {
-      await agentApi.confirmTool(store.state.taskId, store.state.requestId, decision)
+      await agentApi.confirmTool(store.state.requestId, decision)
     } catch (error) {
       console.error('[ToolConfirmationDialog] confirm failed:', error)
       submitError.value = String(error)

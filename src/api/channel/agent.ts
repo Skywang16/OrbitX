@@ -9,13 +9,24 @@ class AgentChannelApi {
    * 创建 Agent 任务执行流
    */
   createTaskStream = (params: ExecuteTaskParams): ReadableStream<TaskProgressPayload> => {
+    // The backend may emit task_* events for subtasks on the same event stream.
+    // Only close this stream when the *root* task (the one created by agent_execute_task) ends.
+    let rootTaskId: string | null = null
     return channelApi.createStream<TaskProgressPayload>(
       'agent_execute_task',
       { params },
       {
         cancelCommand: 'agent_cancel_task',
         shouldClose: (event: TaskProgressPayload) => {
-          return event.type === 'task_completed' || event.type === 'task_cancelled' || event.type === 'task_error'
+          if (event.type === 'task_created') {
+            rootTaskId = event.taskId
+            return false
+          }
+          if (!rootTaskId) return false
+          if (event.type === 'task_completed' || event.type === 'task_cancelled' || event.type === 'task_error') {
+            return event.taskId === rootTaskId
+          }
+          return false
         },
       }
     )

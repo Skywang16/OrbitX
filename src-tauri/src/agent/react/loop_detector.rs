@@ -1,18 +1,61 @@
-/*!
- * Loop Detector - 从 executor.rs 提取的循环检测逻辑
- */
+//! Loop Detector - 检测 agent 陷入循环的情况
+//!
+//! 检测真正的重复：相同工具 + 相同参数，而不是仅靠工具名。
+//! 读取不同文件的多次 read_file 调用是正常行为，不应触发警告。
+
+use std::collections::HashMap;
+
+use serde_json::Value;
 
 use crate::agent::core::context::TaskContext;
+use crate::agent::prompt::PromptBuilder;
 use crate::agent::react::types::ReactIteration;
+
+/// 工具调用签名：(工具名, 参数)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ToolSignature {
+    name: String,
+    /// 参数的规范化字符串（用于比较）
+    args_hash: String,
+}
+
+impl ToolSignature {
+    fn from_action(name: &str, args: &Value) -> Self {
+        Self {
+            name: name.to_string(),
+            args_hash: Self::normalize_args(args),
+        }
+    }
+
+    /// 规范化参数为可比较的字符串
+    fn normalize_args(args: &Value) -> String {
+        // 对于 JSON 对象，按 key 排序后序列化，确保相同参数产生相同字符串
+        match args {
+            Value::Object(map) => {
+                let mut pairs: Vec<_> = map.iter().collect();
+                pairs.sort_by_key(|(k, _)| *k);
+                let sorted: serde_json::Map<String, Value> =
+                    pairs.into_iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                serde_json::to_string(&Value::Object(sorted)).unwrap_or_default()
+            }
+            _ => serde_json::to_string(args).unwrap_or_default(),
+        }
+    }
+}
 
 pub struct LoopDetector;
 
 impl LoopDetector {
+    /// 检测循环模式
+    ///
+    /// 只有当检测到**完全相同的工具调用**（相同工具名 + 相同参数）重复时才触发警告。
+    /// 调用不同参数的同一工具（如读取不同文件）不会触发警告。
     pub async fn detect_loop_pattern(
         context: &TaskContext,
         current_iteration: u32,
     ) -> Option<String> {
         const LOOP_DETECTION_WINDOW: usize = 3;
+        const MIN_IDENTICAL_CALLS: usize = 2;
 
         if current_iteration < LOOP_DETECTION_WINDOW as u32 {
             return None;
@@ -32,96 +75,46 @@ impl LoopDetector {
             .take(LOOP_DETECTION_WINDOW)
             .collect();
 
-        if let Some(warning) = Self::detect_identical_tool_sequence(&recent) {
-            return Some(warning);
-        }
-
-        if let Some(warning) = Self::detect_similar_tool_pattern(&recent) {
-            return Some(warning);
-        }
-
-        None
+        // 检测完全相同的工具调用（相同工具 + 相同参数）
+        Self::detect_identical_tool_calls(&recent, MIN_IDENTICAL_CALLS)
     }
 
-    fn detect_identical_tool_sequence(recent_iterations: &[&ReactIteration]) -> Option<String> {
-        if recent_iterations.len() < 2 {
-            return None;
-        }
+    /// 检测完全相同的工具调用
+    ///
+    /// 只有当同一个工具以**完全相同的参数**被调用多次时才触发警告。
+    fn detect_identical_tool_calls(
+        recent_iterations: &[&ReactIteration],
+        min_count: usize,
+    ) -> Option<String> {
+        // 收集所有工具调用签名
+        let mut call_counts: HashMap<ToolSignature, usize> = HashMap::new();
 
-        let tool_sequences: Vec<Vec<String>> = recent_iterations
-            .iter()
-            .map(|iter| {
-                iter.action
-                    .as_ref()
-                    .map(|action| vec![action.tool_name.clone()])
-                    .unwrap_or_default()
-            })
-            .collect();
-
-        let first = &tool_sequences[0];
-        if first.is_empty() {
-            return None;
-        }
-
-        // 安全切片
-        let all_identical = tool_sequences
-            .get(1..)
-            .unwrap_or(&[])
-            .iter()
-            .all(|seq| seq == first);
-
-        if all_identical {
-            let tools_list = first.join(", ");
-            return Some(format!(
-                "<system-reminder type=\"loop-warning\">\n\
-                 You've called the same tools {} times in a row: {}\n\n\
-                 The results haven't changed. Consider:\n\
-                 - Have you gathered enough information?\n\
-                 - Can you proceed with what you have?\n\
-                 - Do you need to try a different approach?\n\n\
-                 Break the loop by using the information you already have or trying different tools.\n\
-                 </system-reminder>",
-                recent_iterations.len(),
-                tools_list
-            ));
-        }
-
-        None
-    }
-
-    fn detect_similar_tool_pattern(recent_iterations: &[&ReactIteration]) -> Option<String> {
-        if recent_iterations.len() < 3 {
-            return None;
-        }
-
-        let tool_names: Vec<Option<String>> = recent_iterations
-            .iter()
-            .map(|iter| iter.action.as_ref().map(|a| a.tool_name.clone()))
-            .collect();
-
-        let mut tool_counts = std::collections::HashMap::new();
-        for name in tool_names.iter().flatten() {
-            *tool_counts.entry(name.clone()).or_insert(0) += 1;
-        }
-
-        for (tool, count) in tool_counts {
-            if count >= 3 {
-                return Some(format!(
-                    "<system-reminder type=\"loop-warning\">\n\
-                     You've called '{}' tool {} times in the last {} iterations.\n\n\
-                     You may be stuck in a pattern. Consider:\n\
-                     - Are you getting new information each time?\n\
-                     - Can you analyze the results you already have?\n\
-                     - Should you try a different approach?\n\n\
-                     Try to make progress with the information you've gathered.\n\
-                     </system-reminder>",
-                    tool,
-                    count,
-                    recent_iterations.len()
-                ));
+        for iter in recent_iterations {
+            if let Some(action) = &iter.action {
+                let sig = ToolSignature::from_action(&action.tool_name, &action.arguments);
+                *call_counts.entry(sig).or_insert(0) += 1;
             }
         }
 
-        None
+        // 找出重复调用次数最多的
+        let mut duplicates: Vec<_> = call_counts
+            .into_iter()
+            .filter(|(_, count)| *count >= min_count)
+            .collect();
+
+        if duplicates.is_empty() {
+            return None;
+        }
+
+        // 按重复次数排序，取最严重的
+        duplicates.sort_by(|a, b| b.1.cmp(&a.1));
+        let (sig, count) = &duplicates[0];
+
+        let builder = PromptBuilder::new(None);
+        let warning = builder.get_loop_warning(*count, &sig.name);
+        Some(format!(
+            "<system-reminder type=\"loop-warning\">\n{}\n</system-reminder>",
+            warning
+        ))
     }
 }

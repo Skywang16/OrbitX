@@ -7,8 +7,13 @@ use crate::agent::error::{AgentError, AgentResult};
 use crate::agent::types::{Block, Message, MessageRole, MessageStatus, TokenUsage};
 use crate::storage::database::DatabaseManager;
 
-use super::models::{build_session, build_tool_execution, build_workspace, Session, ToolExecution, Workspace};
-use super::{bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime, timestamp_to_datetime};
+use super::models::{
+    build_session, build_tool_execution, build_workspace, Session, ToolExecution, Workspace,
+};
+use super::{
+    bool_to_sql, now_timestamp, opt_datetime_to_timestamp, opt_timestamp_to_datetime,
+    timestamp_to_datetime,
+};
 
 #[derive(Debug)]
 pub struct WorkspaceRepository {
@@ -121,6 +126,46 @@ impl SessionRepository {
             .await?;
         Ok(())
     }
+
+    pub async fn update_agent_type(&self, id: i64, agent_type: &str) -> AgentResult<()> {
+        let ts = now_timestamp();
+        sqlx::query("UPDATE sessions SET agent_type = ?, updated_at = ? WHERE id = ?")
+            .bind(agent_type)
+            .bind(ts)
+            .bind(id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn update_model_id(&self, id: i64, model_id: &str) -> AgentResult<()> {
+        let ts = now_timestamp();
+        sqlx::query("UPDATE sessions SET model_id = ?, updated_at = ? WHERE id = ?")
+            .bind(model_id)
+            .bind(ts)
+            .bind(id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn list_children(&self, parent_id: i64) -> AgentResult<Vec<Session>> {
+        let rows = sqlx::query("SELECT * FROM sessions WHERE parent_id = ? ORDER BY id ASC")
+            .bind(parent_id)
+            .fetch_all(self.pool())
+            .await?;
+        rows.into_iter()
+            .map(|row| build_session(&row))
+            .collect::<AgentResult<Vec<_>>>()
+    }
+
+    pub async fn delete(&self, id: i64) -> AgentResult<()> {
+        sqlx::query("DELETE FROM sessions WHERE id = ?")
+            .bind(id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -141,7 +186,7 @@ impl MessageRepository {
         let rows = sqlx::query(
             "SELECT
                 id, session_id, role, agent_type, parent_message_id,
-                status, blocks, is_summary,
+                status, blocks, is_summary, is_internal,
                 model_id, provider_id,
                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                 created_at, finished_at, duration_ms
@@ -165,6 +210,7 @@ impl MessageRepository {
         status: MessageStatus,
         blocks: Vec<Block>,
         is_summary: bool,
+        is_internal: bool,
         agent_type: &str,
         parent_message_id: Option<i64>,
         model_id: Option<&str>,
@@ -178,10 +224,10 @@ impl MessageRepository {
         let result = sqlx::query(
             "INSERT INTO messages (
                 session_id, role, agent_type, parent_message_id,
-                status, blocks, is_summary,
+                status, blocks, is_summary, is_internal,
                 model_id, provider_id,
                 created_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(session_id)
         .bind(role_as_str(&role))
@@ -190,6 +236,7 @@ impl MessageRepository {
         .bind(status_as_str(&status))
         .bind(blocks_json)
         .bind(bool_to_sql(is_summary))
+        .bind(bool_to_sql(is_internal))
         .bind(model_id)
         .bind(provider_id)
         .bind(ts)
@@ -210,9 +257,55 @@ impl MessageRepository {
             status,
             blocks,
             is_summary,
+            is_internal,
             model_id: model_id.map(|s| s.to_string()),
             provider_id: provider_id.map(|s| s.to_string()),
             created_at: timestamp_to_datetime(ts),
+            finished_at: None,
+            duration_ms: None,
+            token_usage: None,
+            context_usage: None,
+        })
+    }
+
+    pub async fn create_summary_message(
+        &self,
+        session_id: i64,
+        agent_type: &str,
+        created_at_ts: i64,
+    ) -> AgentResult<Message> {
+        let result = sqlx::query(
+            "INSERT INTO messages (
+                session_id, role, agent_type, parent_message_id,
+                status, blocks, is_summary,
+                model_id, provider_id,
+                created_at
+             ) VALUES (?, 'assistant', ?, NULL, 'streaming', '[]', 1, NULL, NULL, ?)",
+        )
+        .bind(session_id)
+        .bind(agent_type)
+        .bind(created_at_ts)
+        .execute(self.pool())
+        .await?;
+
+        let message_id = result.last_insert_rowid();
+
+        let sessions = SessionRepository::new(Arc::clone(&self.database));
+        sessions.touch_on_message(session_id, created_at_ts).await?;
+
+        Ok(Message {
+            id: message_id,
+            session_id,
+            role: MessageRole::Assistant,
+            agent_type: agent_type.to_string(),
+            parent_message_id: None,
+            status: MessageStatus::Streaming,
+            blocks: Vec::new(),
+            is_summary: true,
+            is_internal: false,
+            model_id: None,
+            provider_id: None,
+            created_at: timestamp_to_datetime(created_at_ts),
             finished_at: None,
             duration_ms: None,
             token_usage: None,
@@ -251,6 +344,95 @@ impl MessageRepository {
         .bind(cache_read_tokens)
         .bind(cache_write_tokens)
         .bind(message.id)
+        .execute(self.pool())
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn list_messages_after(
+        &self,
+        session_id: i64,
+        message_id: i64,
+    ) -> AgentResult<Vec<Message>> {
+        let created_at: i64 = sqlx::query_scalar("SELECT created_at FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_one(self.pool())
+            .await?;
+
+        let rows = sqlx::query(
+            "SELECT
+                id, session_id, role, agent_type, parent_message_id,
+                status, blocks, is_summary, is_internal,
+                model_id, provider_id,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                created_at, finished_at, duration_ms
+             FROM messages
+             WHERE session_id = ?
+               AND (created_at > ? OR (created_at = ? AND id > ?))
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(session_id)
+        .bind(created_at)
+        .bind(created_at)
+        .bind(message_id)
+        .fetch_all(self.pool())
+        .await?;
+
+        rows.into_iter()
+            .map(|row| build_message(&row))
+            .collect::<AgentResult<Vec<_>>>()
+    }
+
+    pub async fn list_messages_from(
+        &self,
+        session_id: i64,
+        message_id: i64,
+    ) -> AgentResult<Vec<Message>> {
+        let created_at: i64 = sqlx::query_scalar("SELECT created_at FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_one(self.pool())
+            .await?;
+
+        let rows = sqlx::query(
+            "SELECT
+                id, session_id, role, agent_type, parent_message_id,
+                status, blocks, is_summary, is_internal,
+                model_id, provider_id,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                created_at, finished_at, duration_ms
+             FROM messages
+             WHERE session_id = ?
+               AND (created_at > ? OR (created_at = ? AND id >= ?))
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(session_id)
+        .bind(created_at)
+        .bind(created_at)
+        .bind(message_id)
+        .fetch_all(self.pool())
+        .await?;
+
+        rows.into_iter()
+            .map(|row| build_message(&row))
+            .collect::<AgentResult<Vec<_>>>()
+    }
+
+    pub async fn delete_messages_after(&self, session_id: i64, message_id: i64) -> AgentResult<()> {
+        let created_at: i64 = sqlx::query_scalar("SELECT created_at FROM messages WHERE id = ?")
+            .bind(message_id)
+            .fetch_one(self.pool())
+            .await?;
+
+        sqlx::query(
+            "DELETE FROM messages
+             WHERE session_id = ?
+               AND (created_at > ? OR (created_at = ? AND id > ?))",
+        )
+        .bind(session_id)
+        .bind(created_at)
+        .bind(created_at)
+        .bind(message_id)
         .execute(self.pool())
         .await?;
 
@@ -358,7 +540,11 @@ fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
         "completed" => MessageStatus::Completed,
         "cancelled" => MessageStatus::Cancelled,
         "error" => MessageStatus::Error,
-        other => return Err(AgentError::Parse(format!("Unknown message status: {other}"))),
+        other => {
+            return Err(AgentError::Parse(format!(
+                "Unknown message status: {other}"
+            )))
+        }
     };
 
     let role_raw: String = row.try_get("role")?;
@@ -372,17 +558,17 @@ fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
     let output_tokens: Option<i64> = row.try_get("output_tokens")?;
     let cache_read_tokens: Option<i64> = row.try_get("cache_read_tokens")?;
     let cache_write_tokens: Option<i64> = row.try_get("cache_write_tokens")?;
-    let token_usage = if let (Some(input_tokens), Some(output_tokens)) = (input_tokens, output_tokens)
-    {
-        Some(TokenUsage {
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_write_tokens,
-        })
-    } else {
-        None
-    };
+    let token_usage =
+        if let (Some(input_tokens), Some(output_tokens)) = (input_tokens, output_tokens) {
+            Some(TokenUsage {
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+            })
+        } else {
+            None
+        };
 
     Ok(Message {
         id: row.try_get("id")?,
@@ -393,6 +579,7 @@ fn build_message(row: &sqlx::sqlite::SqliteRow) -> AgentResult<Message> {
         status,
         blocks,
         is_summary: row.try_get::<i64, _>("is_summary")? != 0,
+        is_internal: row.try_get::<i64, _>("is_internal")? != 0,
         model_id: row.try_get("model_id")?,
         provider_id: row.try_get("provider_id")?,
         created_at: timestamp_to_datetime(row.try_get::<i64, _>("created_at")?),

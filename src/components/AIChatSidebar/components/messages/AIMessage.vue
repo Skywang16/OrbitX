@@ -1,11 +1,13 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import type { Message } from '@/types'
+  import type { Block, Message } from '@/types'
   import { formatTime } from '@/utils/dateFormatter'
   import { renderMarkdown } from '@/utils/markdown'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
   import ToolBlock from './blocks/ToolBlock.vue'
+  import AgentSwitchBlock from './blocks/AgentSwitchBlock.vue'
+  import SubtaskBlock from './blocks/SubtaskBlock.vue'
   const { t } = useI18n()
 
   interface Props {
@@ -14,7 +16,13 @@
 
   const props = defineProps<Props>()
 
-  const blocks = computed(() => props.message.blocks)
+  const normalizeBlockType = (block: Block): Block => {
+    const type = block.type.trim()
+    if (type === block.type) return block
+    return { ...block, type } as Block
+  }
+
+  const blocks = computed<Block[]>(() => props.message.blocks.map(normalizeBlockType))
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
@@ -37,7 +45,22 @@
       >
         <ThinkingBlock v-if="block.type === 'thinking'" :block="block" />
 
-        <ToolBlock v-else-if="block.type === 'tool'" :block="block" />
+        <ToolBlock v-else-if="block.type === 'tool' && block.name !== 'task'" :block="block" />
+
+        <!-- `task` is orchestration-only; don't render it as a normal tool block -->
+        <template v-else-if="block.type === 'tool' && block.name === 'task'"></template>
+
+        <AgentSwitchBlock v-else-if="block.type === 'agent_switch'" :block="block" />
+
+        <SubtaskBlock v-else-if="block.type === 'subtask'" :block="block" />
+
+        <div v-else-if="block.type === 'user_text'" class="ai-message-text step-block">
+          <div v-html="renderMarkdown(block.content)"></div>
+        </div>
+
+        <div v-else-if="block.type === 'user_image'" class="ai-message-text step-block">
+          <img :src="block.dataUrl" :alt="block.fileName || 'image'" style="max-width: 100%; border-radius: 8px" />
+        </div>
 
         <div v-else-if="block.type === 'text'" class="ai-message-text step-block">
           <div v-html="renderMarkdown(block.content)"></div>

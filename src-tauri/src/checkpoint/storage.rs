@@ -110,9 +110,7 @@ impl CheckpointStorage {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.iter()
-            .map(CheckpointSummary::from_row)
-            .collect()
+        rows.iter().map(CheckpointSummary::from_row).collect()
     }
 
     pub async fn delete(&self, id: i64) -> CheckpointResult<()> {

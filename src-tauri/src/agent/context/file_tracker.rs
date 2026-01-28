@@ -101,7 +101,9 @@ impl FileContextTracker {
         let state = record
             .state_override
             .unwrap_or_else(|| match record.source {
-                FileRecordSource::ReadTool | FileRecordSource::AgentEdited => FileRecordState::Active,
+                FileRecordSource::ReadTool | FileRecordSource::AgentEdited => {
+                    FileRecordState::Active
+                }
                 FileRecordSource::UserEdited => FileRecordState::Stale,
                 FileRecordSource::FileMentioned => FileRecordState::Active,
             });
@@ -110,12 +112,18 @@ impl FileContextTracker {
             FileRecordState::Active => {
                 self.active.write().await.insert(normalized_path.clone());
                 self.stale.write().await.remove(&normalized_path);
-                self.recently_modified.write().await.remove(&normalized_path);
+                self.recently_modified
+                    .write()
+                    .await
+                    .remove(&normalized_path);
             }
             FileRecordState::Stale => {
                 self.stale.write().await.insert(normalized_path.clone());
                 self.active.write().await.remove(&normalized_path);
-                self.recently_modified.write().await.insert(normalized_path.clone());
+                self.recently_modified
+                    .write()
+                    .await
+                    .insert(normalized_path.clone());
             }
         }
 

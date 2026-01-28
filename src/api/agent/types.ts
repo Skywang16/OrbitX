@@ -25,6 +25,8 @@ export interface ExecuteTaskParams {
   userPrompt: string
   /** 模型ID - 必填！ */
   modelId: string
+  /** 单次请求覆盖 agent 类型（不会持久化到 session） */
+  agentType?: string
   /** 图片附件（可选） */
   images?: Array<{ type: 'image'; dataUrl: string; mimeType: string }>
 }
@@ -138,6 +140,45 @@ export interface TaskListFilter {
   offset?: number
   /** 分页限制 */
   limit?: number
+}
+
+// ===== Command system types =====
+
+export interface CommandSummary {
+  name: string
+  description?: string
+  agent?: string
+  model?: string
+  subtask: boolean
+}
+
+export interface CommandRenderResult {
+  name: string
+  agent?: string
+  model?: string
+  subtask: boolean
+  prompt: string
+}
+
+// ===== Skill system types =====
+
+export type SkillSource = 'global' | 'workspace'
+
+export interface SkillSummary {
+  name: string
+  description: string
+  license?: string
+  metadata: Record<string, string>
+  /** Skill 来源: 'global' | 'workspace' */
+  source: SkillSource
+  /** Skill 目录路径 */
+  skillDir: string
+}
+
+export interface SkillValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
 }
 
 // ===== 工具类型 =====

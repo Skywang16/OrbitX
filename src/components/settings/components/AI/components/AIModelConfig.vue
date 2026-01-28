@@ -418,23 +418,82 @@
         <template v-for="model in models" :key="model.id">
           <!-- Editing mode -->
           <div v-if="editingId === model.id" class="inline-form inline-form--nested">
-            <!-- Provider (readonly) -->
+            <!-- Provider select -->
             <div class="settings-item">
               <div class="settings-item-header">
                 <div class="settings-label">{{ t('ai_model.provider') }}</div>
               </div>
               <div class="settings-item-control">
-                <span class="settings-value">{{ model.provider }}</span>
+                <x-select
+                  v-model="formData.provider"
+                  :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
+                  :placeholder="t('ai_model.select_provider')"
+                  @update:modelValue="handleProviderChange"
+                />
               </div>
             </div>
 
-            <!-- Model (readonly) -->
-            <div class="settings-item">
+            <!-- Model select (if provider has presets) -->
+            <div v-if="hasPresetModels" class="settings-item">
               <div class="settings-item-header">
                 <div class="settings-label">{{ t('ai_model.model') }}</div>
               </div>
               <div class="settings-item-control">
-                <span class="settings-value mono">{{ model.model }}</span>
+                <x-select
+                  v-model="formData.model"
+                  :options="availableModels"
+                  :placeholder="t('ai_model.select_model')"
+                />
+              </div>
+            </div>
+
+            <!-- Model name input (if no presets) -->
+            <div v-else-if="formData.provider" class="settings-item">
+              <div class="settings-item-header">
+                <div class="settings-label">{{ t('ai_model.model_name') }}</div>
+              </div>
+              <div class="settings-item-control">
+                <input
+                  v-model="formData.model"
+                  type="text"
+                  class="settings-input"
+                  :placeholder="t('ai_model.model_name_placeholder')"
+                />
+              </div>
+            </div>
+
+            <!-- Custom base URL toggle -->
+            <div v-if="hasPresetModels" class="settings-item">
+              <div class="settings-item-header">
+                <div class="settings-label">{{ t('ai_model.use_custom_base_url') }}</div>
+              </div>
+              <div class="settings-item-control">
+                <x-switch
+                  :modelValue="formData.useCustomBaseUrl"
+                  @update:modelValue="
+                    (val: boolean) => {
+                      formData.useCustomBaseUrl = val
+                      handleCustomUrlToggle()
+                    }
+                  "
+                />
+              </div>
+            </div>
+
+            <!-- Custom base URL input -->
+            <div v-if="formData.useCustomBaseUrl || !hasPresetModels" class="settings-item">
+              <div class="settings-item-header">
+                <div class="settings-label">
+                  {{ hasPresetModels ? t('ai_model.custom_base_url') : t('ai_model.api_url') }}
+                </div>
+              </div>
+              <div class="settings-item-control">
+                <input
+                  v-model="formData.apiUrl"
+                  type="url"
+                  class="settings-input mono"
+                  :placeholder="t('ai_model.api_url_placeholder')"
+                />
               </div>
             </div>
 
@@ -450,21 +509,6 @@
                   type="password"
                   class="settings-input mono"
                   :placeholder="t('ai_model.api_key_placeholder')"
-                />
-              </div>
-            </div>
-
-            <!-- Custom base URL -->
-            <div v-if="model.useCustomBaseUrl" class="settings-item">
-              <div class="settings-item-header">
-                <div class="settings-label">{{ t('ai_model.api_url') }}</div>
-              </div>
-              <div class="settings-item-control">
-                <input
-                  v-model="formData.apiUrl"
-                  type="url"
-                  class="settings-input mono"
-                  :placeholder="t('ai_model.api_url_placeholder')"
                 />
               </div>
             </div>

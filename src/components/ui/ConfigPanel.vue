@@ -1,9 +1,10 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { mcpApi, settingsApi } from '@/api'
+  import { mcpApi, settingsApi, agentApi } from '@/api'
   import type { Settings } from '@/api/settings'
   import type { McpServerStatus } from '@/api/mcp'
+  import type { SkillSummary } from '@/api/agent'
   import { UNGROUPED_WORKSPACE_PATH, useWorkspaceStore } from '@/stores/workspace'
 
   const { t } = useI18n()
@@ -34,12 +35,32 @@
   const isReloadingWorkspaceMcp = ref(false)
   const workspaceMcpStatuses = ref<McpServerStatus[]>([])
 
+  // Skills 相关状态
+  const isLoadingSkills = ref(false)
+  const globalSkills = ref<SkillSummary[]>([])
+  const workspaceSkills = ref<SkillSummary[]>([])
+
   const createEmptySettings = (): Settings => ({
     permissions: { allow: [], deny: [], ask: [] },
     mcpServers: {},
     rules: { content: '', rulesFiles: [] },
     agent: {},
   })
+
+  const loadSkills = async () => {
+    if (!hasWorkspace.value) return
+
+    isLoadingSkills.value = true
+    try {
+      const all = await agentApi.listSkills(currentWorkspacePath.value)
+      globalSkills.value = all.filter(s => s.source === 'global')
+      workspaceSkills.value = all.filter(s => s.source === 'workspace')
+    } catch (e) {
+      console.error('Failed to load skills:', e)
+    } finally {
+      isLoadingSkills.value = false
+    }
+  }
 
   const loadGlobal = async () => {
     isLoadingGlobal.value = true
@@ -51,6 +72,7 @@
       globalMcpJson.value = JSON.stringify({ mcpServers: settings.mcpServers || {} }, null, 2)
       if (hasWorkspace.value) {
         globalMcpStatuses.value = await mcpApi.listServers(currentWorkspacePath.value).catch(() => [])
+        loadSkills()
       }
     } catch (e) {
       globalError.value = e instanceof Error ? e.message : String(e)
@@ -65,6 +87,8 @@
       workspaceRules.value = ''
       workspaceMcpJson.value = '{}'
       workspaceMcpStatuses.value = []
+      globalSkills.value = []
+      workspaceSkills.value = []
       return
     }
 
@@ -77,6 +101,7 @@
       workspaceRules.value = effective.rules?.content || ''
       workspaceMcpJson.value = JSON.stringify({ mcpServers: effective.mcpServers || {} }, null, 2)
       workspaceMcpStatuses.value = await mcpApi.listServers(workspacePath).catch(() => [])
+      loadSkills()
     } catch (e) {
       workspaceError.value = e instanceof Error ? e.message : String(e)
     } finally {
@@ -162,6 +187,19 @@
     return 'config-panel__dot config-panel__dot--off'
   }
 
+  // 展开的服务器列表
+  const expandedServers = ref<Set<string>>(new Set())
+
+  const toggleServer = (name: string) => {
+    if (expandedServers.value.has(name)) {
+      expandedServers.value.delete(name)
+    } else {
+      expandedServers.value.add(name)
+    }
+  }
+
+  const isExpanded = (name: string) => expandedServers.value.has(name)
+
   watch(
     currentWorkspacePath,
     async newPath => {
@@ -239,15 +277,109 @@
         />
 
         <div v-if="globalMcpStatuses.length > 0" class="config-panel__status-list">
-          <div v-for="s in globalMcpStatuses" :key="s.name" class="config-panel__status-item">
-            <span :class="statusDotClass(s.status)"></span>
-            <span class="config-panel__status-name">{{ s.name }}</span>
-            <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-            <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+          <div
+            v-for="s in globalMcpStatuses"
+            :key="s.name"
+            class="config-panel__server-block"
+            @click="toggleServer(s.name)"
+          >
+            <div class="config-panel__status-item">
+              <svg
+                class="config-panel__chevron"
+                :class="{ 'config-panel__chevron--expanded': isExpanded(s.name) }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <svg
+                class="config-panel__server-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <rect x="2" y="3" width="12" height="4" rx="1" />
+                <rect x="2" y="9" width="12" height="4" rx="1" />
+                <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
+                <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
+              </svg>
+              <span :class="statusDotClass(s.status)"></span>
+              <span class="config-panel__status-name">{{ s.name }}</span>
+              <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
+              <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+            </div>
+            <div v-if="isExpanded(s.name) && s.tools.length > 0" class="config-panel__tools-drawer">
+              <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
+                <div class="config-panel__tool-info">
+                  <span class="config-panel__tool-name">{{ tool.name }}</span>
+                  <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="isExpanded(s.name) && s.tools.length === 0" class="config-panel__tools-empty">
+              No tools available
+            </div>
           </div>
         </div>
         <div v-else-if="hasWorkspace && !isLoadingGlobal" class="config-panel__hint">
           {{ t('config.no_mcp_servers') }}
+        </div>
+      </div>
+
+      <!-- Skills Section -->
+      <div class="config-panel__section">
+        <div class="config-panel__section-header">
+          <span class="config-panel__section-title">{{ t('config.global_skills') }}</span>
+        </div>
+
+        <div v-if="isLoadingSkills" class="config-panel__hint">{{ t('common.loading') }}</div>
+
+        <div v-else-if="globalSkills.length > 0" class="config-panel__status-list">
+          <div
+            v-for="skill in globalSkills"
+            :key="skill.name"
+            class="config-panel__server-block"
+            @click="toggleServer(`skill:global:${skill.name}`)"
+          >
+            <div class="config-panel__status-item">
+              <svg
+                class="config-panel__chevron"
+                :class="{ 'config-panel__chevron--expanded': isExpanded(`skill:global:${skill.name}`) }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <svg
+                class="config-panel__server-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M2 3h12v10H2z" />
+                <path d="M5 1v2M11 1v2" />
+                <path d="M2 6h12" />
+              </svg>
+              <span class="config-panel__status-name">{{ skill.name }}</span>
+            </div>
+            <div v-if="isExpanded(`skill:global:${skill.name}`)" class="config-panel__tools-drawer">
+              <div class="config-panel__tool-item">
+                <div class="config-panel__tool-info">
+                  <span class="config-panel__tool-desc">{{ skill.description }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="hasWorkspace && !isLoadingSkills" class="config-panel__hint">
+          {{ t('config.no_global_skills') }}
         </div>
       </div>
 
@@ -326,12 +458,48 @@
               <div
                 v-for="s in groupedWorkspaceMcpStatuses.global"
                 :key="`g:${s.name}`"
-                class="config-panel__status-item"
+                class="config-panel__server-block"
+                @click="toggleServer(`g:${s.name}`)"
               >
-                <span :class="statusDotClass(s.status)"></span>
-                <span class="config-panel__status-name">{{ s.name }}</span>
-                <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-                <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+                <div class="config-panel__status-item">
+                  <svg
+                    class="config-panel__chevron"
+                    :class="{ 'config-panel__chevron--expanded': isExpanded(`g:${s.name}`) }"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <svg
+                    class="config-panel__server-icon"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="2" y="3" width="12" height="4" rx="1" />
+                    <rect x="2" y="9" width="12" height="4" rx="1" />
+                    <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
+                    <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
+                  </svg>
+                  <span :class="statusDotClass(s.status)"></span>
+                  <span class="config-panel__status-name">{{ s.name }}</span>
+                  <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
+                  <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+                </div>
+                <div v-if="isExpanded(`g:${s.name}`) && s.tools.length > 0" class="config-panel__tools-drawer">
+                  <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
+                    <div class="config-panel__tool-info">
+                      <span class="config-panel__tool-name">{{ tool.name }}</span>
+                      <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="isExpanded(`g:${s.name}`) && s.tools.length === 0" class="config-panel__tools-empty">
+                  No tools available
+                </div>
               </div>
             </template>
             <template v-if="groupedWorkspaceMcpStatuses.workspace.length > 0">
@@ -339,14 +507,104 @@
               <div
                 v-for="s in groupedWorkspaceMcpStatuses.workspace"
                 :key="`w:${s.name}`"
-                class="config-panel__status-item"
+                class="config-panel__server-block"
+                @click="toggleServer(`w:${s.name}`)"
               >
-                <span :class="statusDotClass(s.status)"></span>
-                <span class="config-panel__status-name">{{ s.name }}</span>
-                <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-                <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+                <div class="config-panel__status-item">
+                  <svg
+                    class="config-panel__chevron"
+                    :class="{ 'config-panel__chevron--expanded': isExpanded(`w:${s.name}`) }"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <svg
+                    class="config-panel__server-icon"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="2" y="3" width="12" height="4" rx="1" />
+                    <rect x="2" y="9" width="12" height="4" rx="1" />
+                    <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
+                    <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
+                  </svg>
+                  <span :class="statusDotClass(s.status)"></span>
+                  <span class="config-panel__status-name">{{ s.name }}</span>
+                  <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
+                  <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
+                </div>
+                <div v-if="isExpanded(`w:${s.name}`) && s.tools.length > 0" class="config-panel__tools-drawer">
+                  <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
+                    <div class="config-panel__tool-info">
+                      <span class="config-panel__tool-name">{{ tool.name }}</span>
+                      <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="isExpanded(`w:${s.name}`) && s.tools.length === 0" class="config-panel__tools-empty">
+                  No tools available
+                </div>
               </div>
             </template>
+          </div>
+        </div>
+
+        <!-- Workspace Skills Section -->
+        <div class="config-panel__section">
+          <div class="config-panel__section-header">
+            <span class="config-panel__section-title">{{ t('config.workspace_skills') }}</span>
+          </div>
+
+          <div v-if="isLoadingSkills" class="config-panel__hint">{{ t('common.loading') }}</div>
+
+          <div v-else-if="workspaceSkills.length > 0" class="config-panel__status-list">
+            <div
+              v-for="skill in workspaceSkills"
+              :key="skill.name"
+              class="config-panel__server-block"
+              @click="toggleServer(`skill:workspace:${skill.name}`)"
+            >
+              <div class="config-panel__status-item">
+                <svg
+                  class="config-panel__chevron"
+                  :class="{ 'config-panel__chevron--expanded': isExpanded(`skill:workspace:${skill.name}`) }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                <svg
+                  class="config-panel__server-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M2 3h12v10H2z" />
+                  <path d="M5 1v2M11 1v2" />
+                  <path d="M2 6h12" />
+                </svg>
+                <span class="config-panel__status-name">{{ skill.name }}</span>
+              </div>
+              <div v-if="isExpanded(`skill:workspace:${skill.name}`)" class="config-panel__tools-drawer">
+                <div class="config-panel__tool-item">
+                  <div class="config-panel__tool-info">
+                    <span class="config-panel__tool-desc">{{ skill.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="config-panel__hint">
+            {{ t('config.no_workspace_skills') }}
           </div>
         </div>
 
@@ -548,11 +806,10 @@
   .config-panel__status-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
     background: var(--bg-100);
     border: 1px solid var(--border-200);
     border-radius: 6px;
+    padding: 8px;
   }
 
   .config-panel__status-group {
@@ -561,19 +818,130 @@
     color: var(--text-500);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-top: 4px;
+    margin: 8px 0 4px 0;
   }
 
   .config-panel__status-group:first-child {
     margin-top: 0;
   }
 
+  .config-panel__server-block {
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+    margin-bottom: 4px;
+  }
+
+  .config-panel__server-block:last-child {
+    margin-bottom: 0;
+  }
+
+  .config-panel__server-block:hover {
+    background: var(--bg-200);
+  }
+
   .config-panel__status-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: 6px;
+    padding: 6px 8px;
     font-size: 12px;
+  }
+
+  .config-panel__chevron {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--text-500);
+    transition: transform 0.2s ease;
+  }
+
+  .config-panel__chevron--expanded {
+    transform: rotate(90deg);
+  }
+
+  .config-panel__server-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-400);
+  }
+
+  .config-panel__tools-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    margin-left: 8px;
+    border-left: 1px solid var(--border-200);
+    animation: drawer-slide 0.2s ease;
+  }
+
+  @keyframes drawer-slide {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .config-panel__tool-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+  }
+
+  .config-panel__tool-item:hover {
+    background: var(--bg-200);
+  }
+
+  .config-panel__tool-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--text-400);
+  }
+
+  .config-panel__tool-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .config-panel__tool-name {
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    color: var(--text-200);
+    word-break: break-all;
+  }
+
+  .config-panel__tool-desc {
+    font-size: 10px;
+    color: var(--text-500);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .config-panel__tools-empty {
+    padding: 8px 8px 8px 30px;
+    font-size: 11px;
+    color: var(--text-500);
+    font-style: italic;
   }
 
   .config-panel__status-name {

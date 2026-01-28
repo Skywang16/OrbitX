@@ -1,32 +1,14 @@
-use crate::agent::error::AgentResult;
-use crate::agent::{Agent, Context, Task, ToolSchema};
+//! Prompt module - 统一的提示词加载与构建
+//!
+//! 所有提示词存储在 `prompts/` 目录下的 md 文件中：
+//! - `prompts/base/` - 基础提示词片段（role, rules, methodology）
+//! - `prompts/agents/` - Agent 完整提示词（带 frontmatter 配置）
+//! - `prompts/reminders/` - 运行时注入的提示
+//! - `prompts/system/` - 系统级提示（compaction, summary 等）
 
-pub mod builders;
-pub mod components;
+mod builder;
+mod loader;
 pub mod orchestrator;
-pub mod template_engine;
 
-pub use builders::{
-    PromptBuildOptions as BuildersPromptBuildOptions, PromptBuilder as CorePromptBuilder,
-};
-pub use components::types::{ComponentContext as ComponentsComponentContext, ComponentDefinition};
-pub use template_engine::TemplateEngine;
-
-/// Convenience API for building prompts.
-pub async fn build_agent_system_prompt(
-    agent: Agent,
-    task: Option<Task>,
-    context: Option<Context>,
-    tools: Vec<ToolSchema>,
-    ext_sys_prompt: Option<String>,
-) -> AgentResult<String> {
-    builders::build_agent_system_prompt(agent, task, context, tools, ext_sys_prompt).await
-}
-
-pub async fn build_agent_user_prompt(
-    task: Option<Task>,
-    context: Option<Context>,
-    tools: Vec<ToolSchema>,
-) -> AgentResult<String> {
-    builders::build_agent_user_prompt(task, context, tools).await
-}
+pub use builder::{PromptBuilder, SystemPromptParts};
+pub use loader::{BuiltinPrompts, PromptLoader};

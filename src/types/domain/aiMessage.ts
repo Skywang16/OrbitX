@@ -23,6 +23,7 @@ export interface Message {
   status: MessageStatus
   blocks: Block[]
   isSummary: boolean
+  isInternal: boolean
   modelId?: string
   providerId?: string
   createdAt: string
@@ -53,10 +54,11 @@ export type Block =
   | { type: 'agent_switch'; fromAgent: string; toAgent: string; reason?: string }
   | {
       type: 'subtask'
+      id: string
       childSessionId: number
       agentType: string
       description: string
-      status: 'pending' | 'running' | 'completed' | 'error'
+      status: 'pending' | 'running' | 'completed' | 'cancelled' | 'error'
       summary?: string
     }
   | { type: 'error'; code: string; message: string; details?: string }
@@ -70,9 +72,9 @@ export interface ToolOutput {
 
 export type TaskEvent =
   | { type: 'task_created'; taskId: string; sessionId: number; workspacePath: string }
-  | { type: 'message_created'; message: Message }
-  | { type: 'block_appended'; messageId: number; block: Block }
-  | { type: 'block_updated'; messageId: number; blockId: string; block: Block }
+  | { type: 'message_created'; taskId: string; message: Message }
+  | { type: 'block_appended'; taskId: string; messageId: number; block: Block }
+  | { type: 'block_updated'; taskId: string; messageId: number; blockId: string; block: Block }
   | {
       type: 'tool_confirmation_requested'
       taskId: string
@@ -83,6 +85,7 @@ export type TaskEvent =
     }
   | {
       type: 'message_finished'
+      taskId: string
       messageId: number
       status: MessageStatus
       finishedAt: string

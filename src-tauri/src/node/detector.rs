@@ -186,8 +186,8 @@ fn read_versions_from_dir(path: PathBuf, add_v_prefix: bool) -> Result<Vec<Strin
         return Ok(vec![]);
     }
 
-    let entries = std::fs::read_dir(&path)
-        .map_err(|e| format!("Failed to read versions directory: {e}"))?;
+    let entries =
+        std::fs::read_dir(&path).map_err(|e| format!("Failed to read versions directory: {e}"))?;
 
     let mut versions = Vec::new();
     for entry in entries.flatten() {

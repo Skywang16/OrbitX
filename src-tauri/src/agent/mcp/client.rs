@@ -8,14 +8,12 @@ use crate::agent::mcp::protocol::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::agent::mcp::transport::stdio::{
     ensure_abs_workspace, expand_args, expand_env_map, StdioTransport,
 };
-use crate::agent::mcp::transport::streamable_http::StreamableHttpTransport;
-use crate::agent::mcp::transport::McpTransport;
 use crate::agent::mcp::types::{McpToolDefinition, ServerInfo, ToolCallResult};
 use crate::settings::types::McpServerConfig;
 
 pub struct McpClient {
     name: String,
-    transport: Arc<dyn McpTransport>,
+    transport: Arc<StdioTransport>,
     server_info: Option<ServerInfo>,
     tools: Vec<McpToolDefinition>,
 }
@@ -26,40 +24,16 @@ impl McpClient {
         config: &McpServerConfig,
         workspace_root: &Path,
     ) -> McpResult<Self> {
-        let transport: Arc<dyn McpTransport> = match config {
-            McpServerConfig::Stdio {
-                command,
-                args,
-                env,
-                disabled,
-            } => {
-                if *disabled {
-                    return Err(McpError::Disabled);
-                }
-                let workspace_root = ensure_abs_workspace(workspace_root)?;
-                let args = expand_args(args, &workspace_root);
-                let env = expand_env_map(env, &workspace_root);
-                Arc::new(StdioTransport::spawn(command, &args, &env, Some(&workspace_root)).await?)
-            }
-            McpServerConfig::Sse { disabled, .. } => {
-                if *disabled {
-                    return Err(McpError::Disabled);
-                }
-                return Err(McpError::InvalidConfig(
-                    "SSE MCP servers not supported yet".into(),
-                ));
-            }
-            McpServerConfig::StreamableHttp {
-                url,
-                headers,
-                disabled,
-            } => {
-                if *disabled {
-                    return Err(McpError::Disabled);
-                }
-                Arc::new(StreamableHttpTransport::new(url.clone(), headers)?)
-            }
-        };
+        if config.disabled {
+            return Err(McpError::Disabled);
+        }
+
+        let workspace_root = ensure_abs_workspace(workspace_root)?;
+        let args = expand_args(&config.args, &workspace_root);
+        let env = expand_env_map(&config.env, &workspace_root);
+        let transport = Arc::new(
+            StdioTransport::spawn(&config.command, &args, &env, Some(&workspace_root)).await?,
+        );
 
         let mut client = Self {
             name,
@@ -105,7 +79,7 @@ impl McpClient {
                 0,
                 "initialize",
                 Some(json!({
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": "2025-11-25",
                     "clientInfo": { "name": "OrbitX", "version": env!("CARGO_PKG_VERSION") },
                     "capabilities": {}
                 })),

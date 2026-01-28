@@ -99,6 +99,7 @@ pub async fn llm_get_providers(
     _state: State<'_, LLMManagerState>,
 ) -> TauriApiResult<Vec<super::provider_registry::ProviderMetadata>> {
     let providers = ProviderRegistry::global()
-        .get_all_providers_metadata().to_vec();
+        .get_all_providers_metadata()
+        .to_vec();
     Ok(api_success!(providers))
 }

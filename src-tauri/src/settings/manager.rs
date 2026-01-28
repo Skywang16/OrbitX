@@ -131,6 +131,13 @@ impl SettingsManager {
             permissions: PermissionRules {
                 allow: vec![
                     "Read(${workspaceFolder}/**)".into(),
+                    "List(${workspaceFolder}/**)".into(),
+                    "Grep".into(),
+                    "Semantic_Search".into(),
+                    "Syntax_Diagnostics".into(),
+                    "Terminal".into(),
+                    "Task".into(),
+                    "Todowrite".into(),
                     "Bash(ls:*)".into(),
                     "Bash(cat:${workspaceFolder}/**)".into(),
                     "Bash(head:${workspaceFolder}/**)".into(),
@@ -150,6 +157,7 @@ impl SettingsManager {
                     "Write(~/.ssh/**)".into(),
                 ],
                 ask: vec![
+                    "external_directory".into(),
                     "Write(**)".into(),
                     "Edit(**)".into(),
                     "Bash(rm:*)".into(),

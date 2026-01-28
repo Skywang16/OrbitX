@@ -17,10 +17,9 @@ use crate::llm::{
     types::{EmbeddingRequest, EmbeddingResponse},
 };
 
-/// Provider 枚举 - 零成本抽象，静态分发
+/// Provider 枚举
 ///
-/// 替代 Box<dyn LLMProvider>，消除 vtable 开销
-/// 所有方法可内联，编译器完全优化
+
 pub enum Provider {
     OpenAI(OpenAIProvider),
     Anthropic(AnthropicProvider),

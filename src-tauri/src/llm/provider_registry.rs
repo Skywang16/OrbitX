@@ -50,7 +50,7 @@ static PROVIDER_METADATA: Lazy<Vec<ProviderMetadata>> = Lazy::new(|| {
     ]
 });
 
-/// Provider 注册表 - 零成本抽象版本
+/// Provider 注册表
 ///
 /// 删除所有运行时开销：
 /// - 零哈希查找（编译期 match）

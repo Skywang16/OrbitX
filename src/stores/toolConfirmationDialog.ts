@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export interface ToolConfirmationDialogState {
-  taskId: string
   requestId: string
   workspacePath: string
   toolName: string

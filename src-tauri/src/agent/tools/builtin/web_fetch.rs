@@ -103,6 +103,7 @@ Error Handling:
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::Network, ToolPriority::Expensive)
+            .with_confirmation()
             .with_rate_limit(RateLimitConfig {
                 max_calls: 10,
                 window_secs: 60,

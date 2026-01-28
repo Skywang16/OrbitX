@@ -24,7 +24,7 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug,ignore=warn,globset=warn";
+        let default_level = "debug,ignore=warn,globset=warn,hyper_util=info,hyper=info,reqwest=info";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -357,12 +357,18 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .inner()
             .clone();
 
+        let config_paths = app
+            .state::<crate::config::paths::ConfigPaths>()
+            .inner()
+            .clone();
+
         let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
             settings_manager,
             mcp_registry,
+            Arc::new(config_paths),
             Arc::clone(&checkpoint_service),
             std::sync::Arc::clone(&workspace_changes),
             vector_search_engine,

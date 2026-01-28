@@ -195,6 +195,28 @@ impl WorkspaceService {
             ));
         }
 
+        let messages_to_delete = self
+            .agent_persistence
+            .messages()
+            .list_messages_from(session_id, message_id)
+            .await
+            .map_err(|e| anyhow!("List session messages failed: {}", e))?;
+
+        let mut child_session_ids = Vec::new();
+        for msg in &messages_to_delete {
+            for block in &msg.blocks {
+                if let Block::Subtask(subtask) = block {
+                    child_session_ids.push(subtask.child_session_id);
+                }
+            }
+        }
+
+        child_session_ids.sort();
+        child_session_ids.dedup();
+        for child_session_id in child_session_ids {
+            delete_session_cascade(&self.agent_persistence, child_session_id).await?;
+        }
+
         self.agent_persistence
             .messages()
             .delete_messages_from(session_id, message_id)
@@ -308,7 +330,6 @@ impl WorkspaceService {
 
         Ok(row.map(build_session))
     }
-
 }
 
 fn path_to_string(path: &Path) -> Result<String> {
@@ -354,8 +375,9 @@ impl WorkspaceService {
         .await?
         .flatten();
 
-        let latest_user_content =
-            latest_user_blocks_json.as_deref().and_then(extract_user_text_from_blocks);
+        let latest_user_content = latest_user_blocks_json
+            .as_deref()
+            .and_then(extract_user_text_from_blocks);
 
         let last_timestamp: Option<i64> =
             sqlx::query_scalar("SELECT MAX(created_at) FROM messages WHERE session_id = ?")
@@ -374,6 +396,40 @@ impl WorkspaceService {
 
         Ok(())
     }
+}
+
+async fn delete_session_cascade(
+    persistence: &crate::agent::persistence::AgentPersistence,
+    session_id: i64,
+) -> Result<()> {
+    let mut delete_order = Vec::new();
+    let mut stack = vec![(session_id, false)];
+
+    while let Some((id, visited)) = stack.pop() {
+        if visited {
+            delete_order.push(id);
+            continue;
+        }
+
+        stack.push((id, true));
+        let children = persistence
+            .sessions()
+            .list_children(id)
+            .await
+            .map_err(|e| anyhow!("List child sessions failed: {}", e))?;
+        for child in children {
+            stack.push((child.id, false));
+        }
+    }
+
+    for id in delete_order {
+        persistence
+            .sessions()
+            .delete(id)
+            .await
+            .map_err(|e| anyhow!("Delete session failed: {}", e))?;
+    }
+    Ok(())
 }
 
 fn extract_user_text_from_blocks(blocks_json: &str) -> Option<String> {

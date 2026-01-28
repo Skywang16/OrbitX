@@ -33,6 +33,9 @@ pub struct ConfigPaths {
 
     /// Shell集成脚本目录
     shell_dir: PathBuf,
+
+    /// 全局 Skills 目录
+    skills_dir: PathBuf,
 }
 
 impl ConfigPaths {
@@ -69,6 +72,7 @@ impl ConfigPaths {
         let cache_dir = app_data_dir.join(crate::config::CACHE_DIR_NAME);
         let logs_dir = app_data_dir.join(crate::config::LOGS_DIR_NAME);
         let shell_dir = app_data_dir.join("shell");
+        let skills_dir = app_data_dir.join("skills");
 
         let paths = Self {
             app_data_dir,
@@ -78,6 +82,7 @@ impl ConfigPaths {
             cache_dir,
             logs_dir,
             shell_dir,
+            skills_dir,
         };
 
         // 确保所有必要的目录存在
@@ -138,6 +143,7 @@ impl ConfigPaths {
             &self.cache_dir,
             &self.logs_dir,
             &self.shell_dir,
+            &self.skills_dir,
         ];
 
         for dir in &directories {
@@ -201,6 +207,11 @@ impl ConfigPaths {
     /// 获取指定shell的集成脚本文件路径
     pub fn shell_integration_script_path(&self, shell_name: &str) -> PathBuf {
         self.shell_dir.join(format!("integration.{shell_name}"))
+    }
+
+    /// 获取全局 Skills 目录路径
+    pub fn skills_dir(&self) -> &Path {
+        &self.skills_dir
     }
 
     // 路径验证和操作方法
@@ -454,6 +465,7 @@ impl ConfigPaths {
             cache_dir: base_dir.join("cache"),
             logs_dir: base_dir.join("logs"),
             shell_dir: base_dir.join("shell"),
+            skills_dir: base_dir.join("skills"),
         }
     }
 }

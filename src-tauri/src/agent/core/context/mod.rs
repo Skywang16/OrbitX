@@ -27,7 +27,7 @@ use crate::agent::state::session::SessionContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::{
     Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, TaskEvent, TokenUsage,
-    ToolStatus, UserImageBlock, UserTextBlock,
+    SubtaskStatus, ToolStatus, UserImageBlock, UserTextBlock,
 };
 use crate::agent::workspace_changes::WorkspaceChangeJournal;
 use crate::checkpoint::CheckpointService;
@@ -38,12 +38,38 @@ use crate::llm::anthropic_types::{
 use crate::storage::DatabaseManager;
 use tokio_util::sync::CancellationToken;
 
+#[async_trait::async_trait]
+pub trait SubtaskRunner: Send + Sync {
+    async fn run_subtask(
+        &self,
+        parent: &TaskContext,
+        request: SubtaskRequest,
+    ) -> TaskExecutorResult<SubtaskResponse>;
+}
+
+#[derive(Debug, Clone)]
+pub struct SubtaskRequest {
+    pub description: String,
+    pub prompt: String,
+    pub subagent_type: String,
+    pub session_id: Option<i64>,
+    pub call_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubtaskResponse {
+    pub session_id: i64,
+    pub status: SubtaskStatus,
+    pub summary: Option<String>,
+}
+
 pub struct TaskContextDeps {
     pub tool_registry: Arc<ToolRegistry>,
     pub repositories: Arc<DatabaseManager>,
     pub agent_persistence: Arc<AgentPersistence>,
     pub checkpoint_service: Option<Arc<CheckpointService>>,
     pub workspace_changes: Arc<WorkspaceChangeJournal>,
+    pub subtask_runner: Arc<dyn SubtaskRunner>,
 }
 
 pub struct TaskContext {
@@ -52,10 +78,12 @@ pub struct TaskContext {
     pub user_prompt: Arc<str>,
     pub agent_type: Arc<str>,
     pub cwd: Arc<str>,
+    emit_task_events: bool,
     config: TaskExecutionConfig,
 
     session: Arc<SessionContext>,
     tool_registry: Arc<ToolRegistry>,
+    subtask_runner: Arc<dyn SubtaskRunner>,
     state_manager: Arc<StateManager>,
     checkpoint_service: Option<Arc<CheckpointService>>,
     active_checkpoint: Arc<RwLock<Option<ActiveCheckpoint>>>,
@@ -77,6 +105,7 @@ impl TaskContext {
         agent_type: String,
         config: TaskExecutionConfig,
         workspace_path: String,
+        emit_task_events: bool,
         progress_channel: Option<Channel<TaskEvent>>,
         deps: TaskContextDeps,
     ) -> TaskExecutorResult<Self> {
@@ -125,9 +154,11 @@ impl TaskContext {
             user_prompt: Arc::from(user_prompt.as_str()),
             agent_type: Arc::from(agent_type.as_str()),
             cwd: Arc::from(normalized_workspace.as_str()),
+            emit_task_events,
             config,
             session,
             tool_registry: deps.tool_registry,
+            subtask_runner: deps.subtask_runner,
             state_manager: Arc::new(StateManager::new(task_state)),
             checkpoint_service: deps.checkpoint_service,
             active_checkpoint: Arc::new(RwLock::new(None)),
@@ -137,6 +168,10 @@ impl TaskContext {
             pause_status: AtomicU8::new(0),
             pause_notify: Arc::new(Notify::new()),
         })
+    }
+
+    pub fn emits_task_events(&self) -> bool {
+        self.emit_task_events
     }
 
     pub async fn note_agent_write_intent(&self, path: &Path) {
@@ -153,6 +188,10 @@ impl TaskContext {
 
     pub async fn set_progress_channel(&self, channel: Option<Channel<TaskEvent>>) {
         *self.states.progress_channel.lock().await = channel;
+    }
+
+    pub async fn progress_channel(&self) -> Option<Channel<TaskEvent>> {
+        self.states.progress_channel.lock().await.clone()
     }
 
     pub fn checkpointing_enabled(&self) -> bool {
@@ -179,6 +218,22 @@ impl TaskContext {
         }
 
         Ok(())
+    }
+
+    pub async fn active_checkpoint_handle(&self) -> Option<(i64, PathBuf)> {
+        self.active_checkpoint
+            .read()
+            .await
+            .as_ref()
+            .map(|cp| (cp.id, cp.workspace_root.clone()))
+    }
+
+    pub async fn inherit_checkpoint(&self, checkpoint_id: i64, workspace_root: PathBuf) {
+        let mut guard = self.active_checkpoint.write().await;
+        *guard = Some(ActiveCheckpoint {
+            id: checkpoint_id,
+            workspace_root,
+        });
     }
 
     pub async fn snapshot_file_before_edit(&self, path: &Path) -> TaskExecutorResult<()> {
@@ -213,6 +268,10 @@ impl TaskContext {
 
     pub fn tool_registry(&self) -> Arc<ToolRegistry> {
         Arc::clone(&self.tool_registry)
+    }
+
+    pub fn subtask_runner(&self) -> &dyn SubtaskRunner {
+        self.subtask_runner.as_ref()
     }
 
     pub async fn status(&self) -> AgentTaskStatus {
@@ -437,12 +496,21 @@ impl TaskContext {
     pub async fn add_tool_results(&self, results: Vec<ToolCallResult>) -> TaskExecutorResult<()> {
         let blocks: Vec<ContentBlock> = results
             .iter()
-            .map(|r| ContentBlock::ToolResult {
-                tool_use_id: r.call_id.clone(),
-                content: Some(ToolResultContent::Text(
-                    serde_json::to_string(&r.result).unwrap_or_else(|_| "{}".to_string()),
-                )),
-                is_error: Some(r.status != crate::agent::tools::ToolResultStatus::Success),
+            .map(|r| {
+                // r.result is now a JSON Value that contains the actual result content
+                // It could be a string, number, object, or array - convert to appropriate string representation
+                let result_text = if r.result.is_string() {
+                    r.result.as_str().unwrap_or("").to_string()
+                } else {
+                    // For non-string values, serialize to JSON string
+                    serde_json::to_string(&r.result).unwrap_or_else(|_| r.result.to_string())
+                };
+
+                ContentBlock::ToolResult {
+                    tool_use_id: r.call_id.clone(),
+                    content: Some(ToolResultContent::Text(result_text)),
+                    is_error: Some(r.status != crate::agent::tools::ToolResultStatus::Success),
+                }
             })
             .collect();
 
@@ -467,6 +535,7 @@ impl TaskContext {
         {
             let mut exec = self.states.execution.write().await;
             exec.system_prompt = Some(SystemPrompt::Text(system_prompt));
+            exec.system_prompt_overlay = None;
             exec.messages.clear();
             exec.message_sequence = 0;
         }
@@ -479,7 +548,13 @@ impl TaskContext {
     }
 
     pub async fn get_system_prompt(&self) -> Option<SystemPrompt> {
-        self.states.execution.read().await.system_prompt.clone()
+        let exec = self.states.execution.read().await;
+        match (&exec.system_prompt, &exec.system_prompt_overlay) {
+            (None, None) => None,
+            (Some(base), None) => Some(base.clone()),
+            (None, Some(overlay)) => Some(overlay.clone()),
+            (Some(base), Some(overlay)) => Some(merge_system_prompts(base, overlay)),
+        }
     }
 
     pub async fn add_user_message(&self, text: String) -> TaskExecutorResult<()> {
@@ -536,6 +611,30 @@ impl TaskContext {
         Ok(())
     }
 
+    /// Add a user message with optional images and system reminders.
+    /// System reminders are wrapped in <system-reminder> tags and prepended to the user message.
+    /// They are only sent to the LLM, not persisted to UI messages.
+    pub async fn add_user_message_with_reminders(
+        &self,
+        text: String,
+        images: Option<&[ImageAttachment]>,
+        system_reminders: &[String],
+    ) -> TaskExecutorResult<()> {
+        // Build the final text with system reminders prepended
+        let final_text = if system_reminders.is_empty() {
+            text
+        } else {
+            let reminder_block = system_reminders
+                .iter()
+                .map(|r| format!("<system-reminder>\n{}\n</system-reminder>", r.trim()))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            format!("{}\n\n{}", reminder_block, text)
+        };
+
+        self.add_user_message_with_images(final_text, images).await
+    }
+
     pub async fn reset_message_state(&self) -> TaskExecutorResult<()> {
         {
             let mut exec = self.states.execution.write().await;
@@ -547,14 +646,25 @@ impl TaskContext {
 
     /// Set system prompt in memory only; do not persist system message to DB.
     pub async fn set_system_prompt(&self, prompt: String) -> TaskExecutorResult<()> {
-        self.states.execution.write().await.system_prompt = Some(SystemPrompt::Text(prompt));
+        let mut exec = self.states.execution.write().await;
+        exec.system_prompt = Some(SystemPrompt::Text(prompt));
+        exec.system_prompt_overlay = None;
         Ok(())
     }
 
     // Deprecated: system prompt is stored separately and not part of messages.
     pub async fn update_system_prompt(&self, new_system_prompt: String) -> TaskExecutorResult<()> {
-        self.states.execution.write().await.system_prompt =
-            Some(SystemPrompt::Text(new_system_prompt));
+        let mut exec = self.states.execution.write().await;
+        exec.system_prompt = Some(SystemPrompt::Text(new_system_prompt));
+        Ok(())
+    }
+
+    /// A transient overlay appended to the base system prompt (e.g. loop warnings).
+    pub async fn set_system_prompt_overlay(
+        &self,
+        overlay: Option<SystemPrompt>,
+    ) -> TaskExecutorResult<()> {
+        self.states.execution.write().await.system_prompt_overlay = overlay;
         Ok(())
     }
 
@@ -582,6 +692,7 @@ impl TaskContext {
         &self,
         user_prompt: &str,
         images: Option<&[ImageAttachment]>,
+        internal_user_message: bool,
     ) -> TaskExecutorResult<i64> {
         let mut user_blocks = Vec::new();
 
@@ -601,6 +712,7 @@ impl TaskContext {
                 MessageStatus::Completed,
                 user_blocks,
                 false,
+                internal_user_message,
                 self.agent_type.as_ref(),
                 None,
                 None,
@@ -610,6 +722,7 @@ impl TaskContext {
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
         self.emit_event(TaskEvent::MessageCreated {
+            task_id: self.task_id.to_string(),
             message: user_message.clone(),
         })
         .await?;
@@ -622,6 +735,7 @@ impl TaskContext {
                 UiMessageRole::Assistant,
                 MessageStatus::Streaming,
                 Vec::new(),
+                false,
                 false,
                 self.agent_type.as_ref(),
                 Some(user_message.id),
@@ -637,6 +751,7 @@ impl TaskContext {
         }
 
         self.emit_event(TaskEvent::MessageCreated {
+            task_id: self.task_id.to_string(),
             message: assistant_message,
         })
         .await?;
@@ -669,7 +784,11 @@ impl TaskContext {
 
         self.states.messages.lock().await.assistant_message = Some(message);
 
-        self.emit_event(TaskEvent::BlockAppended { message_id, block })
+        self.emit_event(TaskEvent::BlockAppended {
+            task_id: self.task_id.to_string(),
+            message_id,
+            block,
+        })
             .await
     }
 
@@ -719,6 +838,7 @@ impl TaskContext {
         self.states.messages.lock().await.assistant_message = Some(message);
 
         self.emit_event(TaskEvent::BlockUpdated {
+            task_id: self.task_id.to_string(),
             message_id,
             block_id: block_id.to_string(),
             block,
@@ -775,6 +895,7 @@ impl TaskContext {
         self.states.messages.lock().await.assistant_message = Some(message);
 
         self.emit_event(TaskEvent::MessageFinished {
+            task_id: self.task_id.to_string(),
             message_id,
             status,
             finished_at,
@@ -850,6 +971,7 @@ impl TaskContext {
         for (block_id, block) in changed_blocks {
             let _ = self
                 .emit_event(TaskEvent::BlockUpdated {
+                    task_id: self.task_id.to_string(),
                     message_id: message.id,
                     block_id,
                     block,
@@ -858,6 +980,7 @@ impl TaskContext {
         }
 
         self.emit_event(TaskEvent::MessageFinished {
+            task_id: self.task_id.to_string(),
             message_id: message.id,
             status: MessageStatus::Cancelled,
             finished_at: now,
@@ -903,11 +1026,48 @@ fn map_user_image_blocks(images: &[ImageAttachment]) -> Vec<Block> {
         .collect()
 }
 
+fn merge_system_prompts(
+    base: &crate::llm::anthropic_types::SystemPrompt,
+    overlay: &crate::llm::anthropic_types::SystemPrompt,
+) -> crate::llm::anthropic_types::SystemPrompt {
+    use crate::llm::anthropic_types::{SystemBlock, SystemPrompt};
+
+    match (base, overlay) {
+        (SystemPrompt::Text(a), SystemPrompt::Text(b)) => {
+            SystemPrompt::Text(format!("{}\n\n{}", a.trim_end(), b.trim_start()))
+        }
+        (SystemPrompt::Blocks(a), SystemPrompt::Blocks(b)) => {
+            let mut out = a.clone();
+            out.extend(b.iter().cloned());
+            SystemPrompt::Blocks(out)
+        }
+        (SystemPrompt::Text(a), SystemPrompt::Blocks(b)) => {
+            let mut out = vec![SystemBlock {
+                block_type: "text".to_string(),
+                text: a.clone(),
+                cache_control: None,
+            }];
+            out.extend(b.iter().cloned());
+            SystemPrompt::Blocks(out)
+        }
+        (SystemPrompt::Blocks(a), SystemPrompt::Text(b)) => {
+            let mut out = a.clone();
+            out.push(SystemBlock {
+                block_type: "text".to_string(),
+                text: b.clone(),
+                cache_control: None,
+            });
+            SystemPrompt::Blocks(out)
+        }
+    }
+}
+
 fn find_block_index(blocks: &[Block], block_id: &str) -> Option<usize> {
     blocks.iter().position(|block| match block {
         Block::Thinking(b) => b.id == block_id,
         Block::Text(b) => b.id == block_id,
         Block::Tool(b) => b.id == block_id,
+        Block::Subtask(b) => b.id == block_id,
         _ => false,
     })
 }

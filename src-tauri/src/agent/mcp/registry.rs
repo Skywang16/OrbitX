@@ -191,9 +191,5 @@ impl McpRegistry {
 }
 
 fn is_disabled(config: &McpServerConfig) -> bool {
-    match config {
-        McpServerConfig::Stdio { disabled, .. } => *disabled,
-        McpServerConfig::Sse { disabled, .. } => *disabled,
-        McpServerConfig::StreamableHttp { disabled, .. } => *disabled,
-    }
+    config.disabled
 }

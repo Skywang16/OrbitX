@@ -369,7 +369,11 @@
     "no_workspace": "No workspace selected",
     "rules": "Rules",
     "mcp_servers": "MCP Servers",
-    "no_mcp_servers": "No MCP servers configured"
+    "no_mcp_servers": "No MCP servers configured",
+    "global_skills": "Global Skills",
+    "workspace_skills": "Workspace Skills",
+    "no_global_skills": "No global skills found",
+    "no_workspace_skills": "No workspace skills found"
   },
   "workspace": {
     "title": "Workspace",

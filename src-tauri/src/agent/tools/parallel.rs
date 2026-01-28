@@ -123,10 +123,11 @@ async fn execute_parallel(
     _start_idx: usize,
     calls: Vec<&ToolCall>,
 ) -> Vec<ToolCallResult> {
+    tracing::info!("[execute_parallel] Starting {} parallel calls", calls.len());
     // 分批执行，每批最多 MAX_CONCURRENCY 个
     let mut results = Vec::with_capacity(calls.len());
 
-    for chunk in calls.chunks(MAX_CONCURRENCY) {
+    for (_chunk_idx, chunk) in calls.chunks(MAX_CONCURRENCY).enumerate() {
         let futures = chunk.iter().map(|call| async {
             let result = registry
                 .execute_tool(&call.name, context, call.params.clone())
@@ -154,7 +155,7 @@ async fn execute_sequential(
 ) -> Vec<ToolCallResult> {
     let mut results = Vec::with_capacity(calls.len());
 
-    for call in calls {
+    for call in calls.iter() {
         let result = registry
             .execute_tool(&call.name, context, call.params.clone())
             .await;
@@ -165,6 +166,7 @@ async fn execute_sequential(
         });
     }
 
+    tracing::info!("[execute_sequential] All sequential calls completed");
     results
 }
 

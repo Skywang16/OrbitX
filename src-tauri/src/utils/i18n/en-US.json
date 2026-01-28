@@ -84,6 +84,7 @@
   },
   "agent": {
     "cancel_failed": "Failed to cancel task",
+    "command_not_found": "Command not found",
     "context": {
       "file_status_failed": "Failed to get file context status",
       "summary_failed": "Failed to generate conversation summary"
@@ -99,6 +100,9 @@
     "execute_tree_failed": "Failed to execute task tree",
     "list_failed": "Failed to list tasks",
     "pause_failed": "Failed to pause task",
+    "switch_failed": "Failed to switch agent",
+    "tool_confirm_not_found": "Tool confirmation request not found",
+    "unknown_agent_type": "Unknown agent type",
     "ui": {
       "conversations_failed": "Failed to load conversations",
       "messages_failed": "Failed to load messages"

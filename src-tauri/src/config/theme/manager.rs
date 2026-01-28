@@ -23,13 +23,11 @@ pub struct ThemeIndexEntry {
     pub last_modified: Option<SystemTime>,
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ThemeManagerOptions {
     pub auto_refresh_index: bool,
     pub index_refresh_interval: u64,
 }
-
 
 pub struct ThemeManager {
     paths: ConfigPaths,

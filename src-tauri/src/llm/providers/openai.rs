@@ -250,16 +250,16 @@ impl LLMProvider for OpenAIProvider {
             .unwrap_or("")
             .to_string();
         let usage_obj = json.get("usage");
-        let usage = usage_obj.map(|u| Usage {
-                    input_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0)
-                        as u32,
-                    output_tokens: u
-                        .get("completion_tokens")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as u32,
-                    cache_creation_input_tokens: None,
-                    cache_read_input_tokens: None,
-                })
+        let usage = usage_obj
+            .map(|u| Usage {
+                input_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                output_tokens: u
+                    .get("completion_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            })
             .unwrap_or(Usage {
                 input_tokens: 0,
                 output_tokens: 0,

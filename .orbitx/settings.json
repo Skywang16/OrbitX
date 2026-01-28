@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": [],
+    "ask": []
+  },
+  "mcpServers": {},
+  "rules": {
+    "content": "",
+    "rulesFile": null,
+    "rulesFiles": []
+  },
+  "agent": {
+    "maxIterations": null,
+    "maxTokenBudget": null,
+    "thinkingEnabled": null,
+    "autoSummaryThreshold": null
+  }
+}

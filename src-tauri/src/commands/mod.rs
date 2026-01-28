@@ -168,13 +168,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_cancel_task,
         crate::agent::core::commands::agent_tool_confirm,
         crate::agent::core::commands::agent_list_tasks,
-        // 项目规则命令已迁移到 workspace 模块
+        crate::agent::core::commands::agent_list_commands,
+        crate::agent::core::commands::agent_render_command,
+        crate::agent::core::commands::agent_list_skills,
+        crate::agent::core::commands::agent_validate_skill,
+        crate::agent::core::commands::agent_switch_session_agent,
         // 存储系统命令（State/Runtime）
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
         crate::ai::tool::storage::storage_get_terminals_state,
         crate::ai::tool::storage::storage_get_terminal_cwd,
-        // 双轨制任务老命令已废弃，由新的Agent UI持久化替代
         // Node.js 版本管理命令
         crate::node::commands::node_check_project,
         crate::node::commands::node_get_version_manager,

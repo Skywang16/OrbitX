@@ -1,7 +1,6 @@
 /*!
  * ReactHandler 实现 - TaskExecutor作为ReAct处理器
  *
- * 零成本抽象：所有方法都会被内联，无运行时开销
  */
 
 use serde_json::Value;
@@ -114,31 +113,50 @@ impl ReactHandler for TaskExecutor {
     ) -> TaskExecutorResult<Vec<ToolCallResult>> {
         let mut tool_started_at: HashMap<String, chrono::DateTime<chrono::Utc>> = HashMap::new();
         let mut tool_inputs: HashMap<String, Value> = HashMap::new();
+        let mut rendered_tool_blocks: HashMap<String, bool> = HashMap::new();
 
         for (call_id, tool_name, params) in &tool_calls {
             let now = chrono::Utc::now();
+            let mut params = params.clone();
+            if tool_name == "task" {
+                if let Value::Object(ref mut obj) = params {
+                    obj.insert("call_id".to_string(), Value::String(call_id.clone()));
+                }
+            }
             tool_started_at.insert(call_id.clone(), now);
             tool_inputs.insert(call_id.clone(), params.clone());
-            context
-                .assistant_append_block(Block::Tool(ToolBlock {
-                    id: call_id.clone(),
-                    call_id: call_id.clone(),
-                    name: tool_name.clone(),
-                    status: ToolStatus::Running,
-                    input: params.clone(),
-                    output: None,
-                    compacted_at: None,
-                    started_at: now,
-                    finished_at: None,
-                    duration_ms: None,
-                }))
-                .await?;
+
+            let render = should_render_tool_block(context, tool_name).await;
+            rendered_tool_blocks.insert(call_id.clone(), render);
+            if render {
+                context
+                    .assistant_append_block(Block::Tool(ToolBlock {
+                        id: call_id.clone(),
+                        call_id: call_id.clone(),
+                        name: tool_name.clone(),
+                        status: ToolStatus::Running,
+                        input: params.clone(),
+                        output: None,
+                        compacted_at: None,
+                        started_at: now,
+                        finished_at: None,
+                        duration_ms: None,
+                    }))
+                    .await?;
+            }
         }
 
         // 转换为 ToolCall 并并行执行
         let calls: Vec<tools::ToolCall> = tool_calls
             .into_iter()
-            .map(|(id, name, params)| tools::ToolCall { id, name, params })
+            .map(|(id, name, mut params)| {
+                if name == "task" {
+                    if let Value::Object(ref mut obj) = params {
+                        obj.insert("call_id".to_string(), Value::String(id.clone()));
+                    }
+                }
+                tools::ToolCall { id, name, params }
+            })
             .collect();
 
         let responses = tools::execute_batch(&context.tool_registry(), context, calls).await;
@@ -146,16 +164,35 @@ impl ReactHandler for TaskExecutor {
         // 转换结果并发送事件
         let mut results = Vec::with_capacity(responses.len());
         for resp in responses {
+            // These lookups must succeed - they were inserted in the loop above.
+            // If they fail, it indicates a logic error in execute_batch.
+            let Some(&started_at) = tool_started_at.get(&resp.id) else {
+                tracing::error!("⚠️  Missing started_at for tool: {}", resp.id);
+                continue;
+            };
+            let Some(input) = tool_inputs.get(&resp.id).cloned() else {
+                tracing::error!("⚠️  Missing input for tool: {}", resp.id);
+                continue;
+            };
+            let Some(&should_render) = rendered_tool_blocks.get(&resp.id) else {
+                tracing::error!("⚠️  Missing render flag for tool: {}", resp.id);
+                continue;
+            };
+
             let (result_status, result_value) = convert_result(&resp.result);
-            let _output_content = extract_tool_output_content(&result_value);
             let preview_value =
                 truncate_tool_output_value(&result_value, TOOL_OUTPUT_PREVIEW_MAX_CHARS);
             let finished_at = chrono::Utc::now();
-            let started_at = tool_started_at
-                .get(&resp.id)
-                .copied()
-                .unwrap_or(finished_at);
-            let input = tool_inputs.get(&resp.id).cloned().unwrap_or(Value::Null);
+            let duration_ms = resp
+                .result
+                .execution_time_ms
+                .map(|v| v as i64)
+                .unwrap_or_else(|| {
+                    finished_at
+                        .signed_duration_since(started_at)
+                        .num_milliseconds()
+                        .max(0)
+                });
 
             let status = match result_status {
                 ToolResultStatus::Success => ToolStatus::Completed,
@@ -163,44 +200,37 @@ impl ReactHandler for TaskExecutor {
                 ToolResultStatus::Cancelled => ToolStatus::Cancelled,
             };
 
-            context
-                .assistant_update_block(
-                    &resp.id,
-                    Block::Tool(ToolBlock {
-                        id: resp.id.clone(),
-                        call_id: resp.id.clone(),
-                        name: resp.name.clone(),
-                        status,
-                        input,
-                        output: Some(ToolOutput {
-                            content: preview_value.clone(),
-                            title: None,
-                            metadata: resp.result.ext_info.clone(),
-                            cancel_reason: resp.result.cancel_reason.clone(),
+            if should_render {
+                context
+                    .assistant_update_block(
+                        &resp.id,
+                        Block::Tool(ToolBlock {
+                            id: resp.id.clone(),
+                            call_id: resp.id.clone(),
+                            name: resp.name.clone(),
+                            status,
+                            input,
+                            output: Some(ToolOutput {
+                                content: preview_value.clone(),
+                                title: None,
+                                metadata: resp.result.ext_info.clone(),
+                                cancel_reason: resp.result.cancel_reason.clone(),
+                            }),
+                            compacted_at: None,
+                            started_at,
+                            finished_at: Some(finished_at),
+                            duration_ms: Some(duration_ms),
                         }),
-                        compacted_at: None,
-                        started_at,
-                        finished_at: Some(finished_at),
-                        duration_ms: resp.result.execution_time_ms.map(|v| v as i64).or_else(
-                            || {
-                                Some(
-                                    finished_at
-                                        .signed_duration_since(started_at)
-                                        .num_milliseconds()
-                                        .max(0),
-                                )
-                            },
-                        ),
-                    }),
-                )
-                .await?;
+                    )
+                    .await?;
+            }
 
             results.push(ToolCallResult {
                 call_id: resp.id,
                 tool_name: resp.name,
                 result: result_value,
                 status: result_status,
-                execution_time_ms: resp.result.execution_time_ms.unwrap_or(0),
+                execution_time_ms: duration_ms as u64,
             });
         }
 
@@ -213,6 +243,13 @@ impl ReactHandler for TaskExecutor {
         let file_tracker = context.file_tracker();
         Arc::new(ContextBuilder::new(file_tracker))
     }
+}
+
+async fn should_render_tool_block(context: &TaskContext, tool_name: &str) -> bool {
+    let Some(meta) = context.tool_registry().get_tool_metadata(tool_name).await else {
+        return true;
+    };
+    !meta.tags.iter().any(|t| t == "ui:hidden")
 }
 
 /// 转换 ToolResult 到 (status, json_value)
@@ -229,10 +266,8 @@ fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            (
-                ToolResultStatus::Success,
-                serde_json::json!({ "result": content }),
-            )
+            // 直接返回字符串，不要包装在对象里
+            (ToolResultStatus::Success, serde_json::json!(content))
         }
         ToolResultStatus::Error => {
             let msg = result
@@ -244,7 +279,7 @@ fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            (ToolResultStatus::Error, serde_json::json!({ "error": msg }))
+            (ToolResultStatus::Error, serde_json::json!(msg))
         }
         ToolResultStatus::Cancelled => {
             let msg = result
@@ -256,29 +291,8 @@ fn convert_result(result: &tools::ToolResult) -> (ToolResultStatus, Value) {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            (
-                ToolResultStatus::Cancelled,
-                serde_json::json!({
-                    "cancelled": msg,
-                    "reason": result.cancel_reason
-                }),
-            )
+            (ToolResultStatus::Cancelled, serde_json::json!(msg))
         }
-    }
-}
-
-fn extract_tool_output_content(value: &Value) -> String {
-    match value {
-        Value::String(s) => s.clone(),
-        Value::Object(map) => {
-            for key in ["result", "error", "cancelled"] {
-                if let Some(Value::String(s)) = map.get(key) {
-                    return s.clone();
-                }
-            }
-            serde_json::to_string(value).unwrap_or_default()
-        }
-        _ => serde_json::to_string(value).unwrap_or_default(),
     }
 }
 

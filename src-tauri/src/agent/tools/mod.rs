@@ -18,11 +18,12 @@ pub use r#trait::{
     ToolResultStatus, ToolSchema,
 };
 pub use registry::{ToolExecutionStats, ToolRegistry};
+pub use registry::ToolConfirmationManager;
 
 // Builtin tool type re-exports
 pub use builtin::{
     GrepTool, ListFilesTool, ReadFileTool, ReadTerminalTool, SemanticSearchTool, ShellTool,
-    SyntaxDiagnosticsTool, TodoWriteTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
+    SyntaxDiagnosticsTool, TaskTool, TodoWriteTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
@@ -30,13 +31,16 @@ use std::sync::Arc;
 pub async fn create_tool_registry(
     chat_mode: &str,
     permission_rules: crate::settings::types::PermissionRules,
+    agent_tool_filter: Option<crate::agent::permissions::ToolFilter>,
+    confirmations: Arc<ToolConfirmationManager>,
     extra_tools: Vec<Arc<dyn RunnableTool>>,
     vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
 ) -> Arc<ToolRegistry> {
     let checker = Arc::new(crate::agent::permissions::PermissionChecker::new(
         &permission_rules,
     ));
-    let registry = Arc::new(ToolRegistry::new(Some(checker)));
+    let agent_filter = agent_tool_filter.map(Arc::new);
+    let registry = Arc::new(ToolRegistry::new(Some(checker), agent_filter, confirmations));
     let is_chat = chat_mode == "chat";
 
     let availability_ctx = ToolAvailabilityContext {
@@ -63,6 +67,16 @@ async fn register_builtin_tools(
     vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
 ) {
     use std::sync::Arc;
+
+    registry
+        .register(
+            "task",
+            Arc::new(TaskTool::new()),
+            is_chat_mode,
+            availability_ctx,
+        )
+        .await
+        .ok();
 
     registry
         .register(

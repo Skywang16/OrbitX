@@ -70,13 +70,6 @@ impl CheckpointService {
             })
             .await?;
 
-        tracing::info!(
-            "Created empty checkpoint {} for session {} message {}",
-            checkpoint_id,
-            session_id,
-            message_id
-        );
-
         self.storage
             .find_by_id(checkpoint_id)
             .await?
@@ -431,11 +424,7 @@ async fn resolve_file_path(path: &Path, workspace_root: &Path) -> CheckpointResu
         let absolute = match fs::canonicalize(path).await {
             Ok(p) => p,
             Err(e) if e.kind() == ErrorKind::NotFound => path.components().collect(),
-            Err(e) => {
-                return Err(CheckpointError::InvalidFilePath(format!(
-                    "{path:?} ({e})"
-                )))
-            }
+            Err(e) => return Err(CheckpointError::InvalidFilePath(format!("{path:?} ({e})"))),
         };
 
         if !absolute.starts_with(workspace_root) {

@@ -24,8 +24,15 @@ pub struct ExecuteTaskParams {
     pub session_id: i64,
     pub user_prompt: String,
     pub model_id: String,
+    /// Optional per-request agent type override (does not persist to session).
+    #[serde(default)]
+    pub agent_type: Option<String>,
     #[serde(default)]
     pub images: Option<Vec<ImageAttachment>>,
+    /// Runtime system reminders to inject into LLM context (not persisted to UI messages).
+    /// These are wrapped in <system-reminder> tags when sent to the LLM.
+    #[serde(skip, default)]
+    pub system_reminders: Vec<String>,
 }
 
 /// 任务摘要信息

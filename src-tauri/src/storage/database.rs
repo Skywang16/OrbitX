@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
-use sqlx::{ConnectOptions, Executor};
+use sqlx::{ConnectOptions, Executor, Row};
 use std::fmt;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -173,6 +173,7 @@ impl DatabaseManager {
         }
 
         self.execute_sql_scripts().await?;
+        self.ensure_messages_schema().await?;
         self.insert_default_data().await?;
         Ok(())
     }
@@ -226,10 +227,13 @@ impl DatabaseManager {
 
     async fn execute_sql_scripts(&self) -> DatabaseResult<()> {
         if self.scripts.is_empty() {
+            tracing::warn!("No SQL scripts found for database initialization");
             return Ok(());
         }
 
+        tracing::info!("Executing {} SQL scripts", self.scripts.len());
         for script in self.scripts.iter() {
+            tracing::info!("Executing script: {}", script.name);
             for statement in script.statements.iter() {
                 if statement.trim().is_empty() {
                     continue;
@@ -239,10 +243,41 @@ impl DatabaseManager {
                     .await
                     .map_err(|err| {
                         DatabaseError::internal(format!(
-                            "Failed to execute SQL statement `{statement}`: {err}"
+                            "Failed to execute SQL statement in script {}: {err}\nStatement: {statement}",
+                            script.name
                         ))
                     })?;
             }
+        }
+
+        tracing::info!("All SQL scripts executed successfully");
+        Ok(())
+    }
+
+    async fn ensure_messages_schema(&self) -> DatabaseResult<()> {
+        let rows = sqlx::query("PRAGMA table_info(messages)")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|err| DatabaseError::internal(format!("Failed to inspect messages schema: {err}")))?;
+
+        let mut has_is_internal = false;
+        for row in rows {
+            let name: String = row.try_get("name").unwrap_or_default();
+            if name == "is_internal" {
+                has_is_internal = true;
+                break;
+            }
+        }
+
+        if !has_is_internal {
+            self.pool
+                .execute("ALTER TABLE messages ADD COLUMN is_internal INTEGER NOT NULL DEFAULT 0")
+                .await
+                .map_err(|err| {
+                    DatabaseError::internal(format!(
+                        "Failed to migrate messages schema (add is_internal): {err}"
+                    ))
+                })?;
         }
 
         Ok(())

@@ -14,6 +14,7 @@ pub struct Message {
     pub status: MessageStatus,
     pub blocks: Vec<Block>,
     pub is_summary: bool,
+    pub is_internal: bool,
     pub model_id: Option<String>,
     pub provider_id: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -148,6 +149,7 @@ pub struct AgentSwitchBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtaskBlock {
+    pub id: String,
     pub child_session_id: i64,
     pub agent_type: String,
     pub description: String,
@@ -161,6 +163,7 @@ pub enum SubtaskStatus {
     Pending,
     Running,
     Completed,
+    Cancelled,
     Error,
 }
 
@@ -184,13 +187,18 @@ pub enum TaskEvent {
     },
 
     #[serde(rename_all = "camelCase")]
-    MessageCreated { message: Message },
+    MessageCreated { task_id: String, message: Message },
 
     #[serde(rename_all = "camelCase")]
-    BlockAppended { message_id: i64, block: Block },
+    BlockAppended {
+        task_id: String,
+        message_id: i64,
+        block: Block,
+    },
 
     #[serde(rename_all = "camelCase")]
     BlockUpdated {
+        task_id: String,
         message_id: i64,
         block_id: String,
         block: Block,
@@ -198,6 +206,7 @@ pub enum TaskEvent {
 
     #[serde(rename_all = "camelCase")]
     MessageFinished {
+        task_id: String,
         message_id: i64,
         status: MessageStatus,
         finished_at: DateTime<Utc>,

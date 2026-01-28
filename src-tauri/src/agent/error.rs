@@ -36,6 +36,10 @@ pub enum AgentError {
     Parse(String),
     #[error("Agent internal error: {0}")]
     Internal(String),
+    #[error("Invalid skill format: {0}")]
+    InvalidSkillFormat(String),
+    #[error("Skill not found: {0}")]
+    SkillNotFound(String),
 }
 
 pub type AgentResult<T> = Result<T, AgentError>;
@@ -272,7 +276,9 @@ impl From<AgentError> for TaskExecutorError {
             | AgentError::XmlSerialize(e)
             | AgentError::TemplateRender(e)
             | AgentError::Parse(e)
-            | AgentError::Internal(e) => TaskExecutorError::InternalError(e),
+            | AgentError::Internal(e)
+            | AgentError::InvalidSkillFormat(e)
+            | AgentError::SkillNotFound(e) => TaskExecutorError::InternalError(e),
         }
     }
 }
@@ -291,7 +297,9 @@ impl From<AgentError> for ToolExecutorError {
             | AgentError::XmlSerialize(e)
             | AgentError::TemplateRender(e)
             | AgentError::Parse(e)
-            | AgentError::Internal(e) => ToolExecutorError::InternalError(e),
+            | AgentError::Internal(e)
+            | AgentError::InvalidSkillFormat(e)
+            | AgentError::SkillNotFound(e) => ToolExecutorError::InternalError(e),
         }
     }
 }

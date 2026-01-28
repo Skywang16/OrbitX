@@ -84,6 +84,7 @@
   },
   "agent": {
     "cancel_failed": "取消任务失败",
+    "command_not_found": "命令不存在",
     "context": {
       "file_status_failed": "获取文件上下文状态失败",
       "summary_failed": "生成会话摘要失败"
@@ -99,6 +100,9 @@
     "execute_tree_failed": "执行任务树失败",
     "list_failed": "获取任务列表失败",
     "pause_failed": "暂停任务失败",
+    "switch_failed": "切换 Agent 失败",
+    "tool_confirm_not_found": "工具确认请求不存在",
+    "unknown_agent_type": "未知 Agent 类型",
     "ui": {
       "conversations_failed": "获取会话列表失败",
       "messages_failed": "获取消息列表失败"

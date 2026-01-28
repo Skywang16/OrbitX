@@ -68,16 +68,12 @@ impl AIFeatureConfig {
             config_json: row.try_get("config_json")?,
             created_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("created_at")?)
                 .map_err(|e| {
-                    RepositoryError::internal(format!(
-                        "Failed to parse created_at timestamp: {e}"
-                    ))
+                    RepositoryError::internal(format!("Failed to parse created_at timestamp: {e}"))
                 })?
                 .with_timezone(&Utc),
             updated_at: DateTime::parse_from_rfc3339(&row.try_get::<String, _>("updated_at")?)
                 .map_err(|e| {
-                    RepositoryError::internal(format!(
-                        "Failed to parse updated_at timestamp: {e}"
-                    ))
+                    RepositoryError::internal(format!("Failed to parse updated_at timestamp: {e}"))
                 })?
                 .with_timezone(&Utc),
         })

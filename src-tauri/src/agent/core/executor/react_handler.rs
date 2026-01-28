@@ -1,10 +1,6 @@
 /*!
  * ReAct Handler Trait - 定义TaskExecutor与ReactOrchestrator的接口
  *
- * 零成本抽象：
- * - 使用trait而不是闭包，编译期单态化
- * - 使用引用而不是克隆
- * - 让编译器内联所有调用
  */
 
 use serde_json::Value;
@@ -18,7 +14,6 @@ use crate::llm::anthropic_types::CreateMessageRequest;
 
 /// ReAct执行器接口
 ///
-/// 零成本抽象：编译器会为每个实现类型生成特化代码
 #[async_trait::async_trait]
 pub trait ReactHandler {
     /// 构建LLM请求

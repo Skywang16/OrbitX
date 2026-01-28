@@ -369,7 +369,11 @@
     "no_workspace": "未选择工作区",
     "rules": "规则",
     "mcp_servers": "MCP 服务器",
-    "no_mcp_servers": "未配置 MCP 服务器"
+    "no_mcp_servers": "未配置 MCP 服务器",
+    "global_skills": "全局技能",
+    "workspace_skills": "工作区技能",
+    "no_global_skills": "未找到全局技能",
+    "no_workspace_skills": "未找到工作区技能"
   },
   "workspace": {
     "title": "工作区",

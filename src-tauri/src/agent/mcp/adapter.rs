@@ -53,10 +53,9 @@ impl RunnableTool for McpToolAdapter {
             Ok(call) => {
                 if call.is_error {
                     Ok(ToolResult {
-                        content: vec![ToolResultContent::Error(format!(
-                            "mcp tool error: {}",
-                            serde_json::to_string(&call.content).unwrap_or_default()
-                        ))],
+                        content: vec![ToolResultContent::Error(
+                            serde_json::to_string(&call.content).unwrap_or_default(),
+                        )],
                         status: ToolResultStatus::Error,
                         cancel_reason: None,
                         execution_time_ms: None,
@@ -64,10 +63,9 @@ impl RunnableTool for McpToolAdapter {
                     })
                 } else {
                     Ok(ToolResult {
-                        content: vec![ToolResultContent::Success(format!(
-                            "mcp tool ok: {}",
-                            serde_json::to_string(&call.content).unwrap_or_default()
-                        ))],
+                        content: vec![ToolResultContent::Success(
+                            serde_json::to_string(&call.content).unwrap_or_default(),
+                        )],
                         status: ToolResultStatus::Success,
                         cancel_reason: None,
                         execution_time_ms: None,

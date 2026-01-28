@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -11,7 +10,6 @@ use tokio::sync::{oneshot, Mutex};
 
 use crate::agent::mcp::error::{McpError, McpResult};
 use crate::agent::mcp::protocol::jsonrpc::{JsonRpcId, JsonRpcRequest, JsonRpcResponse};
-use crate::agent::mcp::transport::McpTransport;
 
 pub struct StdioTransport {
     child: Mutex<Option<Child>>,
@@ -139,11 +137,8 @@ impl StdioTransport {
         stdin.flush().await?;
         Ok(())
     }
-}
 
-#[async_trait]
-impl McpTransport for StdioTransport {
-    async fn request(&self, mut request: JsonRpcRequest) -> McpResult<JsonRpcResponse> {
+    pub async fn request(&self, mut request: JsonRpcRequest) -> McpResult<JsonRpcResponse> {
         if !self.is_connected() {
             return Err(McpError::NotConnected);
         }
@@ -167,7 +162,7 @@ impl McpTransport for StdioTransport {
         }
     }
 
-    async fn notify(&self, request: JsonRpcRequest) -> McpResult<()> {
+    pub async fn notify(&self, request: JsonRpcRequest) -> McpResult<()> {
         if !self.is_connected() {
             return Err(McpError::NotConnected);
         }
@@ -176,7 +171,7 @@ impl McpTransport for StdioTransport {
         Ok(())
     }
 
-    async fn close(&self) -> McpResult<()> {
+    pub async fn close(&self) -> McpResult<()> {
         self.connected.store(false, Ordering::SeqCst);
 
         {
@@ -192,7 +187,7 @@ impl McpTransport for StdioTransport {
         Ok(())
     }
 
-    fn is_connected(&self) -> bool {
+    pub fn is_connected(&self) -> bool {
         self.connected.load(Ordering::SeqCst)
     }
 }

@@ -16,6 +16,8 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
   const sessions = ref<SessionRecord[]>([])
   const currentSession = ref<SessionRecord | null>(null)
   const messages = ref<Message[]>([])
+  const messagesBySession = ref<Record<number, Message[]>>({})
+  const messageIndex = new Map<number, { sessionId: number; index: number }>()
   const isLoading = ref(false)
   const recentWorkspaces = ref<WorkspaceRecord[]>([])
 
@@ -50,7 +52,13 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
   }
 
   const fetchMessages = async (sessionId: number) => {
-    messages.value = await workspaceService.getMessages(sessionId)
+    const loaded = await workspaceService.getMessages(sessionId)
+    clearIndexForSession(sessionId)
+    messagesBySession.value[sessionId] = loaded
+    indexSessionMessages(sessionId, loaded)
+    if (currentSession.value?.id === sessionId) {
+      messages.value = loaded
+    }
   }
 
   // 加载指定工作区的数据（会话列表、当前会话、消息）
@@ -68,6 +76,7 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
       await fetchActiveSession(path)
       if (currentSession.value) {
         await fetchMessages(currentSession.value.id)
+        messages.value = messagesBySession.value[currentSession.value.id] || []
       } else {
         messages.value = []
       }
@@ -86,6 +95,7 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
     currentSession.value = sessions.value.find(session => session.id === sessionId) ?? currentSession.value
     if (currentSession.value) {
       await fetchMessages(currentSession.value.id)
+      messages.value = messagesBySession.value[currentSession.value.id] || []
     }
   }
 
@@ -96,6 +106,101 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
     const created = await workspaceService.createSession(path, title)
     sessions.value.unshift(created)
     await switchSession(created.id)
+  }
+
+  const indexSessionMessages = (sessionId: number, list: Message[]) => {
+    for (let i = 0; i < list.length; i++) {
+      messageIndex.set(list[i].id, { sessionId, index: i })
+    }
+  }
+
+  const clearIndexForSession = (sessionId: number) => {
+    const existing = messagesBySession.value[sessionId]
+    if (!existing) return
+    for (const msg of existing) {
+      const pos = messageIndex.get(msg.id)
+      if (pos?.sessionId === sessionId) {
+        messageIndex.delete(msg.id)
+      }
+    }
+  }
+
+  const upsertMessage = (message: Message) => {
+    const sessionId = message.sessionId
+    const existingPos = messageIndex.get(message.id)
+    if (existingPos) {
+      const existingList = messagesBySession.value[existingPos.sessionId]
+      if (existingList?.[existingPos.index]) {
+        // Replace in place; keep stable ordering.
+        existingList[existingPos.index] = message
+      }
+
+      // If the session changed (shouldn't happen), reindex into the new session list.
+      if (existingPos.sessionId !== sessionId) {
+        messageIndex.delete(message.id)
+        const nextList = messagesBySession.value[sessionId] || []
+        nextList.push(message)
+        messagesBySession.value[sessionId] = nextList
+        messageIndex.set(message.id, { sessionId, index: nextList.length - 1 })
+      }
+    } else {
+      const list = messagesBySession.value[sessionId] || []
+      list.push(message)
+      messagesBySession.value[sessionId] = list
+      messageIndex.set(message.id, { sessionId, index: list.length - 1 })
+    }
+
+    if (currentSession.value?.id === sessionId) {
+      messages.value = messagesBySession.value[sessionId] || []
+    }
+  }
+
+  const appendBlock = (messageId: number, block: Message['blocks'][number]) => {
+    const pos = messageIndex.get(messageId)
+    if (!pos) {
+      console.warn('[appendBlock] message not found in index!')
+      return
+    }
+    const msg = messagesBySession.value[pos.sessionId]?.[pos.index]
+    if (!msg) {
+      console.warn('[appendBlock] message not found in messagesBySession!')
+      return
+    }
+    msg.blocks.push(block)
+  }
+
+  const updateBlock = (messageId: number, blockId: string, block: Message['blocks'][number]) => {
+    const pos = messageIndex.get(messageId)
+    if (!pos) {
+      console.warn('[updateBlock] message not found in index!')
+      return
+    }
+    const msg = messagesBySession.value[pos.sessionId]?.[pos.index]
+    if (!msg) {
+      console.warn('[updateBlock] message not found in messagesBySession!')
+      return
+    }
+    const idx = msg.blocks.findIndex(b => 'id' in b && b.id === blockId)
+    if (idx >= 0) {
+      msg.blocks[idx] = block
+    } else {
+      console.warn('[updateBlock] block not found in message!')
+    }
+  }
+
+  const finishMessage = (
+    messageId: number,
+    patch: Partial<Pick<Message, 'status' | 'finishedAt' | 'durationMs' | 'tokenUsage' | 'contextUsage'>>
+  ) => {
+    const pos = messageIndex.get(messageId)
+    if (!pos) return
+    const msg = messagesBySession.value[pos.sessionId]?.[pos.index]
+    if (!msg) return
+    Object.assign(msg, patch)
+  }
+
+  const getCachedMessages = (sessionId: number) => {
+    return messagesBySession.value[sessionId] || []
   }
 
   return {
@@ -110,6 +215,11 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
     switchSession,
     createSession,
     fetchMessages,
+    upsertMessage,
+    appendBlock,
+    updateBlock,
+    finishMessage,
+    getCachedMessages,
     loadRecentWorkspaces,
   }
 })

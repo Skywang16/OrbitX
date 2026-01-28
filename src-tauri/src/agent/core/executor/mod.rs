@@ -18,6 +18,7 @@ mod lifecycle;
 mod react_handler;
 mod react_impl;
 mod state;
+mod subtask;
 mod types;
 
 pub use react_handler::ReactHandler;
@@ -32,8 +33,10 @@ use crate::agent::mcp::McpRegistry;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::orchestrator::PromptOrchestrator;
 use crate::agent::react::orchestrator::ReactOrchestrator;
+use crate::agent::tools::ToolConfirmationManager;
 use crate::agent::workspace_changes::WorkspaceChangeJournal;
 use crate::checkpoint::CheckpointService;
+use crate::config::paths::ConfigPaths;
 use crate::settings::SettingsManager;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
@@ -50,6 +53,7 @@ struct TaskExecutorInner {
     checkpoint_service: Option<Arc<CheckpointService>>,
     workspace_changes: Arc<WorkspaceChangeJournal>,
     vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
+    tool_confirmations: Arc<ToolConfirmationManager>,
 
     // 编排器
     prompt_orchestrator: Arc<PromptOrchestrator>,
@@ -62,13 +66,22 @@ struct TaskExecutorInner {
 
 /// TaskExecutor - 任务执行器
 ///
-/// # 零成本抽象设计
-/// - 使用Arc<TaskContext>而非TaskContext，避免clone
 /// - 所有API返回Arc<TaskContext>，调用者自行管理生命周期
 /// - DashMap直接存储Arc，取用时只增加引用计数
 #[derive(Clone)]
 pub struct TaskExecutor {
     inner: Arc<TaskExecutorInner>,
+}
+
+#[async_trait::async_trait]
+impl crate::agent::core::context::SubtaskRunner for TaskExecutor {
+    async fn run_subtask(
+        &self,
+        parent: &crate::agent::core::context::TaskContext,
+        request: crate::agent::core::context::SubtaskRequest,
+    ) -> crate::agent::error::TaskExecutorResult<crate::agent::core::context::SubtaskResponse> {
+        subtask::run_subtask(self, parent, request).await
+    }
 }
 
 impl TaskExecutor {
@@ -79,6 +92,7 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         settings_manager: Arc<SettingsManager>,
         mcp_registry: Arc<McpRegistry>,
+        config_paths: Arc<ConfigPaths>,
         workspace_changes: Arc<WorkspaceChangeJournal>,
         vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
     ) -> Self {
@@ -86,6 +100,7 @@ impl TaskExecutor {
             Arc::clone(&cache),
             Arc::clone(&database),
             Arc::clone(&settings_manager),
+            Arc::clone(&config_paths),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
@@ -102,6 +117,7 @@ impl TaskExecutor {
                 checkpoint_service: None,
                 workspace_changes,
                 vector_search_engine,
+                tool_confirmations: Arc::new(ToolConfirmationManager::new()),
                 prompt_orchestrator,
                 react_orchestrator,
                 active_tasks: DashMap::new(),
@@ -116,6 +132,7 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         settings_manager: Arc<SettingsManager>,
         mcp_registry: Arc<McpRegistry>,
+        config_paths: Arc<ConfigPaths>,
         checkpoint_service: Arc<CheckpointService>,
         workspace_changes: Arc<WorkspaceChangeJournal>,
         vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
@@ -124,6 +141,7 @@ impl TaskExecutor {
             Arc::clone(&cache),
             Arc::clone(&database),
             Arc::clone(&settings_manager),
+            Arc::clone(&config_paths),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
@@ -140,6 +158,7 @@ impl TaskExecutor {
                 checkpoint_service: Some(checkpoint_service),
                 workspace_changes,
                 vector_search_engine,
+                tool_confirmations: Arc::new(ToolConfirmationManager::new()),
                 prompt_orchestrator,
                 react_orchestrator,
                 active_tasks: DashMap::new(),
@@ -177,6 +196,10 @@ impl TaskExecutor {
 
     pub fn workspace_changes(&self) -> Arc<WorkspaceChangeJournal> {
         Arc::clone(&self.inner.workspace_changes)
+    }
+
+    pub fn tool_confirmations(&self) -> Arc<ToolConfirmationManager> {
+        Arc::clone(&self.inner.tool_confirmations)
     }
 
     pub(crate) fn prompt_orchestrator(&self) -> Arc<PromptOrchestrator> {

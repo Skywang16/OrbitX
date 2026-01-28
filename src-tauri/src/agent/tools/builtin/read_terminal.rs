@@ -123,9 +123,7 @@ Common Use Cases:
         let buffer = match OutputAnalyzer::global().get_pane_buffer(pane_id.as_u32()) {
             Ok(content) => content,
             Err(err) => {
-                return Ok(tool_error(format!(
-                    "Failed to read terminal buffer: {err}"
-                )));
+                return Ok(tool_error(format!("Failed to read terminal buffer: {err}")));
             }
         };
 

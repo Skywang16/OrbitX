@@ -304,11 +304,7 @@ async fn compute_patch_from_snapshot(
         return Some((None, true));
     }
 
-    let mut trimmed = patch_text;
-    if trimmed.len() > MAX_PATCH_CHARS {
-        trimmed.truncate(MAX_PATCH_CHARS.saturating_sub(3));
-        trimmed.push_str("...");
-    }
+    let trimmed = crate::agent::common::truncate_chars(&patch_text, MAX_PATCH_CHARS);
     Some((Some(trimmed), false))
 }
 

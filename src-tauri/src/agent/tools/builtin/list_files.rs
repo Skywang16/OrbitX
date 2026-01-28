@@ -17,6 +17,7 @@ use super::file_utils::ensure_absolute;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListFilesArgs {
+    #[serde(alias = "directory_path", alias = "directoryPath")]
     path: String,
     recursive: Option<bool>,
 }
@@ -104,6 +105,7 @@ Common Use Cases:
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ListFilesArgs = serde_json::from_value(args)?;
+
         let trimmed = args.path.trim();
         if trimmed.is_empty() {
             return Ok(validation_error("Directory path cannot be empty"));
@@ -140,6 +142,7 @@ Common Use Cases:
         let request_path = path.to_string_lossy().to_string();
 
         let response = fs_list_directory(request_path.clone(), recursive).await;
+
         let api_response = match response {
             Ok(resp) => resp,
             Err(err) => {
@@ -155,6 +158,7 @@ Common Use Cases:
         }
 
         let entries = api_response.data.unwrap_or_default();
+
         let header = format!(
             "Directory listing for {} ({}, {} entries):",
             path.display(),
@@ -178,7 +182,6 @@ Common Use Cases:
                 FileRecordSource::FileMentioned,
             ))
             .await?;
-
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(text)],
             status: ToolResultStatus::Success,

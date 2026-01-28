@@ -94,7 +94,6 @@ pub struct CleanupConfig {
     pub auto_cleanup_enabled: bool,
 }
 
-
 impl Default for BufferConfig {
     fn default() -> Self {
         Self {

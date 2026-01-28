@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
+/// ClaudeCode-compatible permissions JSON format.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PermissionRules {
     #[serde(default)]
@@ -11,32 +12,16 @@ pub struct PermissionRules {
     pub ask: Vec<String>,
 }
 
+/// Standard MCP server configuration (stdio transport).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum McpServerConfig {
-    Stdio {
-        command: String,
-        #[serde(default)]
-        args: Vec<String>,
-        #[serde(default)]
-        env: HashMap<String, String>,
-        #[serde(default)]
-        disabled: bool,
-    },
-    Sse {
-        url: String,
-        #[serde(default)]
-        headers: HashMap<String, String>,
-        #[serde(default)]
-        disabled: bool,
-    },
-    StreamableHttp {
-        url: String,
-        #[serde(default)]
-        headers: HashMap<String, String>,
-        #[serde(default)]
-        disabled: bool,
-    },
+pub struct McpServerConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -119,9 +104,9 @@ impl EffectiveSettings {
         let workspace = workspace.unwrap_or(&default_workspace);
 
         let permissions = PermissionRules {
-            allow: union(&global.permissions.allow, &workspace.permissions.allow),
-            deny: union(&global.permissions.deny, &workspace.permissions.deny),
-            ask: union(&global.permissions.ask, &workspace.permissions.ask),
+            allow: merge_vec(&global.permissions.allow, &workspace.permissions.allow),
+            deny: merge_vec(&global.permissions.deny, &workspace.permissions.deny),
+            ask: merge_vec(&global.permissions.ask, &workspace.permissions.ask),
         };
 
         let mcp_servers = merge_maps(&global.mcp_servers, &workspace.mcp_servers);
@@ -146,11 +131,11 @@ fn default_rules_files() -> Vec<String> {
         .collect()
 }
 
-fn union(a: &[String], b: &[String]) -> Vec<String> {
-    let mut set = HashSet::<String>::with_capacity(a.len() + b.len());
-    set.extend(a.iter().cloned());
-    set.extend(b.iter().cloned());
-    set.into_iter().collect()
+fn merge_vec(a: &[String], b: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(a.len() + b.len());
+    out.extend(a.iter().cloned());
+    out.extend(b.iter().cloned());
+    out
 }
 
 fn merge_maps<V: Clone>(

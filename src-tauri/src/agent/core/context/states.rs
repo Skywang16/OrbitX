@@ -16,6 +16,7 @@ use super::chain::Chain;
 pub(crate) struct ExecutionState {
     pub(crate) runtime_status: AgentTaskStatus,
     pub(crate) system_prompt: Option<SystemPrompt>,
+    pub(crate) system_prompt_overlay: Option<SystemPrompt>,
     /// 简化：用 Vec 替代 MessageRingBuffer
     pub(crate) messages: Vec<MessageParam>,
     pub(crate) message_sequence: i64,
@@ -29,6 +30,7 @@ impl ExecutionState {
         Self {
             runtime_status,
             system_prompt: None,
+            system_prompt_overlay: None,
             messages: Vec::new(),
             message_sequence: 0,
             tool_results: Vec::new(),

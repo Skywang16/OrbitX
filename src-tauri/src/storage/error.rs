@@ -210,6 +210,8 @@ pub enum RepositoryError {
 
     #[error("AI model not found: {id}")]
     AiModelNotFound { id: String },
+    #[error("AI model already exists: {provider}/{model}")]
+    AiModelAlreadyExists { provider: String, model: String },
     #[error("AI feature not found: {name}")]
     AiFeatureNotFound { name: String },
     #[error("Command history entry not found: {id}")]

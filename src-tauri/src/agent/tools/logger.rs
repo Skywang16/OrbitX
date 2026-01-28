@@ -17,12 +17,8 @@ pub struct ToolExecutionLogger {
 }
 
 impl ToolExecutionLogger {
-    pub fn new(
-        verbose: bool,
-    ) -> Self {
-        Self {
-            verbose,
-        }
+    pub fn new(verbose: bool) -> Self {
+        Self { verbose }
     }
 
     /// 记录工具执行开始

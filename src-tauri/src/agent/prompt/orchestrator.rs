@@ -1,16 +1,14 @@
-/*!
- * Prompt Orchestrator - 从 executor.rs 提取的 prompt 构建逻辑
- */
+//! Prompt Orchestrator - 构建任务提示词
 
 use std::sync::Arc;
 
-use chrono::Utc;
-
+use crate::agent::agents::AgentConfigLoader;
 use crate::agent::context::ProjectContextLoader;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::prompt::{build_agent_system_prompt, build_agent_user_prompt};
+use crate::agent::prompt::{BuiltinPrompts, PromptBuilder, SystemPromptParts};
+use crate::agent::skill::{SkillManager, SkillMatchingMode};
 use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
-use crate::agent::types::{Agent, Context as AgentContext, Task, TaskStatus};
+use crate::config::paths::ConfigPaths;
 use crate::settings::SettingsManager;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
@@ -19,6 +17,7 @@ pub struct PromptOrchestrator {
     cache: Arc<UnifiedCache>,
     database: Arc<DatabaseManager>,
     settings_manager: Arc<SettingsManager>,
+    config_paths: Arc<ConfigPaths>,
 }
 
 impl PromptOrchestrator {
@@ -26,11 +25,13 @@ impl PromptOrchestrator {
         cache: Arc<UnifiedCache>,
         database: Arc<DatabaseManager>,
         settings_manager: Arc<SettingsManager>,
+        config_paths: Arc<ConfigPaths>,
     ) -> Self {
         Self {
             cache,
             database,
             settings_manager,
+            config_paths,
         }
     }
 
@@ -59,92 +60,184 @@ impl PromptOrchestrator {
             .await
             .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 
-        // 更新缓存以供其他模块快速访问
         let _ = self.cache.set_global_rules(global_rules.clone()).await;
         let _ = self.cache.set_project_rules(project_rules.clone()).await;
 
         Ok((global_rules, project_rules))
     }
 
+    async fn has_agent_messages(
+        &self,
+        session_id: i64,
+        agent_type: &str,
+    ) -> TaskExecutorResult<bool> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(1) FROM messages WHERE session_id = ? AND agent_type = ? LIMIT 1",
+        )
+        .bind(session_id)
+        .bind(agent_type)
+        .fetch_one(self.database.pool())
+        .await
+        .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        Ok(count > 0)
+    }
+
+    fn get_reminder(&self, agent_type: &str, has_plan_history: bool) -> Option<String> {
+        if agent_type == "plan" {
+            return Some(BuiltinPrompts::reminder_plan_mode().to_string());
+        }
+
+        if agent_type == "coder" && has_plan_history {
+            return Some(BuiltinPrompts::reminder_coder_with_plan().to_string());
+        }
+
+        None
+    }
+
+
+    fn format_skills_for_prompt(
+        &self,
+        skills: &[crate::agent::skill::SkillContent],
+    ) -> Option<String> {
+        if skills.is_empty() {
+            return None;
+        }
+
+        let mut blocks = Vec::new();
+        for skill in skills {
+            if skill.instructions.trim().is_empty() {
+                continue;
+            }
+            blocks.push(format!(
+                "<skill name=\"{}\">\n{}\n</skill>",
+                skill.metadata.name,
+                skill.instructions.trim()
+            ));
+        }
+
+        if blocks.is_empty() {
+            None
+        } else {
+            Some(blocks.join("\n\n"))
+        }
+    }
+
     pub async fn build_task_prompts(
         &self,
         session_id: i64,
-        task_id: String,
+        _task_id: String,
         user_prompt: &str,
+        agent_type: &str,
         workspace_path: &str,
         tool_registry: &ToolRegistry,
     ) -> TaskExecutorResult<(String, String)> {
         let cwd = workspace_path;
-        let tool_schemas_full =
-            tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
-                cwd: cwd.to_string(),
-            });
 
-        let tool_names: Vec<String> = tool_schemas_full.iter().map(|s| s.name.clone()).collect();
+        // 加载 agent 配置
+        let agent_configs = AgentConfigLoader::load_for_workspace(&std::path::PathBuf::from(cwd))
+            .await
+            .unwrap_or_default();
 
-        let agent_info = Agent {
-            name: "OrbitX Agent".to_string(),
-            description: "An AI coding assistant for OrbitX".to_string(),
-            capabilities: vec![],
-            tools: tool_names,
-        };
+        let agent_cfg = agent_configs
+            .get(agent_type)
+            .or_else(|| agent_configs.get("coder"));
 
-        let task_for_prompt = Task {
-            id: task_id,
-            session_id,
-            user_prompt: user_prompt.to_owned(),
-            xml: None,
-            status: TaskStatus::Created,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
+        // 获取工具描述
+        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
+            cwd: cwd.to_string(),
+        });
+        let tools_description = tool_schemas
+            .iter()
+            .map(|s| format!("## {}\n{}", s.name, s.description))
+            .collect::<Vec<_>>()
+            .join("\n\n");
 
-        let mut prompt_ctx = AgentContext {
-            working_directory: Some(cwd.to_owned()),
-            ..Default::default()
-        };
-        prompt_ctx.additional_context.insert(
-            "taskPrompt".to_string(),
-            serde_json::Value::String(user_prompt.to_owned()),
-        );
-
-        // 获取全局/项目规则
+        // 加载规则
         let (global_rules, project_rules) = self.load_rules(workspace_path).await?;
 
-        // 合并项目上下文和用户规则
-        let mut prompt_parts = Vec::new();
-
+        // 加载项目上下文
         let loader = ProjectContextLoader::new(cwd);
-        if let Some(ctx) = loader.load_with_preference(project_rules.as_deref()).await {
-            prompt_parts.push(ctx.format_for_prompt());
-        }
+        let project_context = loader.load_with_preference(project_rules.as_deref()).await;
 
+        // 构建自定义指令
+        let mut custom_parts = Vec::new();
+        if let Some(ctx) = project_context {
+            custom_parts.push(ctx.format_for_prompt());
+        }
         if let Some(rules) = global_rules {
-            prompt_parts.push(rules);
+            custom_parts.push(rules);
         }
 
-        let ext_sys_prompt = if prompt_parts.is_empty() {
+        // 加载 skills - 使用新的 SkillManager (全局 + 工作区)
+        let skill_manager = SkillManager::new();
+        let workspace_path_buf = std::path::PathBuf::from(cwd);
+
+        // 获取全局 skills 目录
+        let global_skills_dir = self.config_paths.skills_dir();
+
+        // 发现技能 (全局 + 工作区)
+        if let Ok(_) = skill_manager
+            .discover_skills(Some(global_skills_dir), Some(&workspace_path_buf))
+            .await
+        {
+            // 提取显式引用的技能列表
+            let explicit_skills = agent_cfg
+                .as_ref()
+                .map(|cfg| cfg.skills.clone())
+                .unwrap_or_default();
+
+            // 激活技能 (使用 Hybrid 模式)
+            if let Ok(activated_skills) = skill_manager
+                .activate_skills(
+                    user_prompt,
+                    SkillMatchingMode::Hybrid,
+                    Some(&explicit_skills),
+                )
+                .await
+            {
+                if let Some(skill_block) = self.format_skills_for_prompt(&activated_skills) {
+                    custom_parts.push(skill_block);
+                }
+            }
+        }
+
+        let custom_instructions = if custom_parts.is_empty() {
             None
         } else {
-            Some(prompt_parts.join("\n\n"))
+            Some(custom_parts.join("\n\n"))
         };
 
-        let system_prompt = build_agent_system_prompt(
-            agent_info.clone(),
-            Some(task_for_prompt.clone()),
-            Some(prompt_ctx.clone()),
-            tool_schemas_full.clone(),
-            ext_sys_prompt,
-        )
-        .await
-        .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+        // 获取 reminder
+        let has_plan_history = self
+            .has_agent_messages(session_id, "plan")
+            .await
+            .unwrap_or(false);
+        let reminder = self.get_reminder(agent_type, has_plan_history);
 
-        let user_prompt_built =
-            build_agent_user_prompt(Some(task_for_prompt), Some(prompt_ctx), tool_schemas_full)
-                .await
-                .map_err(|e| {
-                    TaskExecutorError::InternalError(format!("Failed to build user prompt: {e}"))
-                })?;
+        // 构建环境信息
+        let builder = PromptBuilder::new(Some(workspace_path.to_string()));
+        let env_info = builder.build_env_info(Some(cwd), None);
+
+        // 获取 agent 提示词
+        let agent_prompt = agent_cfg.map(|cfg| cfg.system_prompt.clone());
+
+        // 组装 system prompt
+        let mut prompt_builder = PromptBuilder::new(Some(workspace_path.to_string()));
+        let system_prompt = prompt_builder
+            .build_system_prompt(SystemPromptParts {
+                agent_prompt,
+                rules: Some(BuiltinPrompts::rules().to_string()),
+                methodology: Some(BuiltinPrompts::methodology().to_string()),
+                env_info: Some(env_info),
+                reminder,
+                custom_instructions,
+                tools_description: Some(tools_description),
+            })
+            .await;
+
+        // user prompt 直接返回原始内容
+        let user_prompt_built = user_prompt.to_string();
 
         Ok((system_prompt, user_prompt_built))
     }

@@ -48,10 +48,7 @@ pub async fn ai_models_remove(
     validate_not_empty!(model_id, "common.invalid_params");
 
     match state.ai_service.remove_model(&model_id).await {
-        Ok(_) => Ok(api_success!(
-            EmptyData,
-            "ai.remove_model_success"
-        )),
+        Ok(_) => Ok(api_success!(EmptyData, "ai.remove_model_success")),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "删除AI模型失败");
             Ok(api_error!("ai.remove_model_failed"))
@@ -69,10 +66,7 @@ pub async fn ai_models_update(
     validate_not_empty!(model_id, "common.invalid_params");
 
     match state.ai_service.update_model(&model_id, updates).await {
-        Ok(_) => Ok(api_success!(
-            EmptyData,
-            "ai.update_model_success"
-        )),
+        Ok(_) => Ok(api_success!(EmptyData, "ai.update_model_success")),
         Err(error) => {
             warn!(error = %error, model_id = %model_id, "更新AI模型失败");
             Ok(api_error!("ai.update_model_failed"))
@@ -97,10 +91,7 @@ pub async fn ai_models_test_connection(
     }
 
     match state.ai_service.test_connection_with_config(&config).await {
-        Ok(_result) => Ok(api_success!(
-            EmptyData,
-            "ai.test_connection_success"
-        )),
+        Ok(_result) => Ok(api_success!(EmptyData, "ai.test_connection_success")),
         Err(e) => Ok(api_error!("ai.test_connection_error", "error" => e.to_string())),
     }
 }

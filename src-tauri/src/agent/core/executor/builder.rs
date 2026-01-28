@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 use tauri::ipc::Channel;
 
+use crate::agent::agents::AgentConfigLoader;
 use crate::agent::config::TaskExecutionConfig;
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::tools::RunnableTool;
 use crate::agent::types::TaskEvent;
 
 impl TaskExecutor {
@@ -24,7 +24,8 @@ impl TaskExecutor {
         params: &ExecuteTaskParams,
         progress_channel: Option<Channel<TaskEvent>>,
     ) -> TaskExecutorResult<Arc<TaskContext>> {
-        self.finish_running_task_for_session(params.session_id).await?;
+        self.finish_running_task_for_session(params.session_id)
+            .await?;
         self.create_new_context(params, progress_channel).await
     }
 
@@ -37,9 +38,9 @@ impl TaskExecutor {
         }
 
         for task_id in to_cancel {
-            if let Some((_, ctx)) = self.active_tasks().remove(&task_id) {
-                ctx.abort();
-            }
+            let _ = self
+                .cancel_task(&task_id, Some("superseded by new user message".to_string()))
+                .await;
         }
 
         Ok(())
@@ -59,33 +60,55 @@ impl TaskExecutor {
                 .unwrap_or_else(|_| std::path::PathBuf::from(&requested_workspace));
         let cwd = workspace_root.to_string_lossy().to_string();
 
+        let session = self
+            .agent_persistence()
+            .sessions()
+            .get(params.session_id)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
+            .ok_or_else(|| {
+                TaskExecutorError::StatePersistenceFailed(format!(
+                    "session {} not found",
+                    params.session_id
+                ))
+            })?;
+        let agent_type = params
+            .agent_type
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| session.agent_type.clone());
+
         let effective = self
             .settings_manager()
             .get_effective_settings(Some(workspace_root.clone()))
             .await
             .map_err(|e| TaskExecutorError::ConfigurationError(e.to_string()))?;
 
-        let workspace_settings = self
-            .settings_manager()
-            .get_workspace_settings(&workspace_root)
+        let agent_configs = AgentConfigLoader::load_for_workspace(&workspace_root)
             .await
-            .map_err(|e| TaskExecutorError::ConfigurationError(e.to_string()))?;
-        let _ = self
-            .mcp_registry()
-            .init_workspace_servers(&workspace_root, &effective, workspace_settings.as_ref())
-            .await;
+            .map_err(|e| {
+                tracing::warn!("Failed to load agent configs: {}, using defaults", e);
+            })
+            .unwrap_or_default();
 
-        let mcp_tools = self
-            .mcp_registry()
-            .get_tools_for_workspace(&cwd)
-            .into_iter()
-            .map(|t| Arc::new(t) as Arc<dyn RunnableTool>)
-            .collect::<Vec<_>>();
+        // Get tool filter for the requested agent type.
+        // If not found, fall back to "coder" config (the default primary agent).
+        let agent_tool_filter = agent_configs
+            .get(&agent_type)
+            .or_else(|| {
+                if agent_type != "coder" {
+                    tracing::debug!("Agent type '{}' not found, falling back to 'coder'", agent_type);
+                }
+                agent_configs.get("coder")
+            })
+            .map(|cfg| cfg.tool_filter.clone());
 
         let tool_registry = crate::agent::tools::create_tool_registry(
             "agent",
             effective.permissions,
-            mcp_tools,
+            agent_tool_filter,
+            self.tool_confirmations(),
+            Vec::new(),
             self.vector_search_engine(),
         )
         .await;
@@ -94,9 +117,10 @@ impl TaskExecutor {
             task_id.clone(),
             params.session_id,
             params.user_prompt.clone(),
-            "coder".to_string(),
+            agent_type,
             TaskExecutionConfig::default(),
             cwd,
+            true,
             progress_channel,
             crate::agent::core::context::TaskContextDeps {
                 tool_registry,
@@ -104,6 +128,7 @@ impl TaskExecutor {
                 agent_persistence: Arc::clone(&self.agent_persistence()),
                 checkpoint_service: self.checkpoint_service(),
                 workspace_changes: self.workspace_changes(),
+                subtask_runner: Arc::new(self.clone()),
             },
         )
         .await?;
@@ -115,4 +140,3 @@ impl TaskExecutor {
         Ok(ctx)
     }
 }
-

@@ -23,6 +23,7 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::persistence::AgentPersistence;
+use crate::agent::prompt::PromptBuilder;
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
 use crate::agent::types::{Block, TextBlock, ThinkingBlock};
 use crate::llm::anthropic_types::{ContentBlock, ContentBlockStart, ContentDelta, StreamEvent};
@@ -55,7 +56,6 @@ impl ReactOrchestrator {
 
     /// ReAct循环执行（核心逻辑）
     ///
-    /// 零成本抽象：使用泛型参数H而不是闭包
     /// 编译器会为每个H类型生成特化代码，完全内联
     pub async fn run_react_loop<H>(
         &self,
@@ -71,6 +71,9 @@ impl ReactOrchestrator {
 
             // ===== Phase 1: 迭代初始化 =====
             let iteration = context.increment_iteration().await?;
+            // Clear transient system reminders (e.g. loop warnings) each iteration; they are
+            // meant to influence the *next* step only, not permanently replace the base prompt.
+            context.set_system_prompt_overlay(None).await?;
 
             let react_iteration_index = {
                 let mut react = context.states.react_runtime.write().await;
@@ -303,6 +306,7 @@ impl ReactOrchestrator {
             } else {
                 None
             };
+
             context
                 .add_assistant_message(final_text.clone(), Some(tool_use_blocks))
                 .await?;
@@ -333,12 +337,14 @@ impl ReactOrchestrator {
                             duplicates_count, iteration
                         );
 
+                        let builder = PromptBuilder::new(None);
+                        let warning = builder.get_duplicate_tools_warning(duplicates_count);
                         let _ = context
-                            .set_system_prompt(format!(
-                                "<system-reminder type=\"duplicate-tools\">\n\
-                                 You called {duplicates_count} duplicate tool(s) in this iteration.\n\
-                                 The results haven't changed. Please use the existing results instead of re-calling the same tools.\n\
-                                 </system-reminder>"
+                            .set_system_prompt_overlay(Some(
+                                crate::llm::anthropic_types::SystemPrompt::Text(format!(
+                                    "<system-reminder type=\"duplicate-tools\">\n{}\n</system-reminder>",
+                                    warning
+                                )),
                             ))
                             .await;
                     }
@@ -388,7 +394,11 @@ impl ReactOrchestrator {
                             .await
                     {
                         warn!("Loop pattern detected in iteration {}", iteration);
-                        let _ = context.set_system_prompt(loop_warning).await;
+                        let _ = context
+                            .set_system_prompt_overlay(Some(
+                                crate::llm::anthropic_types::SystemPrompt::Text(loop_warning),
+                            ))
+                            .await;
                     }
 
                     let snapshot = iter_ctx.finalize();
@@ -463,6 +473,7 @@ impl ReactOrchestrator {
 
         context
             .emit_event(crate::agent::types::TaskEvent::MessageCreated {
+                task_id: context.task_id.to_string(),
                 message: job.summary_message.clone(),
             })
             .await?;
@@ -475,6 +486,7 @@ impl ReactOrchestrator {
         let context_usage = context.calculate_context_usage(model_id).await;
         context
             .emit_event(crate::agent::types::TaskEvent::MessageFinished {
+                task_id: context.task_id.to_string(),
                 message_id: completed.message_id,
                 status: completed.status,
                 finished_at: completed.finished_at,

@@ -6,7 +6,17 @@
 
 import { invoke } from '@/utils/request'
 import { agentChannelApi } from '@/api/channel/agent'
-import type { ExecuteTaskParams, TaskListFilter, TaskProgressPayload, TaskProgressStream, TaskSummary } from './types'
+import type {
+  CommandRenderResult,
+  CommandSummary,
+  ExecuteTaskParams,
+  SkillSummary,
+  SkillValidationResult,
+  TaskListFilter,
+  TaskProgressPayload,
+  TaskProgressStream,
+  TaskSummary,
+} from './types'
 
 /**
  * Agent API 主类
@@ -37,13 +47,9 @@ export class AgentApi {
     await invoke('agent_cancel_task', { taskId, reason })
   }
 
-  confirmTool = async (
-    taskId: string,
-    requestId: string,
-    decision: 'allow_once' | 'allow_always' | 'deny'
-  ): Promise<void> => {
+  confirmTool = async (requestId: string, decision: 'allow_once' | 'allow_always' | 'deny'): Promise<void> => {
     await invoke('agent_tool_confirm', {
-      params: { taskId, requestId, decision },
+      params: { requestId, decision },
     })
   }
 
@@ -56,6 +62,30 @@ export class AgentApi {
     return await invoke<TaskSummary[]>('agent_list_tasks', {
       sessionId: filters?.sessionId,
       statusFilter: filters?.status,
+    })
+  }
+
+  listCommands = async (workspacePath: string): Promise<CommandSummary[]> => {
+    return await invoke<CommandSummary[]>('agent_list_commands', {
+      params: { workspacePath },
+    })
+  }
+
+  renderCommand = async (workspacePath: string, name: string, input: string): Promise<CommandRenderResult> => {
+    return await invoke<CommandRenderResult>('agent_render_command', {
+      params: { workspacePath, name, input },
+    })
+  }
+
+  listSkills = async (workspacePath: string): Promise<SkillSummary[]> => {
+    return await invoke<SkillSummary[]>('agent_list_skills', {
+      params: { workspacePath },
+    })
+  }
+
+  validateSkill = async (skillPath: string): Promise<SkillValidationResult> => {
+    return await invoke<SkillValidationResult>('agent_validate_skill', {
+      skillPath,
     })
   }
 

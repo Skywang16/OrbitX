@@ -1,3 +1,9 @@
-// Common/shared utilities for Agent module
+//! Common/shared utilities for Agent module
 
-pub use crate::agent::prompt::template_engine::TemplateEngine;
+// Re-export prompt utilities
+pub use crate::agent::prompt::{BuiltinPrompts, PromptBuilder};
+
+pub mod llm_text;
+pub mod text;
+
+pub use text::{truncate_chars, truncate_chars_no_ellipsis};

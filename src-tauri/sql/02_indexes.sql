@@ -5,7 +5,7 @@
 CREATE INDEX IF NOT EXISTS idx_terminal_sessions_active ON terminal_sessions(is_active);
 
 -- AI模型索引
-CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON ai_models(provider);
+-- 唯一索引已在表定义中通过 UNIQUE(provider, model_name) 约束创建
 CREATE INDEX IF NOT EXISTS idx_ai_features_enabled ON ai_features(enabled);
 
 -- 审计日志索引
@@ -27,6 +27,9 @@ CREATE INDEX IF NOT EXISTS idx_completion_entities_type_last_used
     ON completion_entity_stats(entity_type, last_used_ts DESC);
 
 -- Agent system (new design) indexes
+CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
+    ON workspaces(last_accessed_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_path);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_type);
@@ -40,3 +43,11 @@ CREATE INDEX IF NOT EXISTS idx_tool_executions_message ON tool_executions(messag
 CREATE INDEX IF NOT EXISTS idx_tool_executions_session ON tool_executions(session_id);
 CREATE INDEX IF NOT EXISTS idx_tool_executions_tool ON tool_executions(tool_name);
 CREATE INDEX IF NOT EXISTS idx_tool_executions_status ON tool_executions(status);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace ON checkpoints(workspace_path, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_message ON checkpoints(message_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_parent ON checkpoints(parent_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_files_checkpoint ON checkpoint_file_snapshots(checkpoint_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_files_blob ON checkpoint_file_snapshots(blob_hash);
+CREATE INDEX IF NOT EXISTS idx_blob_refcount ON checkpoint_blobs(ref_count);

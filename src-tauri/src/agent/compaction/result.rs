@@ -13,4 +13,3 @@ pub enum CompactionPhase {
 pub struct CompactionResult {
     pub phase: CompactionPhase,
 }
-

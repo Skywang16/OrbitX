@@ -104,10 +104,8 @@ impl ContextBuilder {
         let note = "Use read_file before editing to load contents.";
         content.push_str(note);
 
-        if content.len() > self.config.max_file_context_chars {
-            let limit = self.config.max_file_context_chars.saturating_sub(3);
-            content.truncate(limit);
-            content.push_str("...");
+        if content.chars().count() > self.config.max_file_context_chars {
+            content = crate::agent::common::truncate_chars(&content, self.config.max_file_context_chars);
         }
 
         Some(MessageParam {

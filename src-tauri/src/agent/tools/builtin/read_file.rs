@@ -689,6 +689,7 @@ Examples:
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ReadFileArgs = serde_json::from_value(args)?;
+
         let path = match ensure_absolute(&args.path, &context.cwd) {
             Ok(resolved) => resolved,
             Err(err) => return Ok(validation_error(err.to_string())),
@@ -744,7 +745,7 @@ Examples:
 
         // 根据模式处理
         let mode = args.mode.as_deref().unwrap_or("full");
-        match mode {
+        let result = match mode {
             "outline" => Ok(self.read_outline(&path, &raw_content)),
             "symbol" => {
                 if let Some(symbol_name) = args.symbol {
@@ -757,7 +758,8 @@ Examples:
             }
             "full" => Ok(self.read_full(&raw_content, args.offset, args.limit)),
             _ => Ok(self.read_full(&raw_content, args.offset, args.limit)),
-        }
+        };
+        result
     }
 }
 

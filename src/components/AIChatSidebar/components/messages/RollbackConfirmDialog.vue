@@ -2,6 +2,7 @@
   import { ref, onMounted, onBeforeUnmount } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useRollbackDialogStore } from '@/stores/rollbackDialog'
+  import { useWorkspaceStore } from '@/stores/workspace'
   import { checkpointApi } from '@/api/checkpoint'
   import type { FileChangeType } from '@/types/domain/checkpoint'
   import { useCheckpoint } from '@/composables/useCheckpoint'
@@ -12,6 +13,7 @@
 
   const { t } = useI18n()
   const store = useRollbackDialogStore()
+  const workspaceStore = useWorkspaceStore()
   const { refreshCheckpoints } = useCheckpoint()
   const isConfirming = ref(false)
 
@@ -65,6 +67,7 @@
       }
 
       await refreshCheckpoints(checkpoint.sessionId, workspacePath)
+      await workspaceStore.fetchMessages(checkpoint.sessionId)
 
       emit('rollback', {
         success: true,

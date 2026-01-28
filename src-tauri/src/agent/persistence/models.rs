@@ -74,7 +74,9 @@ impl FromStr for SessionStatus {
             "completed" => Ok(Self::Completed),
             "error" => Ok(Self::Error),
             "cancelled" => Ok(Self::Cancelled),
-            other => Err(AgentError::Parse(format!("Unknown session status: {other}"))),
+            other => Err(AgentError::Parse(format!(
+                "Unknown session status: {other}"
+            ))),
         }
     }
 }
@@ -177,4 +179,3 @@ pub(crate) fn build_tool_execution(row: &sqlx::sqlite::SqliteRow) -> AgentResult
         duration_ms: row.try_get("duration_ms")?,
     })
 }
-

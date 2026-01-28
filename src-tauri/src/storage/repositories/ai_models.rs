@@ -53,8 +53,7 @@ impl std::str::FromStr for AIProvider {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum ModelType {
     #[serde(rename = "chat")]
     #[default]
@@ -85,7 +84,6 @@ impl std::str::FromStr for ModelType {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -230,17 +228,26 @@ impl<'a> AIModels<'a> {
     }
 
     /// 保存模型（自动加密密钥）
+    ///
+    /// 基于 (provider, model_name) 唯一约束进行 UPSERT:
+    /// - 如果组合不存在,插入新记录
+    /// - 如果组合已存在,更新现有记录
     pub async fn save(&self, model: &AIModelConfig) -> RepositoryResult<()> {
+        use crate::storage::error::RepositoryError;
+
         // 加密 API 密钥
         let encrypted_key = if !model.api_key.is_empty() {
             let encrypted_bytes = self.db.encrypt_data(&model.api_key).await?;
             Some(BASE64.encode(&encrypted_bytes))
         } else {
             // 保留现有密钥
-            sqlx::query_scalar("SELECT api_key_encrypted FROM ai_models WHERE id = ?")
-                .bind(&model.id)
-                .fetch_optional(self.db.pool())
-                .await?
+            sqlx::query_scalar(
+                "SELECT api_key_encrypted FROM ai_models WHERE provider = ? AND model_name = ?"
+            )
+            .bind(model.provider.to_string())
+            .bind(&model.model)
+            .fetch_optional(self.db.pool())
+            .await?
         };
 
         let config_json = model
@@ -248,12 +255,20 @@ impl<'a> AIModels<'a> {
             .as_ref()
             .map(|opts| serde_json::to_string(opts).unwrap_or_default());
 
-        sqlx::query(
+        // UPSERT 基于业务主键 (provider, model_name)
+        let result = sqlx::query(
             r#"
-            INSERT OR REPLACE INTO ai_models 
-            (id, provider, api_url, api_key_encrypted, model_name, model_type, 
+            INSERT INTO ai_models
+            (id, provider, api_url, api_key_encrypted, model_name, model_type,
              config_json, use_custom_base_url, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, model_name) DO UPDATE SET
+                api_url = excluded.api_url,
+                api_key_encrypted = excluded.api_key_encrypted,
+                model_type = excluded.model_type,
+                config_json = excluded.config_json,
+                use_custom_base_url = excluded.use_custom_base_url,
+                updated_at = excluded.updated_at
             "#,
         )
         .bind(&model.id)
@@ -267,9 +282,18 @@ impl<'a> AIModels<'a> {
         .bind(model.created_at)
         .bind(model.updated_at)
         .execute(self.db.pool())
-        .await?;
+        .await;
 
-        Ok(())
+        match result {
+            Ok(_) => Ok(()),
+            Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+                Err(RepositoryError::AiModelAlreadyExists {
+                    provider: model.provider.to_string(),
+                    model: model.model.clone(),
+                })
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// 根据 ID 查找模型
