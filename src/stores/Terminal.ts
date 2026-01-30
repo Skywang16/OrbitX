@@ -277,6 +277,12 @@ export const useTerminalStore = defineStore('Terminal', () => {
     terminals.value.push(terminal)
   }
 
+  const registerRuntimeTerminal = (terminal: RuntimeTerminalState) => {
+    // Runtime terminals (e.g. agent/background terminals) may already have output;
+    // do not mark them as "new" to avoid hiding the terminal UI behind the loading overlay.
+    upsertRuntimeTerminal(terminal)
+  }
+
   const createTerminalPane = async (initialDirectory?: string, options?: { shellName?: string }): Promise<number> => {
     const paneId =
       typeof options?.shellName === 'string'
@@ -415,29 +421,6 @@ export const useTerminalStore = defineStore('Terminal', () => {
     shellManager.value.isLoading = false
   }
 
-  const createAgentTerminal = async (initialDirectory?: string): Promise<number> => {
-    return queueOperation(async () => {
-      const existingAgentTerminal = terminals.value.find(terminal => terminal.shell === 'agent')
-      if (existingAgentTerminal) return existingAgentTerminal.id
-
-      const paneId = await terminalApi.createTerminal({
-        rows: 24,
-        cols: 80,
-        cwd: initialDirectory,
-      })
-
-      upsertRuntimeTerminal({
-        id: paneId,
-        cwd: initialDirectory || '~',
-        shell: 'agent',
-      })
-      paneCreatedAtById.value.set(paneId, Date.now())
-      paneOutputById.value.set(paneId, false)
-
-      return paneId
-    })
-  }
-
   const initializeShellManager = async () => {
     await loadAvailableShells()
   }
@@ -500,7 +483,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
     unregisterTerminalCallbacks,
     hasOutputSubscribers,
     dispatchOutputForPaneId,
-    createAgentTerminal,
+    registerRuntimeTerminal,
     closeTerminal,
     setActiveTerminal,
     writeToTerminal,

@@ -6,9 +6,7 @@ use crate::agent::agents::AgentConfigLoader;
 use crate::agent::context::ProjectContextLoader;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::prompt::{BuiltinPrompts, PromptBuilder, SystemPromptParts};
-use crate::agent::skill::{SkillManager, SkillMatchingMode};
-use crate::agent::tools::{ToolDescriptionContext, ToolRegistry};
-use crate::config::paths::ConfigPaths;
+use crate::agent::tools::ToolRegistry;
 use crate::settings::SettingsManager;
 use crate::storage::repositories::AppPreferences;
 use crate::storage::{DatabaseManager, UnifiedCache};
@@ -17,7 +15,6 @@ pub struct PromptOrchestrator {
     cache: Arc<UnifiedCache>,
     database: Arc<DatabaseManager>,
     settings_manager: Arc<SettingsManager>,
-    config_paths: Arc<ConfigPaths>,
 }
 
 impl PromptOrchestrator {
@@ -25,13 +22,11 @@ impl PromptOrchestrator {
         cache: Arc<UnifiedCache>,
         database: Arc<DatabaseManager>,
         settings_manager: Arc<SettingsManager>,
-        config_paths: Arc<ConfigPaths>,
     ) -> Self {
         Self {
             cache,
             database,
             settings_manager,
-            config_paths,
         }
     }
 
@@ -96,32 +91,9 @@ impl PromptOrchestrator {
     }
 
 
-    fn format_skills_for_prompt(
-        &self,
-        skills: &[crate::agent::skill::SkillContent],
-    ) -> Option<String> {
-        if skills.is_empty() {
-            return None;
-        }
-
-        let mut blocks = Vec::new();
-        for skill in skills {
-            if skill.instructions.trim().is_empty() {
-                continue;
-            }
-            blocks.push(format!(
-                "<skill name=\"{}\">\n{}\n</skill>",
-                skill.metadata.name,
-                skill.instructions.trim()
-            ));
-        }
-
-        if blocks.is_empty() {
-            None
-        } else {
-            Some(blocks.join("\n\n"))
-        }
-    }
+    // format_skills_for_prompt 已移除：
+    // Skill 系统改为 Tool 机制，LLM 通过 tool calling 自动激活 skill
+    // skill 内容不再预先注入到 system prompt 中
 
     pub async fn build_task_prompts(
         &self,
@@ -130,7 +102,7 @@ impl PromptOrchestrator {
         user_prompt: &str,
         agent_type: &str,
         workspace_path: &str,
-        tool_registry: &ToolRegistry,
+        _tool_registry: &ToolRegistry,
     ) -> TaskExecutorResult<(String, String)> {
         let cwd = workspace_path;
 
@@ -142,16 +114,6 @@ impl PromptOrchestrator {
         let agent_cfg = agent_configs
             .get(agent_type)
             .or_else(|| agent_configs.get("coder"));
-
-        // 获取工具描述
-        let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
-            cwd: cwd.to_string(),
-        });
-        let tools_description = tool_schemas
-            .iter()
-            .map(|s| format!("## {}\n{}", s.name, s.description))
-            .collect::<Vec<_>>()
-            .join("\n\n");
 
         // 加载规则
         let (global_rules, project_rules) = self.load_rules(workspace_path).await?;
@@ -169,38 +131,8 @@ impl PromptOrchestrator {
             custom_parts.push(rules);
         }
 
-        // 加载 skills - 使用新的 SkillManager (全局 + 工作区)
-        let skill_manager = SkillManager::new();
-        let workspace_path_buf = std::path::PathBuf::from(cwd);
-
-        // 获取全局 skills 目录
-        let global_skills_dir = self.config_paths.skills_dir();
-
-        // 发现技能 (全局 + 工作区)
-        if let Ok(_) = skill_manager
-            .discover_skills(Some(global_skills_dir), Some(&workspace_path_buf))
-            .await
-        {
-            // 提取显式引用的技能列表
-            let explicit_skills = agent_cfg
-                .as_ref()
-                .map(|cfg| cfg.skills.clone())
-                .unwrap_or_default();
-
-            // 激活技能 (使用 Hybrid 模式)
-            if let Ok(activated_skills) = skill_manager
-                .activate_skills(
-                    user_prompt,
-                    SkillMatchingMode::Hybrid,
-                    Some(&explicit_skills),
-                )
-                .await
-            {
-                if let Some(skill_block) = self.format_skills_for_prompt(&activated_skills) {
-                    custom_parts.push(skill_block);
-                }
-            }
-        }
+        // Skill 系统已改为 Tool 机制，不再需要在此处预先注入
+        // LLM 会通过 tool calling 自动激活所需的 skill
 
         let custom_instructions = if custom_parts.is_empty() {
             None
@@ -232,7 +164,6 @@ impl PromptOrchestrator {
                 env_info: Some(env_info),
                 reminder,
                 custom_instructions,
-                tools_description: Some(tools_description),
             })
             .await;
 

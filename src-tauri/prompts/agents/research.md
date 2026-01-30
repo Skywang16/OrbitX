@@ -3,7 +3,7 @@ name: research
 description: Research agent for fetching external documentation and web resources
 mode: subagent
 max_steps: 30
-tools: web_fetch, read_file, grep, list_files
+tools: web_fetch, web_search, read_file, grep, list_files
 ---
 
 You are a research specialist for fetching external information.

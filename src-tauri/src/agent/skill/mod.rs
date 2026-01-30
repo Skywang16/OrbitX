@@ -51,19 +51,17 @@
 
 mod loader;
 mod manager;
-mod matcher;
 mod registry;
 #[cfg(test)]
 mod test_utils;
+mod tool;
 mod types;
 mod validator;
 
 // 公开 API
 pub use loader::SkillLoader;
 pub use manager::SkillManager;
-pub use matcher::SkillMatcher;
 pub use registry::{SkillRegistry, SkillRegistryRef};
-pub use types::{
-    SkillContent, SkillEntry, SkillMatchingMode, SkillMetadata, SkillSummary, ValidationResult,
-};
+pub use tool::SkillTool;
+pub use types::{SkillContent, SkillEntry, SkillMetadata, SkillSummary, ValidationResult};
 pub use validator::SkillValidator;

@@ -36,7 +36,6 @@ use crate::agent::react::orchestrator::ReactOrchestrator;
 use crate::agent::tools::ToolConfirmationManager;
 use crate::agent::workspace_changes::WorkspaceChangeJournal;
 use crate::checkpoint::CheckpointService;
-use crate::config::paths::ConfigPaths;
 use crate::settings::SettingsManager;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
@@ -92,7 +91,6 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         settings_manager: Arc<SettingsManager>,
         mcp_registry: Arc<McpRegistry>,
-        config_paths: Arc<ConfigPaths>,
         workspace_changes: Arc<WorkspaceChangeJournal>,
         vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
     ) -> Self {
@@ -100,7 +98,6 @@ impl TaskExecutor {
             Arc::clone(&cache),
             Arc::clone(&database),
             Arc::clone(&settings_manager),
-            Arc::clone(&config_paths),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),
@@ -132,7 +129,6 @@ impl TaskExecutor {
         agent_persistence: Arc<AgentPersistence>,
         settings_manager: Arc<SettingsManager>,
         mcp_registry: Arc<McpRegistry>,
-        config_paths: Arc<ConfigPaths>,
         checkpoint_service: Arc<CheckpointService>,
         workspace_changes: Arc<WorkspaceChangeJournal>,
         vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
@@ -141,7 +137,6 @@ impl TaskExecutor {
             Arc::clone(&cache),
             Arc::clone(&database),
             Arc::clone(&settings_manager),
-            Arc::clone(&config_paths),
         ));
         let react_orchestrator = Arc::new(ReactOrchestrator::new(
             Arc::clone(&database),

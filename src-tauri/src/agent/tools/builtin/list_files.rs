@@ -43,37 +43,21 @@ impl RunnableTool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        r#"Lists files and directories in a given path with detailed information and smart filtering.
+        r#"Lists files and directories in a given path.
 
 Usage:
-- The path parameter must be an absolute path to a directory (e.g., '/Users/user/project/src')
-- Returns a list of files and directories with their relative paths, sizes, and modification times
-- Supports recursive listing to show all nested files and directories
-- Automatically respects .gitignore patterns to avoid listing ignored files
+- The path parameter must be an absolute path to a directory
+- Supports recursive listing with recursive=true
+- Automatically respects .gitignore patterns
 - Hidden files (starting with .) are included by default
+- Returns files with their relative paths, sizes, and modification times
 - Results are organized with directories first, then files, sorted alphabetically
 
-Directory Exploration Strategy:
-1. Use list_files to see what's available in a directory
-2. Use read_file with mode="outline" to understand file structure
-3. Use read_file with mode="symbol" to read specific functions/classes
-4. Use grep to find specific patterns across multiple files
-
-When to Use vs Other Tools:
-- Use list_files for exploring directory structure and finding files
-- Use grep if you know what code patterns to search for
-- Use read_file after identifying interesting files to examine
-
 Examples:
-- List project root: {"path": "/Users/user/project"}
-- List source directory: {"path": "/Users/user/project/src"}
+- List directory: {"path": "/Users/user/project/src"}
 - Recursive listing: {"path": "/Users/user/project/src", "recursive": true}
 
-Common Use Cases:
-- Exploring unfamiliar codebases to understand structure
-- Finding configuration files, tests, or documentation
-- Locating specific file types before reading them
-- Understanding project organization before making changes"#
+Note: Prefer grep or semantic_search if you know what content to look for."#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

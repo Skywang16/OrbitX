@@ -2,7 +2,7 @@
  * Executor Helpers - 从 executor.rs 提取的辅助函数
  */
 
-use crate::agent::core::context::ToolCallResult;
+use crate::agent::core::context::{TaskContext, ToolCallResult};
 use crate::agent::tools::{ToolResult, ToolResultContent, ToolResultStatus};
 
 /// 去重工具调用 - 检测同一iteration内的重复调用
@@ -75,4 +75,11 @@ pub fn tail_vec<T: Clone>(items: Vec<T>, limit: usize) -> Vec<T> {
         let split_at = items.len() - limit;
         items.split_off(split_at)
     }
+}
+
+pub async fn should_render_tool_block(context: &TaskContext, tool_name: &str) -> bool {
+    let Some(meta) = context.tool_registry().get_tool_metadata(tool_name).await else {
+        return true;
+    };
+    !meta.tags.iter().any(|t| t == "ui:hidden")
 }

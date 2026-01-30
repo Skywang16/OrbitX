@@ -5,6 +5,7 @@
   import { useGitStore } from '@/stores/git'
   import type { DiffContent } from '@/api/git/types'
   import { gitApi } from '@/api'
+  import hljs from 'highlight.js'
 
   interface Props {
     repoPath: string
@@ -32,6 +33,52 @@
     const parts = props.filePath.split('/')
     if (parts.length <= 1) return ''
     return parts.slice(0, -1).join('/')
+  })
+
+  const fileLanguage = computed(() => {
+    const ext = fileName.value.split('.').pop()?.toLowerCase()
+    if (!ext) return 'plaintext'
+
+    const langMap: Record<string, string> = {
+      js: 'javascript',
+      jsx: 'javascript',
+      ts: 'typescript',
+      tsx: 'typescript',
+      py: 'python',
+      rb: 'ruby',
+      go: 'go',
+      rs: 'rust',
+      java: 'java',
+      cpp: 'cpp',
+      c: 'c',
+      cs: 'csharp',
+      php: 'php',
+      swift: 'swift',
+      kt: 'kotlin',
+      scala: 'scala',
+      sh: 'bash',
+      bash: 'bash',
+      zsh: 'bash',
+      fish: 'bash',
+      yml: 'yaml',
+      yaml: 'yaml',
+      json: 'json',
+      xml: 'xml',
+      html: 'html',
+      css: 'css',
+      scss: 'scss',
+      sass: 'sass',
+      less: 'less',
+      md: 'markdown',
+      sql: 'sql',
+      toml: 'toml',
+      ini: 'ini',
+      vue: 'vue',
+      svelte: 'svelte',
+    }
+
+    const lang = langMap[ext] || ext
+    return hljs.getLanguage(lang) ? lang : 'plaintext'
   })
 
   const loadDiff = async () => {
@@ -82,6 +129,16 @@
       return content.length > 0 ? content.slice(1) : ''
     }
     return content
+  }
+
+  const highlightCode = (text: string): string => {
+    if (!text) return ''
+    try {
+      const result = hljs.highlight(text, { language: fileLanguage.value })
+      return result.value
+    } catch {
+      return text
+    }
   }
 
   const stageFile = () => {
@@ -178,7 +235,7 @@
             <span class="line__marker">{{ getMarker(line.lineType, line.content) }}</span>
             <span class="line__num line__num--old">{{ line.oldLineNumber ?? '' }}</span>
             <span class="line__num line__num--new">{{ line.newLineNumber ?? '' }}</span>
-            <pre class="line__code">{{ getDisplayText(line.lineType, line.content) }}</pre>
+            <pre class="line__code" v-html="highlightCode(getDisplayText(line.lineType, line.content))"></pre>
           </div>
         </div>
       </div>
@@ -323,6 +380,7 @@
 
   .diff-view__content {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     padding: 16px;
   }

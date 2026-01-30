@@ -1,4 +1,3 @@
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -7,7 +6,7 @@ use serde_json::json;
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
-use crate::agent::shell::{AgentShellExecutor, CommandStatus, ShellError};
+use crate::agent::terminal::{AgentTerminalManager, TerminalExecutionMode, TerminalStatus};
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
     ToolResultStatus,
@@ -15,13 +14,6 @@ use crate::agent::tools::{
 
 /// 默认超时时间（毫秒）
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
-
-/// 全局 Shell 执行器
-static SHELL_EXECUTOR: OnceLock<AgentShellExecutor> = OnceLock::new();
-
-fn get_executor() -> &'static AgentShellExecutor {
-    SHELL_EXECUTOR.get_or_init(AgentShellExecutor::new)
-}
 
 /// Git 安全协议验证
 fn validate_git_command(command: &str) -> Result<(), String> {
@@ -107,7 +99,7 @@ impl RunnableTool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        r#"Executes a shell command with support for background execution and custom timeout.
+        r#"Executes a shell command inside an Agent terminal with support for background execution and custom timeout.
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 
@@ -125,8 +117,8 @@ Command Execution Guidelines:
   - python "/path/with spaces/script.py" (correct)
   - python /path/with spaces/script.py (incorrect - will fail)
 - For long-running commands (e.g., dev servers), use background=true
-- Background commands return immediately with a command ID
-- Use read_terminal to check output of background commands
+- Background commands return immediately with a terminal ID
+- Use read_agent_terminal to check output of background commands
 
 Tool Usage Policy:
 - Avoid using shell with find, grep, cat, head, tail, sed, awk, or echo commands
@@ -206,7 +198,16 @@ Important Notes:
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ShellArgs = serde_json::from_value(args)?;
-        let executor = get_executor();
+        let manager = match AgentTerminalManager::global() {
+            Some(manager) => manager,
+            None => {
+                return Ok(tool_error(
+                    "Agent terminal manager is not initialized.",
+                    &args.command,
+                    context.cwd.as_ref(),
+                ));
+            }
+        };
 
         // Git 安全检查
         if let Err(validation_error) = validate_git_command(&args.command) {
@@ -233,157 +234,106 @@ Important Notes:
 
         // 是否后台运行
         let is_background = args.background.unwrap_or(false);
+        let mode = if is_background {
+            TerminalExecutionMode::Background
+        } else {
+            TerminalExecutionMode::Blocking
+        };
+
+        let terminal_cwd = if cwd.trim().is_empty() {
+            None
+        } else {
+            Some(cwd.to_string())
+        };
+
+        let terminal = match manager
+            .create_terminal(
+                args.command.clone(),
+                mode.clone(),
+                context.session_id,
+                terminal_cwd,
+                None,
+            )
+            .await
+        {
+            Ok(terminal) => terminal,
+            Err(err) => return Ok(tool_error(err, &args.command, cwd)),
+        };
 
         if is_background {
-            // 后台执行
-            match executor
-                .execute_background(&args.command, cwd, Some(timeout_duration))
-                .await
-            {
-                Ok(command_id) => {
-                    // 等待一小段时间收集初始输出（最多 2 秒）
-                    tokio::time::sleep(Duration::from_millis(2000)).await;
-
-                    // 获取当前输出和状态
-                    let output = executor
-                        .get_command_output(command_id)
-                        .await
-                        .unwrap_or_default();
-                    let status = executor
-                        .get_command_status(command_id)
-                        .await
-                        .unwrap_or(CommandStatus::Running { pid: None });
-
-                    let is_still_running = !status.is_terminal();
-                    let status_str = if is_still_running {
-                        "running"
-                    } else {
-                        "completed"
-                    };
-
-                    let message = if is_still_running {
-                        format!(
-                            "Command running in background (ID: {}). Initial output:\n{}",
-                            command_id,
-                            if output.is_empty() {
-                                "(no output yet)".to_string()
-                            } else {
-                                output.clone()
-                            }
-                        )
-                    } else {
-                        output.clone()
-                    };
-
-                    Ok(ToolResult {
-                        content: vec![ToolResultContent::Success(message)],
-                        status: ToolResultStatus::Success,
-                        cancel_reason: None,
-                        execution_time_ms: Some(2000),
-                        ext_info: Some(json!({
-                            "command": args.command,
-                            "cwd": cwd,
-                            "commandId": command_id,
-                            "isBackground": true,
-                            "status": status_str,
-                            "output": output,
-                        })),
-                    })
-                }
-                Err(e) => Ok(error_result(&args.command, cwd, &e)),
-            }
-        } else {
-            // 同步执行
-            match executor
-                .execute(&args.command, cwd, Some(timeout_duration))
-                .await
-            {
-                Ok(result) => {
-                    let is_success = matches!(
-                        result.status,
-                        CommandStatus::Completed { exit_code, .. } if exit_code == 0
-                    );
-
-                    let exit_code = match &result.status {
-                        CommandStatus::Completed { exit_code, .. } => Some(*exit_code),
-                        _ => None,
-                    };
-
-                    Ok(ToolResult {
-                        content: vec![if is_success {
-                            ToolResultContent::Success(result.output.clone())
-                        } else {
-                            ToolResultContent::Error(result.output.clone())
-                        }],
-                        status: if is_success {
-                            ToolResultStatus::Success
-                        } else {
-                            ToolResultStatus::Error
-                        },
-                        cancel_reason: None,
-                        execution_time_ms: Some(result.duration_ms),
-                        ext_info: Some(json!({
-                            "command": args.command,
-                            "cwd": cwd,
-                            "commandId": result.command_id,
-                            "exitCode": exit_code,
-                            "durationMs": result.duration_ms,
-                            "isBackground": false,
-                            "outputTruncated": result.output_truncated,
-                            "status": result.status,
-                        })),
-                    })
-                }
-                Err(e) => Ok(error_result(&args.command, cwd, &e)),
-            }
+            let message = format!(
+                "Command running in background (terminalId: {}). Use read_agent_terminal to check output.",
+                terminal.id
+            );
+            return Ok(ToolResult {
+                content: vec![ToolResultContent::Success(message)],
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
+                execution_time_ms: None,
+                ext_info: Some(json!({
+                    "command": args.command,
+                    "cwd": cwd,
+                    "terminalId": terminal.id,
+                    "paneId": terminal.pane_id,
+                    "isBackground": true,
+                    "status": "running",
+                })),
+            });
         }
+
+        let status = match manager
+            .wait_for_completion(&terminal.id, timeout_duration)
+            .await
+        {
+            Ok(status) => status,
+            Err(err) => return Ok(tool_error(err, &args.command, cwd)),
+        };
+
+        let output = manager
+            .get_terminal_last_command_output(&terminal.id)
+            .unwrap_or_default();
+        let exit_code = match status {
+            TerminalStatus::Completed { exit_code } => exit_code,
+            _ => None,
+        };
+        let is_success = matches!(status, TerminalStatus::Completed { exit_code: Some(0) });
+
+        Ok(ToolResult {
+            content: vec![if is_success {
+                ToolResultContent::Success(output.clone())
+            } else {
+                ToolResultContent::Error(output.clone())
+            }],
+            status: if is_success {
+                ToolResultStatus::Success
+            } else {
+                ToolResultStatus::Error
+            },
+            cancel_reason: None,
+            execution_time_ms: None,
+            ext_info: Some(json!({
+                "command": args.command,
+                "cwd": cwd,
+                "terminalId": terminal.id,
+                "paneId": terminal.pane_id,
+                "exitCode": exit_code,
+                "isBackground": false,
+                "status": status,
+            })),
+        })
     }
 }
 
-fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
-    let (message, status, tool_status, cancel_reason) = match error {
-        ShellError::Timeout(ms) => (
-            format!("Command timed out after {ms}ms"),
-            "timeout",
-            ToolResultStatus::Error,
-            None,
-        ),
-        ShellError::Aborted => (
-            "Command was aborted".to_string(),
-            "aborted",
-            ToolResultStatus::Cancelled,
-            Some("aborted".to_string()),
-        ),
-        ShellError::ValidationFailed(msg) => (
-            format!("Validation failed: {msg}"),
-            "validation_error",
-            ToolResultStatus::Error,
-            None,
-        ),
-        ShellError::TooManyBackgroundCommands(max) => (
-            format!("Too many background commands (max: {max})"),
-            "limit_exceeded",
-            ToolResultStatus::Error,
-            None,
-        ),
-        _ => (
-            format!("Command failed: {error}"),
-            "failed",
-            ToolResultStatus::Error,
-            None,
-        ),
-    };
-
+fn tool_error(message: impl Into<String>, command: &str, cwd: &str) -> ToolResult {
     ToolResult {
-        content: vec![ToolResultContent::Error(message)],
-        status: tool_status,
-        cancel_reason,
+        content: vec![ToolResultContent::Error(message.into())],
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: Some(json!({
             "command": command,
             "cwd": cwd,
-            "status": status,
-            "error": error.to_string(),
+            "status": "failed",
         })),
     }
 }

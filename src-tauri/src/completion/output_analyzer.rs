@@ -55,6 +55,8 @@ impl HistoryBufferEntry {
 struct OutputAnalyzerInner {
     history_buffer: HashMap<u32, HistoryBufferEntry>,
     active_command_ids: HashMap<u32, u64>,
+    last_command_output: HashMap<u32, String>,
+    last_finished_command_ids: HashMap<u32, u64>,
 }
 
 pub struct OutputAnalyzer {
@@ -69,6 +71,8 @@ impl OutputAnalyzer {
             inner: Mutex::new(OutputAnalyzerInner {
                 history_buffer: HashMap::new(),
                 active_command_ids: HashMap::new(),
+                last_command_output: HashMap::new(),
+                last_finished_command_ids: HashMap::new(),
             }),
         }
     }
@@ -139,14 +143,37 @@ impl OutputAnalyzer {
         };
 
         if command.is_finished() {
+            {
+                let mut inner = self.lock_inner()?;
+                if inner
+                    .last_finished_command_ids
+                    .get(&pane_id)
+                    .is_some_and(|id| *id == command.id)
+                {
+                    return Ok(());
+                }
+                inner.last_finished_command_ids.insert(pane_id, command.id);
+            }
+
             let output = self.get_pane_buffer(pane_id).unwrap_or_default();
+            {
+                let mut inner = self.lock_inner()?;
+                inner.last_command_output.insert(pane_id, output.clone());
+            }
             let cwd = command
                 .working_directory
                 .as_deref()
                 .unwrap_or("/tmp")
                 .to_string();
 
-            self.record_completed_command(pane_id, command_line.to_string(), output, cwd)?;
+            if let Err(err) =
+                self.record_completed_command(pane_id, command_line.to_string(), output, cwd)
+            {
+                let mut inner = self.lock_inner()?;
+                inner.last_finished_command_ids.remove(&pane_id);
+                return Err(err);
+            }
+
             self.clear_pane_buffer(pane_id)?;
 
             let mut inner = self.lock_inner()?;
@@ -187,6 +214,11 @@ impl OutputAnalyzer {
         } else {
             Ok(String::new())
         }
+    }
+
+    pub fn get_last_command_output(&self, pane_id: u32) -> OutputAnalyzerResult<Option<String>> {
+        let inner = self.lock_inner()?;
+        Ok(inner.last_command_output.get(&pane_id).cloned())
     }
 
     pub fn is_pane_buffer_too_new(&self, pane_id: u32) -> bool {

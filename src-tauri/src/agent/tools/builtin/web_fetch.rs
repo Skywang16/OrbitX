@@ -45,47 +45,16 @@ impl RunnableTool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        r#"Fetches content from a specified URL and returns the response data with intelligent content processing.
+        r#"Fetches content from a URL and returns it as text.
 
 Usage:
 - Takes a URL as input and performs an HTTP GET request
-- Follows up to 10 redirects automatically
-- Simplifies HTML to plain text for easier analysis and reading
-- Returns at most 2000 characters to keep responses manageable
-- Includes SSRF protection and rate limiting for security
-
-URL Requirements:
-- The URL must be a fully-formed valid URL starting with http:// or https://
-- Examples: "https://api.github.com/repos/owner/repo", "https://docs.example.com/api"
-- Blocked: localhost, private IPs, and internal network addresses for security
-
-Response Processing:
 - HTML content is automatically converted to readable plain text
-- JSON responses are returned as-is for API interactions
-- Large responses are truncated to 2000 characters with indication
-- Redirects are followed transparently
-
-Rate Limiting & Security:
-- Limited to 10 calls per minute to prevent abuse
-- SSRF protection blocks requests to localhost/private IPs (including via DNS)
-- 30-second timeout prevents hanging requests
-- This tool is read-only and does not modify any files
-
-Common Use Cases:
-- Fetching API documentation or specifications
-- Reading public documentation pages
-- Accessing configuration files from public repositories
-- Checking API endpoints for integration work
-
-Examples:
-- Fetch API docs: {"url": "https://api.github.com/repos/microsoft/vscode"}
-- Read documentation: {"url": "https://docs.python.org/3/library/json.html"}
-- Check public config: {"url": "https://raw.githubusercontent.com/owner/repo/main/config.json"}
-
-Error Handling:
-- Network errors, timeouts, and invalid URLs will return descriptive error messages
-- Rate limit exceeded will suggest waiting before retrying
-- SSRF blocked requests will explain the security restriction"#
+- JSON responses are returned as-is
+- Returns at most 2000 characters; large responses are truncated
+- The URL must be a fully-formed valid URL starting with http:// or https://
+- Blocked: localhost, private IPs, and internal network addresses
+- This tool is read-only and does not modify any files"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

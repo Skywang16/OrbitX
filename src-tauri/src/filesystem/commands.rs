@@ -97,6 +97,31 @@ pub async fn fs_read_dir(path: String) -> TauriApiResult<Vec<DirEntryExt>> {
     Ok(api_success!(entries))
 }
 
+/// 内置忽略目录 - 递归遍历时自动跳过这些大目录
+/// 注意：如果用户直接指定这些目录作为根路径，仍然可以访问
+const BUILTIN_SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    ".svn",
+    ".hg",
+    "dist",
+    "build",
+    "target",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".cache",
+    ".turbo",
+    "__pycache__",
+    ".pytest_cache",
+    "venv",
+    ".venv",
+    "vendor",
+    "coverage",
+    ".nyc_output",
+    "bower_components",
+];
+
 pub(crate) async fn fs_list_directory(
     path: String,
     recursive: bool,
@@ -121,6 +146,25 @@ pub(crate) async fn fs_list_directory(
 
     if !recursive {
         builder.max_depth(Some(1));
+    }
+
+    // 递归时过滤内置忽略目录（depth > 0 才过滤，这样用户直接指定这些目录仍可访问）
+    if recursive {
+        builder.filter_entry(|entry| {
+            // depth 0 是根目录本身，不过滤
+            if entry.depth() == 0 {
+                return true;
+            }
+            // 只过滤目录
+            let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+            if is_dir {
+                let name = entry.file_name().to_string_lossy();
+                if BUILTIN_SKIP_DIRS.contains(&name.as_ref()) {
+                    return false;
+                }
+            }
+            true
+        });
     }
 
     let mut entries: Vec<(String, bool)> = Vec::new();

@@ -24,6 +24,35 @@
 
   const blocks = computed<Block[]>(() => props.message.blocks.map(normalizeBlockType))
 
+  const handleMessageClick = async (event: MouseEvent) => {
+    const target = event.target as HTMLElement
+    const copyBtn = target.closest('.code-copy-btn')
+
+    if (copyBtn) {
+      const wrapper = copyBtn.closest('.code-block-wrapper')
+      const codeElement = wrapper?.querySelector('code')
+
+      if (codeElement && codeElement.textContent) {
+        try {
+          await navigator.clipboard.writeText(codeElement.textContent)
+
+          // 临时切换图标为成功状态
+          const originalHTML = copyBtn.innerHTML
+          copyBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-success)">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          `
+          setTimeout(() => {
+            copyBtn.innerHTML = originalHTML
+          }, 2000)
+        } catch (err) {
+          console.error('Failed to copy code:', err)
+        }
+      }
+    }
+  }
+
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
     const seconds = (ms / 1000).toFixed(1)
@@ -54,7 +83,7 @@
 
         <SubtaskBlock v-else-if="block.type === 'subtask'" :block="block" />
 
-        <div v-else-if="block.type === 'user_text'" class="ai-message-text step-block">
+        <div v-else-if="block.type === 'user_text'" class="ai-message-text step-block" @click="handleMessageClick">
           <div v-html="renderMarkdown(block.content)"></div>
         </div>
 
@@ -62,7 +91,7 @@
           <img :src="block.dataUrl" :alt="block.fileName || 'image'" style="max-width: 100%; border-radius: 8px" />
         </div>
 
-        <div v-else-if="block.type === 'text'" class="ai-message-text step-block">
+        <div v-else-if="block.type === 'text'" class="ai-message-text step-block" @click="handleMessageClick">
           <div v-html="renderMarkdown(block.content)"></div>
         </div>
 
@@ -225,16 +254,19 @@
   }
 
   .ai-message-text {
-    font-size: 0.9em;
+    font-size: var(--font-size-md);
     line-height: 1.6;
     color: var(--text-200);
     overflow: hidden;
     min-width: 0;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
 
   .ai-message-text :deep(p) {
     margin: var(--spacing-sm) 0;
-    font-size: 0.95em;
+    font-size: 1em;
   }
 
   .ai-message-text :deep(p:first-child) {
@@ -254,8 +286,9 @@
   .ai-message-text :deep(h6) {
     margin: var(--spacing-md) 0 var(--spacing-sm) 0;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1.5;
     color: var(--text-100);
+    letter-spacing: 0.02em;
   }
 
   .ai-message-text :deep(h1) {
@@ -278,24 +311,129 @@
 
   /* 代码 */
   .ai-message-text :deep(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-family-mono);
     font-size: 0.85em;
-    padding: 0.15em 0.4em;
-    background: var(--bg-400);
-    border-radius: 3px;
-    color: var(--text-200);
+    padding: 0.2em 0.4em;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: var(--text-100);
+    -webkit-font-smoothing: auto;
   }
 
+  /* --- 代码块新样式 (Card Style) --- */
+  .ai-message-text :deep(.code-block-wrapper) {
+    margin: var(--spacing-md) 0;
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    background: var(--bg-100); /* 使用主题背景色 */
+    border: 1px solid var(--border-300);
+  }
+
+  /* 代码块头部 */
+  .ai-message-text :deep(.code-block-header) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-300); /* 使用主题变量 */
+    border-bottom: 1px solid var(--border-200);
+  }
+
+  .ai-message-text :deep(.code-lang) {
+    font-size: 12px;
+    color: var(--text-400);
+    text-transform: lowercase;
+    font-family: var(--font-family-mono);
+  }
+
+  .ai-message-text :deep(.code-copy-btn) {
+    background: transparent;
+    border: none;
+    color: var(--text-400);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .ai-message-text :deep(.code-copy-btn:hover) {
+    color: var(--text-200);
+    background: var(--color-hover); /* 使用主题变量 */
+  }
+
+  /* 覆盖 pre 样式 */
   .ai-message-text :deep(pre) {
-    margin: var(--spacing-sm) 0;
+    margin: 0 !important;
+    padding: 12px !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
     overflow-x: auto;
-    max-width: 100%;
   }
 
   .ai-message-text :deep(pre code) {
-    padding: 0;
-    background: transparent;
+    background: transparent !important;
+    padding: 0 !important;
+    border: none !important;
+    font-family: var(--font-family-mono);
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    color: var(--text-200); /* 使用主题变量 */
+  }
+
+  /* --- 表格新样式 --- */
+  .ai-message-text :deep(.table-wrapper) {
+    margin: var(--spacing-md) 0;
+    overflow-x: auto;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-300);
+  }
+
+  .ai-message-text :deep(table) {
+    margin: 0;
+    border-collapse: collapse;
+    width: 100%;
+    border: none;
+  }
+
+  .ai-message-text :deep(th) {
+    background: var(--bg-400); /* 使用主题变量 */
+    color: var(--text-200);
+    font-weight: 600;
+    padding: 10px 16px;
+    border: none;
+    border-bottom: 1px solid var(--border-300);
+    text-align: left;
     font-size: 0.9em;
+  }
+
+  .ai-message-text :deep(td) {
+    padding: 10px 16px;
+    border: none;
+    border-bottom: 1px solid var(--border-200);
+    color: var(--text-300);
+    font-size: 0.9em;
+  }
+
+  .ai-message-text :deep(tr:last-child td) {
+    border-bottom: none;
+  }
+
+  /* 标题增强 */
+  .ai-message-text :deep(h1),
+  .ai-message-text :deep(h2) {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    color: var(--text-100);
+    letter-spacing: -0.01em;
+  }
+
+  .ai-message-text :deep(h3) {
+    margin-top: 20px;
+    margin-bottom: 12px;
   }
 
   /* 列表 */
@@ -303,23 +441,29 @@
   .ai-message-text :deep(ol) {
     margin: var(--spacing-sm) 0;
     padding-left: 1.5em;
+    line-height: 1.6;
   }
 
   .ai-message-text :deep(li) {
-    margin: var(--spacing-xs) 0;
+    margin: var(--spacing-sm) 0;
   }
 
   .ai-message-text :deep(li > p) {
     margin: var(--spacing-xs) 0;
   }
 
+  .ai-message-text :deep(li::marker) {
+    color: var(--text-400);
+  }
+
   /* 引用 */
   .ai-message-text :deep(blockquote) {
     margin: var(--spacing-sm) 0;
     padding: var(--spacing-xs) var(--spacing-md);
-    border-left: 3px solid var(--color-primary);
-    background: var(--bg-400);
+    border-left: 3px solid var(--border-300);
+    background: rgba(255, 255, 255, 0.04);
     color: var(--text-300);
+    border-radius: var(--border-radius-sm);
   }
 
   .ai-message-text :deep(blockquote p) {
@@ -343,37 +487,12 @@
     border-top: 1px solid var(--border-200);
   }
 
-  /* 表格 */
-  .ai-message-text :deep(table) {
-    margin: var(--spacing-sm) 0;
-    border-collapse: collapse;
-    width: 100%;
-    max-width: 100%;
-    display: block;
-    overflow-x: auto;
-  }
-
-  .ai-message-text :deep(th),
-  .ai-message-text :deep(td) {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--border-200);
-    text-align: left;
-  }
-
-  .ai-message-text :deep(th) {
-    background: var(--bg-400);
-    font-weight: 600;
-  }
-
-  .ai-message-text :deep(tr:nth-child(even)) {
-    background: var(--bg-300);
-  }
-
   /* 图片 */
   .ai-message-text :deep(img) {
     max-width: 100%;
     height: auto;
     border-radius: var(--border-radius);
+    margin: var(--spacing-sm) 0;
   }
 
   /* 强调 */
@@ -384,5 +503,15 @@
 
   .ai-message-text :deep(em) {
     font-style: italic;
+  }
+
+  /* 删除线和下划线 */
+  .ai-message-text :deep(del) {
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .ai-message-text :deep(u) {
+    text-decoration: underline;
   }
 </style>

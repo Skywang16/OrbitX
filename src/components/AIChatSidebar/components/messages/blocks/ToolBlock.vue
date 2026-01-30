@@ -1,9 +1,10 @@
 <template>
   <!-- todowrite 特殊渲染：简单的进度列表 -->
-  <div v-if="isTodoWrite" class="todo-block">
+  <div v-if="isTodoWrite" class="todo-block" :class="{ running: isRunning }">
     <div class="todo-header">
       <span class="todo-label">Todo</span>
-      <span class="todo-progress">{{ todoProgress }}</span>
+      <span v-if="isRunning" class="todo-progress todo-progress-running">{{ todoProgress || '处理中…' }}</span>
+      <span v-else class="todo-progress">{{ todoProgress }}</span>
     </div>
     <div v-if="todoItems.length > 0" class="todo-list">
       <div v-for="(item, idx) in todoItems" :key="idx" class="todo-item" :class="item.status">
@@ -13,10 +14,51 @@
         <span class="todo-text">{{ item.content }}</span>
       </div>
     </div>
+    <div v-else-if="isRunning" class="todo-empty">等待任务输出…</div>
+  </div>
+
+  <!-- Shell 工具：独立渲染 -->
+  <div v-else-if="isShellTool" class="tool-block-shell">
+    <div class="shell-header">
+      <div class="shell-info">
+        <svg
+          class="shell-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+        <span class="shell-command" :class="{ running: isRunning }" :title="shellCommandDisplay">
+          {{ shellCommandDisplay }}
+        </span>
+      </div>
+      <button v-if="shellPaneId !== null" class="shell-expand-btn" @click="openShellTerminal" title="Open in main tab">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </button>
+    </div>
+    <!-- 有终端或正在运行时显示终端容器 -->
+    <div v-if="shellPaneId !== null || isRunning" class="shell-terminal">
+      <Terminal v-if="shellPaneId !== null" :terminal-id="shellPaneId" :is-active="false" />
+    </div>
+    <!-- 其他状态（错误/取消/完成但无终端）显示文本 -->
+    <div v-else class="shell-content">
+      <pre class="shell-output">{{ toolResult || 'No output' }}</pre>
+    </div>
   </div>
 
   <!-- 其他工具的通用渲染 -->
   <div v-else class="tool-block">
+    <!-- 工具状态行：所有工具统一使用 -->
     <div
       class="tool-line"
       :class="{ clickable: isExpandable, running: isRunning, error: isError, cancelled: isCancelled }"
@@ -49,7 +91,20 @@
       </svg>
     </div>
 
-    <transition name="expand">
+    <!-- Shell 工具的内容区 -->
+    <template v-if="isShellTool">
+      <!-- 有终端时显示 -->
+      <div v-if="shellPaneId !== null" class="shell-terminal">
+        <Terminal :terminal-id="shellPaneId" :is-active="false" />
+      </div>
+      <!-- 正在运行（且没有终端）时显示 loading -->
+      <div v-else-if="isRunning" class="shell-loading">
+        <div class="shell-loading-spinner"></div>
+      </div>
+    </template>
+
+    <!-- 其他工具：可展开的结果区 -->
+    <transition v-else name="expand">
       <div v-if="isExpanded && hasResult" class="tool-result" :class="{ 'has-scroll': hasScroll }" @click.stop>
         <div ref="resultWrapperRef" class="result-wrapper" @scroll="checkScroll">
           <EditResult v-if="isEditResult" :editData="editData" />
@@ -69,8 +124,11 @@
   import { ref, computed, nextTick, watch } from 'vue'
   import type { Block } from '@/types'
   import EditResult from './components/EditResult.vue'
+  import Terminal from '@/components/terminal/Terminal.vue'
+  import { useEditorStore } from '@/stores/Editor'
   import stripAnsi from 'strip-ansi'
   import hljs from 'highlight.js'
+  import { getPathBasename } from '@/utils/path'
 
   interface EditResultData {
     file: string
@@ -93,6 +151,7 @@
   const resultTextRef = ref<HTMLPreElement | null>(null)
   const resultWrapperRef = ref<HTMLDivElement | null>(null)
   const hasScroll = ref(false)
+  const editorStore = useEditorStore()
 
   // Extract tool information from step metadata
   const toolName = computed(() => {
@@ -143,6 +202,41 @@
     return props.block.output?.content || ''
   })
 
+  const toolMetadata = computed(() => (props.block.output?.metadata as Record<string, unknown>) || null)
+
+  // Shell 工具相关
+  const isShellTool = computed(() => toolName.value === 'shell')
+  const shellPaneId = computed(() => {
+    if (!isShellTool.value) return null
+    const paneId = toolMetadata.value?.paneId
+    return typeof paneId === 'number' ? paneId : null
+  })
+  const shellTerminalId = computed(() => {
+    if (!isShellTool.value) return null
+    const terminalId = toolMetadata.value?.terminalId
+    return typeof terminalId === 'string' ? terminalId : null
+  })
+  // 加载时从 input 取命令，完成后从 metadata 取
+  const shellCommandDisplay = computed(() => {
+    if (!isShellTool.value) return ''
+    // 优先从 metadata 取（执行完成后）
+    const metaCommand = toolMetadata.value?.command
+    if (typeof metaCommand === 'string' && metaCommand) return metaCommand
+    // 否则从 input 取（正在加载时）
+    const inputCommand = toolParams.value?.command
+    return typeof inputCommand === 'string' ? inputCommand : ''
+  })
+
+  const openShellTerminal = async () => {
+    if (!shellTerminalId.value || shellPaneId.value == null) return
+    await editorStore.openAgentTerminalTab({
+      terminalId: shellTerminalId.value,
+      paneId: shellPaneId.value,
+      command: shellCommandDisplay.value || 'shell',
+      activate: true,
+    })
+  }
+
   const isError = computed(() => {
     return props.block.status === 'error'
   })
@@ -156,7 +250,9 @@
   })
 
   const shouldHighlight = computed(() => {
-    return toolName.value === 'read_file' || toolName.value === 'read_terminal'
+    return (
+      toolName.value === 'read_file' || toolName.value === 'read_terminal' || toolName.value === 'read_agent_terminal'
+    )
   })
 
   const editData = computed(() => {
@@ -225,6 +321,8 @@
         return 'Read '
       case 'read_terminal':
         return 'Read Terminal '
+      case 'read_agent_terminal':
+        return 'Read Agent Terminal '
       case 'orbit_search':
         return 'Searched '
       case 'shell':
@@ -242,6 +340,10 @@
         return 'Listed '
       case 'web_fetch':
         return 'Fetched '
+      case 'web_search':
+        return 'Searched '
+      case 'skill':
+        return 'Loaded skill '
       case 'apply_diff':
         return 'Applied diff to '
       default:
@@ -311,6 +413,12 @@
       case 'web_fetch':
         baseText = formatUrl(params?.url as string)
         break
+      case 'web_search':
+        baseText = formatText(params?.query as string)
+        break
+      case 'skill':
+        baseText = (params?.name as string) || 'unknown'
+        break
       case 'apply_diff':
         baseText = `${(params?.files as { path: string }[])?.length || 0} files`
         break
@@ -325,14 +433,24 @@
       return cancelReason ? `${baseText} (${cancelReason})` : `${baseText} (cancelled)`
     }
 
+    if (!baseText && isRunning.value) {
+      const streaming = (params as Record<string, unknown>)?.__streaming
+      const bytes = (params as Record<string, unknown>)?.__inputBytes
+      if (streaming === true && typeof bytes === 'number') {
+        return `(${formatBytes(bytes)} args)`
+      }
+      if (streaming === true) {
+        return '(preparing args)'
+      }
+      return toolName.value || '...'
+    }
+
     return baseText
   }
 
   const formatPath = (path: string) => {
     if (!path) return ''
-    const parts = path.split('/')
-    // 只返回文件名
-    return parts[parts.length - 1] || path
+    return getPathBasename(path)
   }
 
   const formatUrl = (url: string) => {
@@ -348,6 +466,13 @@
   const formatText = (text: string) => {
     if (!text) return ''
     return text.length > 50 ? text.substring(0, 47) + '...' : text
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0B'
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
   }
 
   const cleanToolResult = computed(() => {
@@ -427,6 +552,32 @@
   .todo-progress {
     color: var(--text-500);
     font-size: 12px;
+  }
+
+  .todo-block.running .todo-label {
+    color: var(--text-300);
+  }
+
+  .todo-progress-running {
+    background: linear-gradient(
+      90deg,
+      var(--text-500) 0%,
+      var(--text-500) 25%,
+      var(--text-200) 50%,
+      var(--text-500) 75%,
+      var(--text-500) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: scan 2s linear infinite;
+  }
+
+  .todo-empty {
+    font-size: 12px;
+    color: var(--text-500);
+    padding-left: 18px;
   }
 
   .todo-list {
@@ -591,6 +742,48 @@
     overflow: hidden;
   }
 
+  .tool-terminal-preview {
+    margin-top: 8px;
+    border: 1px solid var(--border-200);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-200);
+  }
+
+  .tool-terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--text-400);
+    background: var(--bg-300);
+    border-bottom: 1px solid var(--border-200);
+  }
+
+  .tool-terminal-title {
+    font-weight: 500;
+  }
+
+  .tool-terminal-open {
+    border: none;
+    background: none;
+    color: var(--text-300);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+
+  .tool-terminal-open:hover {
+    background: var(--bg-500);
+    color: var(--text-200);
+  }
+
+  .tool-terminal-preview :deep(.terminal-container) {
+    height: 160px;
+  }
+
   /* 只在有滚动条时显示渐变阴影 */
   .tool-result::before,
   .tool-result::after {
@@ -703,5 +896,116 @@
     max-height: 300px;
     opacity: 1;
     margin-top: 8px;
+  }
+
+  /* Shell 工具样式 */
+  .tool-block-shell {
+    background: var(--bg-200);
+    border: 1px solid var(--border-200);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 6px 0;
+  }
+
+  .shell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+    border-bottom: 1px solid var(--border-200);
+  }
+
+  .shell-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .shell-icon {
+    color: #667eea;
+    flex-shrink: 0;
+  }
+
+  .shell-command {
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 13px;
+    color: var(--text-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shell-command.running {
+    background: linear-gradient(
+      90deg,
+      var(--text-500) 0%,
+      var(--text-500) 25%,
+      var(--text-200) 50%,
+      var(--text-500) 75%,
+      var(--text-500) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: scan 2s linear infinite;
+  }
+
+  .shell-expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    background: transparent;
+    border: 1px solid var(--border-200);
+    border-radius: 4px;
+    color: var(--text-400);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .shell-expand-btn:hover {
+    background: var(--bg-300);
+    color: var(--text-300);
+    border-color: #667eea;
+  }
+
+  .shell-terminal {
+    height: 180px;
+    overflow: hidden;
+  }
+
+  .shell-terminal :deep(.terminal-wrapper) {
+    height: 100%;
+    background: transparent;
+    padding: 8px;
+  }
+
+  .shell-terminal :deep(.terminal-container) {
+    background: transparent;
+  }
+
+  .shell-content {
+    min-height: 180px;
+    background: var(--bg-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shell-output {
+    margin: 0;
+    padding: 12px;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-400);
+    white-space: pre-wrap;
+    word-break: break-word;
+    width: 100%;
   }
 </style>

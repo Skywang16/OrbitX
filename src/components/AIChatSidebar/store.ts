@@ -211,8 +211,8 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
       // 取消逻辑
       if (!cancelSent && cancelRequested.value && currentTaskId.value) {
-        await agentApi.cancelTask(currentTaskId.value)
         cancelSent = true
+        await agentApi.cancelTask(currentTaskId.value)
       }
 
       handleAgentEvent(event)
@@ -232,12 +232,13 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     })
 
     cancelFunction.value = () => {
+      if (cancelRequested.value) return
       cancelRequested.value = true
       toolConfirmStore.close()
-      if (currentTaskId.value) {
+      if (currentTaskId.value && !cancelSent) {
+        cancelSent = true
         void agentApi.cancelTask(currentTaskId.value)
       }
-      stream.close()
       isSending.value = false
     }
   }

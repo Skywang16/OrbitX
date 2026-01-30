@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio_stream::StreamExt;
+use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use crate::llm::{
@@ -97,10 +99,13 @@ impl LLMService {
 
         let (config, model_name) = self.get_provider_config_and_model(&request.model).await?;
 
+        tracing::info!("🚀 Starting LLM stream call: model={}", model_name);
+
         let provider = ProviderRegistry::global()
             .create(config.clone())
             .map_err(LlmError::from)?;
 
+        let model_for_logs = model_name.clone();
         let mut actual_request = request;
         actual_request.model = model_name;
 
@@ -112,24 +117,83 @@ impl LLMService {
         let stream = provider
             .call_stream(actual_request)
             .await
-            .map_err(LlmError::from)?;
+            .map_err(|e| {
+                tracing::error!("❌ LLM stream call failed: {}", e);
+                LlmError::from(e)
+            })?;
 
         let stream_with_cancel = tokio_stream::wrappers::ReceiverStream::new({
             let (tx, rx) = tokio::sync::mpsc::channel(10);
             let mut stream = Box::pin(stream);
+            let start = Instant::now();
 
             tokio::spawn(async move {
+                let mut event_count: u64 = 0;
+                let mut first_event_logged = false;
+                let mut idle_ticks: u32 = 0;
+                let mut idle_interval = interval(Duration::from_secs(10));
+                idle_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
                 loop {
                     tokio::select! {
                         _ = token.cancelled() => {
+                            tracing::warn!(
+                                "⏸️  LLM stream cancelled (events={}, elapsed_ms={}, model={})",
+                                event_count,
+                                start.elapsed().as_millis(),
+                                model_for_logs
+                            );
                             break;
+                        }
+                        _ = idle_interval.tick(), if !first_event_logged => {
+                            idle_ticks = idle_ticks.saturating_add(1);
+                            if idle_ticks == 1 || idle_ticks % 3 == 0 {
+                                tracing::warn!(
+                                    "⌛ LLM stream has no events after {}s (model={})",
+                                    idle_ticks.saturating_mul(10),
+                                    model_for_logs
+                                );
+                            }
                         }
                         item = stream.next() => {
                             if let Some(item) = item {
+                                event_count = event_count.saturating_add(1);
+                                if !first_event_logged {
+                                    first_event_logged = true;
+                                    tracing::info!(
+                                        "📡 LLM stream first event after {}ms (model={})",
+                                        start.elapsed().as_millis(),
+                                        model_for_logs
+                                    );
+                                }
+                                if event_count <= 3 || event_count % 100 == 0 {
+                                    match &item {
+                                        Ok(event) => {
+                                            tracing::debug!(
+                                                "📡 LLM stream event #{}: {}",
+                                                event_count,
+                                                stream_event_kind(event)
+                                            );
+                                        }
+                                        Err(err) => {
+                                            tracing::warn!(
+                                                "⚠️  LLM stream event error #{}: {}",
+                                                event_count,
+                                                err
+                                            );
+                                        }
+                                    }
+                                }
                                 if tx.send(item).await.is_err() {
                                     break;
                                 }
                             } else {
+                                tracing::info!(
+                                    "✅ LLM stream completed (events={}, elapsed_ms={}, model={})",
+                                    event_count,
+                                    start.elapsed().as_millis(),
+                                    model_for_logs
+                                );
                                 break;
                             }
                         }
@@ -231,5 +295,28 @@ impl LLMService {
         }
 
         Ok(())
+    }
+}
+
+fn stream_event_kind(event: &StreamEvent) -> &'static str {
+    use crate::llm::anthropic_types::{ContentBlockStart, ContentDelta, StreamEvent};
+
+    match event {
+        StreamEvent::MessageStart { .. } => "message_start",
+        StreamEvent::ContentBlockStart { content_block, .. } => match content_block {
+            ContentBlockStart::Text { .. } => "content_block_start.text",
+            ContentBlockStart::ToolUse { .. } => "content_block_start.tool_use",
+            ContentBlockStart::Thinking { .. } => "content_block_start.thinking",
+        },
+        StreamEvent::ContentBlockDelta { delta, .. } => match delta {
+            ContentDelta::Text { .. } => "content_block_delta.text",
+            ContentDelta::InputJson { .. } => "content_block_delta.input_json",
+            ContentDelta::Thinking { .. } => "content_block_delta.thinking",
+        },
+        StreamEvent::ContentBlockStop { .. } => "content_block_stop",
+        StreamEvent::MessageDelta { .. } => "message_delta",
+        StreamEvent::MessageStop => "message_stop",
+        StreamEvent::Ping => "ping",
+        StreamEvent::Error { .. } => "error",
     }
 }

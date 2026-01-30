@@ -171,7 +171,7 @@ mod tests {
     use std::fs as std_fs;
     use tempfile::TempDir;
 
-    async fn create_test_skill(dir: &Path) -> std::io::Result<()> {
+    fn create_test_skill(dir: &Path) -> std::io::Result<()> {
         std_fs::create_dir_all(dir)?;
 
         let skill_md = r#"---
@@ -199,7 +199,7 @@ This is a test skill.
     async fn test_load_metadata() {
         let temp_dir = TempDir::new().unwrap();
         let skill_dir = temp_dir.path().join("test-skill");
-        create_test_skill(&skill_dir).await.unwrap();
+        create_test_skill(&skill_dir).unwrap();
 
         let metadata = SkillLoader::load_metadata(&skill_dir).await.unwrap();
 
@@ -212,7 +212,7 @@ This is a test skill.
     async fn test_load_content() {
         let temp_dir = TempDir::new().unwrap();
         let skill_dir = temp_dir.path().join("test-skill");
-        create_test_skill(&skill_dir).await.unwrap();
+        create_test_skill(&skill_dir).unwrap();
 
         let metadata = SkillLoader::load_metadata(&skill_dir).await.unwrap();
         let content = SkillLoader::load_content(&metadata).await.unwrap();

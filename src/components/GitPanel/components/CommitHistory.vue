@@ -528,8 +528,9 @@
   .history__list {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     position: relative;
+    user-select: none;
   }
 
   .graph-svg {

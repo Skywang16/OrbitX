@@ -5,9 +5,8 @@ use tokio::fs;
 use crate::agent::error::{AgentError, AgentResult};
 
 use super::loader::SkillLoader;
-use super::matcher::SkillMatcher;
 use super::registry::{SkillRegistry, SkillRegistryRef};
-use super::types::{SkillContent, SkillMatchingMode, SkillMetadata};
+use super::types::{SkillContent, SkillMetadata};
 
 /// 技能管理器 - 渐进式披露的核心实现
 ///
@@ -41,22 +40,17 @@ use super::types::{SkillContent, SkillMatchingMode, SkillMetadata};
 /// ```
 pub struct SkillManager {
     registry: SkillRegistryRef,
-    matcher: Arc<SkillMatcher>,
 }
 
 impl SkillManager {
     pub fn new() -> Self {
         Self {
             registry: Arc::new(SkillRegistry::new()),
-            matcher: Arc::new(SkillMatcher::new()),
         }
     }
 
     pub fn with_registry(registry: SkillRegistryRef) -> Self {
-        Self {
-            registry,
-            matcher: Arc::new(SkillMatcher::new()),
-        }
+        Self { registry }
     }
 
     /// 发现阶段: 扫描全局和工作区并加载所有技能的元数据
@@ -144,60 +138,11 @@ impl SkillManager {
         Ok(())
     }
 
-    /// 激活阶段: 根据用户提示和匹配模式激活技能
+    /// 激活阶段: 根据技能名称加载完整内容
     ///
-    /// 参数:
-    /// - user_prompt: 用户输入
-    /// - mode: 匹配模式 (Explicit/Semantic/Hybrid)
-    /// - explicit_skills: 显式指定的技能列表 (可选)
-    ///
-    /// 返回: 激活的技能完整内容
-    pub async fn activate_skills(
-        &self,
-        user_prompt: &str,
-        mode: SkillMatchingMode,
-        explicit_skills: Option<&[String]>,
-    ) -> AgentResult<Vec<SkillContent>> {
-        let all_metadata = self.registry.list_all();
-
-        // 根据模式选择技能
-        let selected_names = match mode {
-            SkillMatchingMode::Explicit => {
-                // 只使用显式指定的技能
-                let explicit = explicit_skills.unwrap_or(&[]);
-                self.matcher.extract_explicit_mentions(user_prompt, explicit)
-            }
-            SkillMatchingMode::Semantic => {
-                // 只使用语义匹配
-                self.matcher
-                    .semantic_match(user_prompt, &all_metadata, 3)
-            }
-            SkillMatchingMode::Hybrid => {
-                // 混合模式: 先提取显式引用,再补充语义匹配
-                let explicit = explicit_skills.unwrap_or(&[]);
-                let mut selected = self.matcher.extract_explicit_mentions(user_prompt, explicit);
-
-                // 如果显式引用少于3个,用语义匹配补充
-                if selected.len() < 3 {
-                    let semantic = self
-                        .matcher
-                        .semantic_match(user_prompt, &all_metadata, 3 - selected.len());
-                    selected.extend(semantic);
-                }
-
-                selected
-            }
-        };
-
-        // 去重
-        let unique_names: Vec<String> = selected_names
-            .into_iter()
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-
-        // 批量加载内容
-        self.registry.get_multiple_contents(&unique_names).await
+    /// 这个方法将被 SkillTool 调用，LLM 通过 tool calling 激活技能
+    pub async fn load_content(&self, skill_name: &str) -> AgentResult<SkillContent> {
+        self.registry.get_or_load_content(skill_name).await
     }
 
     /// 执行阶段: 加载技能的引用文件
@@ -264,7 +209,7 @@ mod tests {
         std_fs::create_dir_all(&orbitx_skills).unwrap();
 
         let skill1_dir = orbitx_skills.join("skill-1");
-        create_test_skill(&skill1_dir, "skill-1").await.unwrap();
+        create_test_skill(&skill1_dir, "skill-1").unwrap();
 
         let manager = SkillManager::new();
         let skills = manager.discover_skills(None, Some(workspace)).await.unwrap();
@@ -281,14 +226,14 @@ mod tests {
         let global_dir = temp_dir.path().join("global");
         std_fs::create_dir_all(&global_dir).unwrap();
         let global_skill1 = global_dir.join("skill-global");
-        create_test_skill(&global_skill1, "skill-global").await.unwrap();
+        create_test_skill(&global_skill1, "skill-global").unwrap();
 
         // 创建工作区 skills
         let workspace = temp_dir.path().join("workspace");
         let orbitx_skills = workspace.join(".orbitx/skills");
         std_fs::create_dir_all(&orbitx_skills).unwrap();
         let workspace_skill1 = orbitx_skills.join("skill-workspace");
-        create_test_skill(&workspace_skill1, "skill-workspace").await.unwrap();
+        create_test_skill(&workspace_skill1, "skill-workspace").unwrap();
 
         let manager = SkillManager::new();
         let skills = manager
@@ -307,13 +252,13 @@ mod tests {
         let global_dir = temp_dir.path().join("global");
         std_fs::create_dir_all(&global_dir).unwrap();
         let global_skill = global_dir.join("shared-skill");
-        create_test_skill(&global_skill, "shared-skill").await.unwrap();
+        create_test_skill(&global_skill, "shared-skill").unwrap();
 
         let workspace = temp_dir.path().join("workspace");
         let orbitx_skills = workspace.join(".orbitx/skills");
         std_fs::create_dir_all(&orbitx_skills).unwrap();
         let workspace_skill = orbitx_skills.join("shared-skill");
-        create_test_skill(&workspace_skill, "shared-skill").await.unwrap();
+        create_test_skill(&workspace_skill, "shared-skill").unwrap();
 
         let manager = SkillManager::new();
         let skills = manager
@@ -330,7 +275,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_activate_explicit() {
+    async fn test_load_content() {
         let temp_dir = TempDir::new().unwrap();
         let workspace = temp_dir.path();
 
@@ -338,18 +283,15 @@ mod tests {
         std_fs::create_dir_all(&orbitx_skills).unwrap();
 
         let skill_dir = orbitx_skills.join("pdf-processing");
-        create_test_skill(&skill_dir, "pdf-processing").await.unwrap();
+        create_test_skill(&skill_dir, "pdf-processing").unwrap();
 
         let manager = SkillManager::new();
         manager.discover_skills(None, Some(workspace)).await.unwrap();
 
-        let prompt = "Please use @pdf-processing to extract text";
-        let activated = manager
-            .activate_skills(prompt, SkillMatchingMode::Explicit, None)
-            .await
-            .unwrap();
-
-        assert!(activated.iter().any(|s| s.metadata.name.as_ref() == "pdf-processing"));
+        // 直接按名称加载技能内容
+        let content = manager.load_content("pdf-processing").await.unwrap();
+        assert_eq!(content.metadata.name.as_ref(), "pdf-processing");
+        assert!(content.instructions.contains("Test content"));
     }
 
     #[tokio::test]
@@ -363,7 +305,7 @@ mod tests {
         for i in 1..=3 {
             let name = format!("skill-{}", i);
             let skill_dir = orbitx_skills.join(&name);
-            create_test_skill(&skill_dir, &name).await.unwrap();
+            create_test_skill(&skill_dir, &name).unwrap();
         }
 
         let manager = SkillManager::new();

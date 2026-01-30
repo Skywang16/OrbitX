@@ -1,10 +1,5 @@
 //! Anthropic Provider - 直接使用 Anthropic 原生类型
 //!
-//! **Linus Torvalds 风格的"好品味"设计**：
-//!
-//! - 零转换：直接使用 Anthropic API 的原生类型
-//! - 无中间抽象：不需要 convert_messages() 等函数
-//! - 简洁明了：0 行转换逻辑 vs 旧版 100+ 行
 //!
 //! ## 使用示例
 //!
@@ -203,7 +198,7 @@ impl AnthropicProvider {
 /// 1. System prompt 添加缓存
 /// 2. 最近两条 user 消息添加缓存
 ///
-/// 参考: https://docs.claude.com/en/docs/build-with-claude/prompt-caching
+
 pub fn apply_prompt_caching(mut request: CreateMessageRequest) -> CreateMessageRequest {
     // 1. 给 system prompt 添加缓存控制
     if let Some(SystemPrompt::Text(text)) = request.system.take() {

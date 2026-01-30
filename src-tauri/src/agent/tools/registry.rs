@@ -179,7 +179,7 @@ impl ToolRegistry {
                 self.cascade_allow_once(&task_id, &workspace, &permission, &always_patterns);
             }
             ToolConfirmationDecision::Deny => {
-                self.cancel_pending_confirmations_for_task(&task_id);
+                self.cancel_pending_confirmations_for_task(context, &task_id).await;
             }
         }
 
@@ -189,19 +189,21 @@ impl ToolRegistry {
         ok
     }
 
-    fn cancel_pending_confirmations_for_task(&self, task_id: &str) {
-        let mut to_cancel = Vec::new();
-        for entry in self.confirmations.pending_confirmations.iter() {
-            if entry.value().task_id == task_id {
-                to_cancel.push(entry.key().clone());
-            }
+    pub async fn cancel_pending_confirmations_for_task(&self, context: &TaskContext, task_id: &str) {
+        let to_cancel = self
+            .confirmations
+            .pending_confirmations
+            .iter()
+            .filter(|entry| entry.value().task_id == task_id)
+            .map(|entry| entry.key().clone())
+            .collect::<Vec<_>>();
+
+        for request_id in to_cancel {
+            self.drop_pending_confirmation(&request_id, ToolConfirmationDecision::Deny)
+                .await;
         }
 
-        for id in to_cancel {
-            if let Some((_, pending)) = self.confirmations.pending_confirmations.remove(&id) {
-                let _ = pending.tx.send(ToolConfirmationDecision::Deny);
-            }
-        }
+        self.pump_next_confirmation(context).await;
     }
 
     fn cascade_allow_once(
@@ -247,7 +249,14 @@ impl ToolRegistry {
             state.queue.retain(|id| id != request_id);
         }
 
-        // Only pump when the active request has finished.
+        drop(state);
+        self.pump_next_confirmation(context).await;
+    }
+
+    async fn pump_next_confirmation(&self, context: &TaskContext) {
+        let mut state = self.confirmations.confirmation_state.lock().await;
+
+        // Only pump when there is no active request.
         if state.active_request_id.is_some() {
             return;
         }
@@ -1066,6 +1075,7 @@ fn build_tool_action_for_prompt(tool_name: &str, workspace_root: PathBuf) -> Too
         "grep" => ToolAction::new("grep", workspace_root, vec![]),
         "semantic_search" => ToolAction::new("semantic_search", workspace_root, vec![]),
         "read_terminal" => ToolAction::new("terminal", workspace_root, vec![]),
+        "read_agent_terminal" => ToolAction::new("terminal", workspace_root, vec![]),
         "syntax_diagnostics" => ToolAction::new("syntax_diagnostics", workspace_root, vec![]),
         "todowrite" => ToolAction::new("todowrite", workspace_root, vec![]),
         "task" => ToolAction::new("task", workspace_root, vec![]),
@@ -1125,7 +1135,12 @@ fn build_tool_action(
             let url = args.get("url").and_then(|v| v.as_str()).unwrap_or_default();
             ToolAction::new("web_fetch", workspace_root, web_fetch_variants(url))
         }
+        "web_search" => {
+            let q = args.get("query").and_then(|v| v.as_str()).unwrap_or_default();
+            ToolAction::new("web_search", workspace_root, vec![q.to_string()])
+        }
         "read_terminal" => ToolAction::new("terminal", workspace_root, vec![]),
+        "read_agent_terminal" => ToolAction::new("terminal", workspace_root, vec![]),
         "syntax_diagnostics" => ToolAction::new("syntax_diagnostics", workspace_root, vec![]),
         "todowrite" => ToolAction::new("todowrite", workspace_root, vec![]),
         "task" => {

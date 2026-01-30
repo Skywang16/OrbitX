@@ -10,7 +10,6 @@ pub type TerminalResult<T> = Result<T, TerminalError>;
 pub type ContextRegistryResult<T> = Result<T, ContextRegistryError>;
 pub type ContextServiceResult<T> = Result<T, ContextServiceError>;
 pub type EventHandlerResult<T> = Result<T, EventHandlerError>;
-pub type ReplayResult<T> = Result<T, ReplayError>;
 pub type TerminalValidationResult<T> = Result<T, TerminalValidationError>;
 
 #[derive(Debug, Error)]
@@ -21,8 +20,6 @@ pub enum TerminalError {
     ContextService(#[from] ContextServiceError),
     #[error(transparent)]
     EventHandler(#[from] EventHandlerError),
-    #[error(transparent)]
-    Replay(#[from] ReplayError),
     #[error(transparent)]
     Validation(#[from] TerminalValidationError),
     #[error("Terminal internal error: {0}")]
@@ -85,14 +82,6 @@ pub enum EventHandlerError {
     Mux(#[from] MuxError),
     #[error("Event handler internal error: {0}")]
     Internal(String),
-}
-
-#[derive(Debug, Error)]
-pub enum ReplayError {
-    #[error("Output analyzer error: {reason}")]
-    OutputAnalyzer { reason: String },
-    #[error("Mux error: {0}")]
-    Mux(#[from] MuxError),
 }
 
 #[derive(Debug, Error)]

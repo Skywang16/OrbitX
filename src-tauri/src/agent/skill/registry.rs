@@ -162,7 +162,7 @@ mod tests {
     async fn test_register_and_get() {
         let temp_dir = TempDir::new().unwrap();
         let skill_dir = temp_dir.path().join("test-skill");
-        create_test_skill(&skill_dir, "test-skill").await.unwrap();
+        create_test_skill(&skill_dir, "test-skill").unwrap();
 
         let registry = SkillRegistry::new();
         let metadata = SkillLoader::load_metadata(&skill_dir).await.unwrap();
@@ -177,7 +177,7 @@ mod tests {
     async fn test_get_or_load_content() {
         let temp_dir = TempDir::new().unwrap();
         let skill_dir = temp_dir.path().join("test-skill");
-        create_test_skill(&skill_dir, "test-skill").await.unwrap();
+        create_test_skill(&skill_dir, "test-skill").unwrap();
 
         let registry = SkillRegistry::new();
         let metadata = SkillLoader::load_metadata(&skill_dir).await.unwrap();
@@ -200,7 +200,7 @@ mod tests {
         for i in 1..=3 {
             let name = format!("skill-{}", i);
             let skill_dir = temp_dir.path().join(&name);
-            create_test_skill(&skill_dir, &name).await.unwrap();
+            create_test_skill(&skill_dir, &name).unwrap();
 
             let metadata = SkillLoader::load_metadata(&skill_dir).await.unwrap();
             registry.register(metadata).unwrap();

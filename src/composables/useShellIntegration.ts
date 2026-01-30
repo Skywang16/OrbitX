@@ -175,6 +175,13 @@ export const useShellIntegration = (options: ShellIntegrationOptions) => {
       try {
         const exists = await terminalApi.terminalExists(paneId)
         if (!exists || disposed) return
+        let enabled = false
+        try {
+          enabled = await shellIntegrationApi.checkShellIntegrationStatus(paneId)
+        } catch (error) {
+          console.warn('Check shell integration status failed:', error)
+        }
+        if (enabled || disposed) return
         await shellIntegrationApi.setupShellIntegration(paneId, true)
       } catch (e) {
         console.error('Silent shell integration failed:', e)

@@ -229,9 +229,9 @@ impl<'a> AIModels<'a> {
 
     /// 保存模型（自动加密密钥）
     ///
-    /// 基于 (provider, model_name) 唯一约束进行 UPSERT:
-    /// - 如果组合不存在,插入新记录
-    /// - 如果组合已存在,更新现有记录
+    /// 基于主键 (id) 进行 UPSERT:
+    /// - 如果 id 不存在,插入新记录
+    /// - 如果 id 已存在,更新现有记录
     pub async fn save(&self, model: &AIModelConfig) -> RepositoryResult<()> {
         use crate::storage::error::RepositoryError;
 
@@ -255,16 +255,18 @@ impl<'a> AIModels<'a> {
             .as_ref()
             .map(|opts| serde_json::to_string(opts).unwrap_or_default());
 
-        // UPSERT 基于业务主键 (provider, model_name)
+        // UPSERT 基于主键 (id)
         let result = sqlx::query(
             r#"
             INSERT INTO ai_models
             (id, provider, api_url, api_key_encrypted, model_name, model_type,
              config_json, use_custom_base_url, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(provider, model_name) DO UPDATE SET
+            ON CONFLICT(id) DO UPDATE SET
+                provider = excluded.provider,
                 api_url = excluded.api_url,
                 api_key_encrypted = excluded.api_key_encrypted,
+                model_name = excluded.model_name,
                 model_type = excluded.model_type,
                 config_json = excluded.config_json,
                 use_custom_base_url = excluded.use_custom_base_url,

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::time::Duration;
 
 use crate::agent::core::context::{SubtaskRequest, TaskContext};
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
@@ -42,6 +43,7 @@ impl RunnableTool for TaskTool {
 
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::CodeAnalysis, ToolPriority::Expensive)
+            .with_timeout(Duration::from_secs(30 * 60))
             .with_summary_key_arg("description")
             .with_tags(vec!["ui:hidden".into(), "orchestration".into()])
     }

@@ -83,6 +83,9 @@ pub struct ToolMetadata {
     pub tags: Vec<String>,
     /// Key argument field name for summarization (e.g., "path" for file tools, "command" for shell)
     pub summary_key_arg: Option<&'static str>,
+    /// Whether this tool's output should be protected from context compaction
+    /// Used for critical tools like skill, whose output contains important instructions
+    pub protected_from_compaction: bool,
 }
 
 impl ToolMetadata {
@@ -95,6 +98,7 @@ impl ToolMetadata {
             requires_confirmation: false,
             tags: Vec::new(),
             summary_key_arg: None,
+            protected_from_compaction: false,
         }
     }
 
@@ -120,6 +124,11 @@ impl ToolMetadata {
 
     pub fn with_summary_key_arg(mut self, key_arg: &'static str) -> Self {
         self.summary_key_arg = Some(key_arg);
+        self
+    }
+
+    pub fn with_compaction_protection(mut self) -> Self {
+        self.protected_from_compaction = true;
         self
     }
 

@@ -1,9 +1,5 @@
 /// 命令序列预测引擎
 ///
-/// Linus式设计：三个步骤，没有抽象
-/// 1. 根据上一条命令查表
-/// 2. 从输出提取实体
-/// 3. 生成带参数的建议
 use super::command_pairs::get_suggested_commands;
 use crate::completion::smart_extractor::SmartExtractor;
 use crate::completion::types::{CompletionItem, CompletionType};
@@ -57,8 +53,6 @@ impl CommandPredictor {
     }
 
     /// 预测下一条命令
-    ///
-    /// Linus: "Keep it simple - 三步走"
     pub fn predict_next_commands(
         &self,
         last_command: &str,
@@ -146,8 +140,6 @@ impl CommandPredictor {
     }
 
     /// 提取第一个 PID
-    ///
-    /// Linus: "不需要完美，需要的是能用"
     fn extract_first_pid(&self, last_command: &str, output: &str) -> Option<String> {
         // 使用 SmartExtractor 提取 PID
         match self.extractor.extract_entities(last_command, output) {

@@ -77,6 +77,7 @@ fn build_openai_chat_body(
     body
 }
 
+
 impl OpenAIProvider {
     pub fn new(config: LLMProviderConfig) -> Self {
         Self { config }
@@ -220,7 +221,6 @@ impl LLMProvider for OpenAIProvider {
         let url = self.get_chat_endpoint();
         let headers = self.get_headers();
         let body = build_openai_chat_body(&request, false);
-
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
             req = req.header(&k, &v);
@@ -303,7 +303,6 @@ impl LLMProvider for OpenAIProvider {
         let url = self.get_chat_endpoint();
         let headers = self.get_headers();
         let body = build_openai_chat_body(&request, true);
-
         let mut req = self.client().post(&url).json(&body);
         for (k, v) in headers {
             req = req.header(&k, &v);
@@ -505,6 +504,44 @@ impl LLMProvider for OpenAIProvider {
                                     }
                                 }
 
+                                // 兼容旧的 function_call 流式字段（部分 OpenAI-compatible 模型仍会发送）
+                                if let Some(func) = delta.get("function_call") {
+                                    let name_opt = func.get("name").and_then(|v| v.as_str());
+                                    let args_opt = func.get("arguments").and_then(|v| v.as_str());
+                                    let event_index = 1;
+
+                                    if !state.tool_use_started.contains(&event_index) {
+                                        if let Some(name) = name_opt {
+                                            let id = format!("call_{}", uuid::Uuid::new_v4());
+                                            state.tool_use_started.insert(event_index);
+                                            state.pending_events.push_back(
+                                                StreamEvent::ContentBlockStart {
+                                                    index: event_index,
+                                                    content_block: ContentBlockStart::ToolUse {
+                                                        id,
+                                                        name: name.to_string(),
+                                                    },
+                                                },
+                                            );
+                                        }
+                                    }
+
+                                    if let Some(arguments) = args_opt {
+                                        if !arguments.is_empty()
+                                            && state.tool_use_started.contains(&event_index)
+                                        {
+                                            state.pending_events.push_back(
+                                                StreamEvent::ContentBlockDelta {
+                                                    index: event_index,
+                                                    delta: ContentDelta::InputJson {
+                                                        partial_json: arguments.to_string(),
+                                                    },
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+
                                 // finish_reason（流结束原因）
                                 if let Some(reason) = choice["finish_reason"].as_str() {
                                     // 先发送 ContentBlockStop（文本）
@@ -515,7 +552,8 @@ impl LLMProvider for OpenAIProvider {
                                             .push_back(StreamEvent::ContentBlockStop { index: 0 });
                                     }
                                     // 如果是工具调用结束，也关闭所有已开启的工具块
-                                    if reason == "tool_calls" && !state.tool_use_started.is_empty()
+                                    if (reason == "tool_calls" || reason == "function_call")
+                                        && !state.tool_use_started.is_empty()
                                     {
                                         let indices: Vec<usize> =
                                             state.tool_use_started.iter().copied().collect();
@@ -531,7 +569,7 @@ impl LLMProvider for OpenAIProvider {
                                     let stop_reason = match reason {
                                         "stop" => Some(StopReason::EndTurn),
                                         "length" => Some(StopReason::MaxTokens),
-                                        "tool_calls" => Some(StopReason::ToolUse),
+                                        "tool_calls" | "function_call" => Some(StopReason::ToolUse),
                                         "content_filter" => Some(StopReason::EndTurn),
                                         _ => None,
                                     };

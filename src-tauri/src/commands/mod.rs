@@ -67,6 +67,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::ai::tool::shell::terminal_get_default_shell,
         crate::ai::tool::shell::terminal_validate_shell_path,
         crate::ai::tool::shell::terminal_create_with_shell,
+        // Agent terminal commands
+        crate::agent::terminal::commands::agent_terminal_list,
+        crate::agent::terminal::commands::agent_terminal_abort,
+        crate::agent::terminal::commands::agent_terminal_remove,
         // 终端上下文管理命令
         crate::terminal::commands::pane::terminal_context_set_active_pane,
         crate::terminal::commands::pane::terminal_context_get_active_pane,

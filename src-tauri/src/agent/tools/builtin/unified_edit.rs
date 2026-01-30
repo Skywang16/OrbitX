@@ -480,45 +480,19 @@ impl RunnableTool for UnifiedEditTool {
     }
 
     fn description(&self) -> &str {
-        r#"Performs smart string replacements, insertions, or diff applications in files with advanced multi-strategy matching and intelligent indentation preservation.
+        r#"Performs exact string replacements in files.
 
 Usage:
-- You MUST use the read_file tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file first
-- The path parameter must be an absolute path (e.g., '/Users/user/project/src/main.ts')
-- When editing text from read_file tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file content
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required
-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked
+- You MUST use the read_file tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file first.
+- When editing text from read_file output, preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: spaces + line number + tab. Everything after that tab is the actual file content to match. Never include any part of the line number prefix in old_text or new_text.
+- ALWAYS prefer editing existing files. NEVER write new files unless explicitly required.
+- The edit will FAIL if old_text is not found in the file.
+- The edit will FAIL if old_text matches multiple locations. Provide more surrounding context to make it unique, or use mode="diff" for multiple changes.
 
 Edit Modes:
-- mode="replace": Find and replace text with advanced multi-strategy matching
-- mode="insert": Insert content at a specific position
-- mode="diff": Apply unified diff patches to files
-
-Replace Mode Guidelines:
-- Uses 5 intelligent matching strategies in order: Exact → LineTrimmed → WhitespaceNormalized → IndentationFlexible → BlockAnchor
-- Exact: Perfect string match (100% accuracy)
-- LineTrimmed: Ignores leading whitespace differences (95% accuracy)
-- WhitespaceNormalized: Normalizes all whitespace (90% accuracy)  
-- IndentationFlexible: Matches content with flexible indentation (85% accuracy)
-- BlockAnchor: Matches first/last lines exactly, fuzzy matches middle content (80-95% accuracy)
-- Include enough surrounding context to make the old_text unique in the file
-- Indentation is automatically preserved: the tool detects the original file's indentation style and applies it to replacements
-- For renaming variables/functions across a file, consider using multiple replace operations
-
-Insert Mode Guidelines:
-- Use after_line parameter (0-based line index) to specify insertion point
-- Use 0 to insert at the beginning of the file
-- Content will be inserted with appropriate indentation
-
-Diff Mode Guidelines:
-- Provide unified diff format patches
-- Useful for complex multi-location changes
-- The tool will validate and apply the patch safely
-
-Examples:
-- Replace text: {"path": "/path/file.js", "mode": "replace", "old_text": "function oldName() {\n  return true;\n}", "new_text": "function newName() {\n  return false;\n}"}
-- Insert at position: {"path": "/path/file.js", "mode": "insert", "after_line": 10, "content": "// New comment\nconst newVar = 'value';"}
-- Apply diff: {"path": "/path/file.js", "mode": "diff", "diff_content": "--- a/file.js\n+++ b/file.js\n@@ -1,3 +1,3 @@\n-old line\n+new line"}"#
+- mode="replace": Find old_text and replace with new_text. Indentation is auto-preserved.
+- mode="insert": Insert content after a specific line number (0-based).
+- mode="diff": Apply unified diff patches for complex multi-location changes."#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

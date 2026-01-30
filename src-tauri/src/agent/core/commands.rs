@@ -51,7 +51,12 @@ pub async fn agent_execute_task(
         Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("❌ Task execution failed: {}", e);
-            Ok(api_error!("agent.execute_failed"))
+            match e {
+                crate::agent::error::TaskExecutorError::TooManyActiveTasksGlobal { .. } => {
+                    Ok(api_error!("agent.too_many_active_tasks_global"))
+                }
+                _ => Ok(api_error!("agent.execute_failed")),
+            }
         }
     }
 }
@@ -264,25 +269,12 @@ pub async fn agent_render_command(
         return Ok(api_error!("agent.command_not_found"));
     };
 
-    // 加载 skills 使用新 API (暂时只用工作区, 全局skills在TaskExecutor中会统一加载)
-    let skill_manager = crate::agent::skill::SkillManager::new();
-    let skills = if let Ok(_) = skill_manager.discover_skills(None, Some(&workspace_root)).await {
-        skill_manager
-            .activate_skills(
-                &params.input,
-                crate::agent::skill::SkillMatchingMode::Hybrid,
-                None,
-            )
-            .await
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
+    // Skill 系统已改为 Tool 机制，不再在 command render 时预先加载
+    // LLM 会通过 tool calling 自动激活所需的 skill
     Ok(api_success!(CommandConfigLoader::render_with_skills(
         cfg,
         &params.input,
-        &skills
+        &Vec::new()
     )))
 }
 

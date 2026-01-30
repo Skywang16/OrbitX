@@ -18,6 +18,8 @@ use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::types::TaskEvent;
 
+const MAX_ACTIVE_TASKS_GLOBAL: usize = 5;
+
 impl TaskExecutor {
     pub async fn build_or_restore_context(
         &self,
@@ -26,6 +28,7 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<Arc<TaskContext>> {
         self.finish_running_task_for_session(params.session_id)
             .await?;
+        self.enforce_task_limits().await?;
         self.create_new_context(params, progress_channel).await
     }
 
@@ -103,6 +106,29 @@ impl TaskExecutor {
             })
             .map(|cfg| cfg.tool_filter.clone());
 
+        // 初始化 Skill 系统: 自动发现全局和工作区技能
+        let skill_manager = {
+            let manager = Arc::new(crate::agent::skill::SkillManager::new());
+            
+            // 获取全局 skills 目录
+            let global_skills_dir = crate::config::paths::skills_dir();
+            
+            // 自动发现技能
+            if let Err(e) = manager
+                .discover_skills(Some(&global_skills_dir), Some(&workspace_root))
+                .await
+            {
+                tracing::warn!("Failed to discover skills: {}", e);
+            } else {
+                let count = manager.list_all().len();
+                if count > 0 {
+                    tracing::info!("Discovered {} skills", count);
+                }
+            }
+            
+            Some(manager)
+        };
+
         let tool_registry = crate::agent::tools::create_tool_registry(
             "agent",
             effective.permissions,
@@ -110,6 +136,7 @@ impl TaskExecutor {
             self.tool_confirmations(),
             Vec::new(),
             self.vector_search_engine(),
+            skill_manager,
         )
         .await;
 
@@ -138,5 +165,22 @@ impl TaskExecutor {
             .insert(task_id.clone(), Arc::clone(&ctx));
 
         Ok(ctx)
+    }
+
+    async fn enforce_task_limits(&self) -> TaskExecutorResult<()> {
+        let global_count = self
+            .active_tasks()
+            .iter()
+            .filter(|entry| entry.value().emits_task_events())
+            .count();
+
+        if global_count >= MAX_ACTIVE_TASKS_GLOBAL {
+            return Err(TaskExecutorError::TooManyActiveTasksGlobal {
+                current: global_count,
+                limit: MAX_ACTIVE_TASKS_GLOBAL,
+            });
+        }
+
+        Ok(())
     }
 }

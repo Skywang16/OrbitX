@@ -22,8 +22,9 @@ pub use registry::ToolConfirmationManager;
 
 // Builtin tool type re-exports
 pub use builtin::{
-    GrepTool, ListFilesTool, ReadFileTool, ReadTerminalTool, SemanticSearchTool, ShellTool,
-    SyntaxDiagnosticsTool, TaskTool, TodoWriteTool, UnifiedEditTool, WebFetchTool, WriteFileTool,
+    GrepTool, ListFilesTool, ReadAgentTerminalTool, ReadFileTool, ReadTerminalTool,
+    SemanticSearchTool, ShellTool, SyntaxDiagnosticsTool, TaskTool, TodoWriteTool, UnifiedEditTool,
+    WebFetchTool, WebSearchTool, WriteFileTool,
 };
 
 use std::sync::Arc;
@@ -35,6 +36,7 @@ pub async fn create_tool_registry(
     confirmations: Arc<ToolConfirmationManager>,
     extra_tools: Vec<Arc<dyn RunnableTool>>,
     vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
+    skill_manager: Option<Arc<crate::agent::skill::SkillManager>>,
 ) -> Arc<ToolRegistry> {
     let checker = Arc::new(crate::agent::permissions::PermissionChecker::new(
         &permission_rules,
@@ -47,7 +49,14 @@ pub async fn create_tool_registry(
         has_vector_index: vector_search_engine.is_some(),
     };
 
-    register_builtin_tools(&registry, is_chat, &availability_ctx, vector_search_engine).await;
+    register_builtin_tools(
+        &registry,
+        is_chat,
+        &availability_ctx,
+        vector_search_engine,
+        skill_manager,
+    )
+    .await;
 
     for tool in extra_tools {
         let name = tool.name().to_string();
@@ -65,6 +74,7 @@ async fn register_builtin_tools(
     is_chat_mode: bool,
     availability_ctx: &ToolAvailabilityContext,
     vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
+    skill_manager: Option<Arc<crate::agent::skill::SkillManager>>,
 ) {
     use std::sync::Arc;
 
@@ -92,6 +102,16 @@ async fn register_builtin_tools(
         .register(
             "web_fetch",
             Arc::new(WebFetchTool::new()),
+            is_chat_mode,
+            availability_ctx,
+        )
+        .await
+        .ok();
+
+    registry
+        .register(
+            "web_search",
+            Arc::new(WebSearchTool::new()),
             is_chat_mode,
             availability_ctx,
         )
@@ -176,6 +196,15 @@ async fn register_builtin_tools(
         )
         .await
         .ok();
+    registry
+        .register(
+            "read_agent_terminal",
+            Arc::new(ReadAgentTerminalTool::new()),
+            is_chat_mode,
+            availability_ctx,
+        )
+        .await
+        .ok();
 
     registry
         .register(
@@ -186,4 +215,17 @@ async fn register_builtin_tools(
         )
         .await
         .ok();
+
+    // 注册 Skill 工具
+    if let Some(manager) = skill_manager {
+        registry
+            .register(
+                "skill",
+                Arc::new(crate::agent::skill::SkillTool::new(manager)),
+                is_chat_mode,
+                availability_ctx,
+            )
+            .await
+            .ok();
+    }
 }

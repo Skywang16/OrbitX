@@ -1,7 +1,8 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from './store'
+  import { useAgentTerminalStore } from '@/stores/agentTerminal'
   import { useAISettingsStore } from '@/components/settings/components/AI'
   import { useSessionStore } from '@/stores/session'
 
@@ -14,6 +15,7 @@
   import ToolConfirmationDialog from './components/messages/ToolConfirmationDialog.vue'
 
   const aiChatStore = useAIChatStore()
+  const agentTerminalStore = useAgentTerminalStore()
   const aiSettingsStore = useAISettingsStore()
   const sessionStore = useSessionStore()
 
@@ -66,11 +68,16 @@
 
   // 拖拽调整功能
   const startDrag = (event: MouseEvent) => {
+    event.preventDefault()
+
     isDragging.value = true
+    document.body.classList.add('orbitx-resizing')
+
     const startX = event.clientX
     const startWidth = aiChatStore.sidebarWidth
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
       const deltaX = startX - e.clientX
       const newWidth = Math.max(100, Math.min(800, startWidth + deltaX))
 
@@ -79,6 +86,7 @@
 
     const handleMouseUp = () => {
       isDragging.value = false
+      document.body.classList.remove('orbitx-resizing')
 
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -132,6 +140,7 @@
 
   onMounted(async () => {
     await aiChatStore.initialize()
+    await agentTerminalStore.setupListeners()
 
     const savedModelId = sessionStore.aiState?.selectedModelId || null
     if (savedModelId) {
@@ -142,6 +151,16 @@
 
     await handleModelChange(selectedModelId.value)
   })
+
+  watch(
+    () => aiChatStore.currentSession?.id ?? null,
+    async sessionId => {
+      if (typeof sessionId === 'number') {
+        await agentTerminalStore.loadTerminals(sessionId)
+      }
+    },
+    { immediate: true }
+  )
 </script>
 
 <template>

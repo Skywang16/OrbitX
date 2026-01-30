@@ -1,5 +1,5 @@
 <template>
-  <div class="terminal-wrapper">
+  <div class="terminal-wrapper" @mousedown="handleWrapperMouseDown">
     <TerminalLoading v-if="isLoading" />
 
     <div
@@ -596,6 +596,18 @@
       }
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * 处理 wrapper 的 mousedown 事件
+   * 阻止从 padding 区域拖拽时触发浏览器原生的元素选择（蓝色遮罩）
+   */
+  const handleWrapperMouseDown = (event: MouseEvent) => {
+    // 只处理点击在 padding 区域（即直接点击 wrapper 本身）的情况
+    if (event.target === event.currentTarget) {
+      event.preventDefault()
+      focusTerminal()
     }
   }
 

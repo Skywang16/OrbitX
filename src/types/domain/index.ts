@@ -1,6 +1,7 @@
 export * from './ai'
 export * from './checkpoint'
 export * from './aiMessage'
+export * from './agent-terminal'
 export * from './terminal'
 export * from './storage'
 export * from './shortcuts'

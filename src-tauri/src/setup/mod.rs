@@ -357,18 +357,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .inner()
             .clone();
 
-        let config_paths = app
-            .state::<crate::config::paths::ConfigPaths>()
-            .inner()
-            .clone();
-
         let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
             Arc::clone(&cache),
             Arc::clone(&agent_persistence),
             settings_manager,
             mcp_registry,
-            Arc::new(config_paths),
             Arc::clone(&checkpoint_service),
             std::sync::Arc::clone(&workspace_changes),
             vector_search_engine,
@@ -412,6 +406,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 /// 设置应用程序事件和监听器
 pub fn setup_app_events<R: tauri::Runtime>(app: &tauri::App<R>) {
     setup_unified_terminal_events(app.handle().clone());
+    crate::agent::terminal::AgentTerminalManager::init(app.handle().clone());
 
     // 启动系统主题监听器
     start_system_theme_listener(app.handle().clone());

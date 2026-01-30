@@ -8,9 +8,11 @@
  * - 管理迭代快照和压缩
  */
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use chrono::Utc;
 use serde_json::Value;
 use tokio_stream::StreamExt;
 use tracing::warn;
@@ -21,12 +23,17 @@ use crate::agent::compaction::{
 };
 use crate::agent::core::context::TaskContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
+use crate::agent::core::utils::should_render_tool_block;
 use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::PromptBuilder;
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
-use crate::agent::types::{Block, TextBlock, ThinkingBlock};
-use crate::llm::anthropic_types::{ContentBlock, ContentBlockStart, ContentDelta, StreamEvent};
+use crate::agent::types::{Block, TextBlock, ThinkingBlock, ToolBlock, ToolStatus};
+use crate::agent::terminal::AgentTerminalManager;
+use crate::agent::tools::ToolDescriptionContext;
+use crate::llm::anthropic_types::{
+    ContentBlock, ContentBlockStart, ContentDelta, StreamEvent, SystemPrompt,
+};
 use crate::storage::DatabaseManager;
 
 /// 内容块累积器（用于流式组装）
@@ -36,6 +43,8 @@ enum BlockAccumulator {
         id: String,
         name: String,
         input_json: String,
+        last_ui_update: Instant,
+        last_ui_len: usize,
     },
     Thinking(String),
 }
@@ -66,6 +75,9 @@ impl ReactOrchestrator {
     where
         H: crate::agent::core::executor::ReactHandler,
     {
+        tracing::info!("🔄 Starting ReAct loop with model: {}", model_id);
+        let mut fabricated_tool_output_count: u32 = 0;
+
         while !context.should_stop().await {
             context.check_aborted_async(false).await?;
 
@@ -74,6 +86,13 @@ impl ReactOrchestrator {
             // Clear transient system reminders (e.g. loop warnings) each iteration; they are
             // meant to influence the *next* step only, not permanently replace the base prompt.
             context.set_system_prompt_overlay(None).await?;
+            if let Some(manager) = AgentTerminalManager::global() {
+                if let Some(overlay) = manager.build_prompt_overlay(context.session_id) {
+                    let _ = context
+                        .set_system_prompt_overlay(Some(SystemPrompt::Text(overlay)))
+                        .await;
+                }
+            }
 
             let react_iteration_index = {
                 let mut react = context.states.react_runtime.write().await;
@@ -85,6 +104,13 @@ impl ReactOrchestrator {
             // ===== Phase 2: 准备消息上下文（从 messages 表加载，Summary 作为断点） =====
 
             let tool_registry = context.tool_registry();
+            let tool_names: HashSet<String> = tool_registry
+                .get_tool_schemas_with_context(&ToolDescriptionContext {
+                    cwd: context.cwd.to_string(),
+                })
+                .into_iter()
+                .map(|schema| schema.name.to_lowercase())
+                .collect();
 
             // 文件上下文（如有），追加为 user 临时消息
             let recent_iterations = {
@@ -125,6 +151,7 @@ impl ReactOrchestrator {
 
             let llm_service = crate::llm::service::LLMService::new(Arc::clone(&self.database));
             let cancel_token = context.create_stream_cancel_token();
+
             let mut stream = llm_service
                 .call_stream(llm_request, cancel_token)
                 .await
@@ -137,6 +164,9 @@ impl ReactOrchestrator {
             let mut text_content: Vec<String> = Vec::new();
             let mut tool_use_blocks: Vec<ContentBlock> = Vec::new();
             let mut pending_tool_calls: Vec<(String, String, Value)> = Vec::new();
+            let mut tool_block_visibility: HashMap<String, bool> = HashMap::new();
+            let mut tool_block_started_at: HashMap<String, chrono::DateTime<chrono::Utc>> =
+                HashMap::new();
 
             let mut thinking_stream_id: Option<String> = None;
             let mut text_stream_id: Option<String> = None;
@@ -146,7 +176,7 @@ impl ReactOrchestrator {
             // ===== Phase 3: 处理 Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
                 if context.is_aborted() {
-                    break;
+                    return Err(TaskExecutorError::TaskInterrupted);
                 }
                 context.check_aborted_async(true).await?;
 
@@ -160,14 +190,38 @@ impl ReactOrchestrator {
                             current_blocks.insert(index, BlockAccumulator::Text(text));
                         }
                         ContentBlockStart::ToolUse { id, name } => {
+                            let tool_id = id.clone();
+                            let tool_name = name.clone();
                             current_blocks.insert(
                                 index,
                                 BlockAccumulator::ToolUse {
                                     id,
                                     name,
                                     input_json: String::new(),
+                                    last_ui_update: Instant::now(),
+                                    last_ui_len: 0,
                                 },
                             );
+                            let should_render = should_render_tool_block(context, &tool_name).await;
+                            tool_block_visibility.insert(tool_id.clone(), should_render);
+                            if should_render {
+                                let now = Utc::now();
+                                tool_block_started_at.insert(tool_id.clone(), now);
+                                context
+                                    .assistant_append_block(Block::Tool(ToolBlock {
+                                        id: tool_id.clone(),
+                                        call_id: tool_id.clone(),
+                                        name: tool_name.clone(),
+                                        status: ToolStatus::Pending,
+                                        input: Value::Object(serde_json::Map::new()),
+                                        output: None,
+                                        compacted_at: None,
+                                        started_at: now,
+                                        finished_at: None,
+                                        duration_ms: None,
+                                    }))
+                                    .await?;
+                            }
                         }
                         ContentBlockStart::Thinking { thinking } => {
                             current_blocks.insert(index, BlockAccumulator::Thinking(thinking));
@@ -198,8 +252,62 @@ impl ReactOrchestrator {
                                     }
                                 }
                                 ContentDelta::InputJson { partial_json } => {
-                                    if let BlockAccumulator::ToolUse { input_json, .. } = block {
+                                    if let BlockAccumulator::ToolUse {
+                                        id,
+                                        name,
+                                        input_json,
+                                        last_ui_update,
+                                        last_ui_len,
+                                    } = block
+                                    {
                                         input_json.push_str(&partial_json);
+
+                                        if !tool_block_visibility
+                                            .get(id)
+                                            .copied()
+                                            .unwrap_or(false)
+                                        {
+                                            continue;
+                                        }
+
+                                        const MIN_UI_UPDATE_INTERVAL: Duration =
+                                            Duration::from_millis(750);
+                                        const MIN_BYTES_DELTA_FOR_UPDATE: usize = 2048;
+
+                                        let now = Instant::now();
+                                        let bytes = input_json.len();
+                                        let bytes_delta = bytes.saturating_sub(*last_ui_len);
+                                        if bytes_delta < MIN_BYTES_DELTA_FOR_UPDATE
+                                            && now.duration_since(*last_ui_update)
+                                                < MIN_UI_UPDATE_INTERVAL
+                                        {
+                                            continue;
+                                        }
+
+                                        *last_ui_update = now;
+                                        *last_ui_len = bytes;
+
+                                        let started_at = tool_block_started_at
+                                            .get(id)
+                                            .cloned()
+                                            .unwrap_or_else(Utc::now);
+                                        let _ = context
+                                            .assistant_upsert_block(Block::Tool(ToolBlock {
+                                                id: id.clone(),
+                                                call_id: id.clone(),
+                                                name: name.clone(),
+                                                status: ToolStatus::Pending,
+                                                input: serde_json::json!({
+                                                    "__streaming": true,
+                                                    "__inputBytes": bytes,
+                                                }),
+                                                output: None,
+                                                compacted_at: None,
+                                                started_at,
+                                                finished_at: None,
+                                                duration_ms: None,
+                                            }))
+                                            .await;
                                     }
                                 }
                                 ContentDelta::Thinking { thinking } => {
@@ -244,22 +352,56 @@ impl ReactOrchestrator {
                                         text_content.push(text);
                                     }
                                 }
-                                BlockAccumulator::ToolUse {
-                                    id,
-                                    name,
-                                    input_json,
-                                } => {
-                                    let input: Value =
-                                        serde_json::from_str(&input_json).map_err(|err| {
-                                            TaskExecutorError::InternalError(format!(
-                                                "Invalid tool input JSON from stream: {err}"
-                                            ))
-                                        })?;
+                                BlockAccumulator::ToolUse { id, name, input_json, .. } => {
+                                    // Some OpenAI-compatible models (e.g., GLM) may send
+                                    // duplicate arguments via both `tool_calls` and
+                                    // `function_call`, resulting in concatenated JSON like
+                                    // `{...}{...}`. We defensively parse only the first
+                                    // valid JSON object using a streaming deserializer.
+                                    let input: Value = {
+                                        let mut de =
+                                            serde_json::Deserializer::from_str(&input_json)
+                                                .into_iter::<Value>();
+                                        de.next()
+                                            .ok_or_else(|| {
+                                                TaskExecutorError::InternalError(
+                                                    "Empty tool input JSON from stream"
+                                                        .to_string(),
+                                                )
+                                            })?
+                                            .map_err(|err| {
+                                                TaskExecutorError::InternalError(format!(
+                                                    "Invalid tool input JSON from stream: {err}"
+                                                ))
+                                            })?
+                                    };
                                     tool_use_blocks.push(ContentBlock::ToolUse {
                                         id: id.clone(),
                                         name: name.clone(),
                                         input: input.clone(),
                                     });
+
+                                    if tool_block_visibility.get(&id).copied().unwrap_or(false) {
+                                        let now = Utc::now();
+                                        let started_at = tool_block_started_at
+                                            .get(&id)
+                                            .cloned()
+                                            .unwrap_or(now);
+                                        context
+                                            .assistant_upsert_block(Block::Tool(ToolBlock {
+                                                id: id.clone(),
+                                                call_id: id.clone(),
+                                                name: name.clone(),
+                                                status: ToolStatus::Pending,
+                                                input: input.clone(),
+                                                output: None,
+                                                compacted_at: None,
+                                                started_at,
+                                                finished_at: None,
+                                                duration_ms: None,
+                                            }))
+                                            .await?;
+                                    }
 
                                     context.states.react_runtime.write().await.record_action(
                                         react_iteration_index,
@@ -300,12 +442,60 @@ impl ReactOrchestrator {
                 }
             }
 
+            if context.is_aborted() {
+                return Err(TaskExecutorError::TaskInterrupted);
+            }
+
             // ===== Phase 4: 将累积内容写入上下文 =====
             let final_text = if !text_content.is_empty() {
                 Some(text_content.join("\n"))
             } else {
                 None
             };
+
+            if pending_tool_calls.is_empty() {
+                if let Some(text) = final_text.as_deref() {
+                    if contains_fabricated_tool_output(text, &tool_names) {
+                        fabricated_tool_output_count =
+                            fabricated_tool_output_count.saturating_add(1);
+
+                        if let Some(id) = &text_stream_id {
+                            let note = if fabricated_tool_output_count == 1 {
+                                "⚠️ Invalid tool output text. Retrying once."
+                            } else {
+                                "⚠️ Invalid tool output text. Aborting."
+                            };
+                            let _ = context
+                                .assistant_update_block(
+                                    id,
+                                    Block::Text(TextBlock {
+                                        id: id.clone(),
+                                        content: note.to_string(),
+                                        is_streaming: false,
+                                    }),
+                                )
+                                .await;
+                        }
+
+                        if fabricated_tool_output_count == 1 {
+                            let reminder = "You must NEVER claim tool results in plain text. \
+If a tool is needed, emit a tool call; otherwise reply without tool-result language.";
+                            let _ = context
+                                .set_system_prompt_overlay(Some(SystemPrompt::Text(format!(
+                                    "<system-reminder type=\"invalid-tool-output\">\n{}\n</system-reminder>",
+                                    reminder
+                                ))))
+                                .await;
+                            continue;
+                        }
+
+                        return Err(TaskExecutorError::InternalError(format!(
+                            "LLM output contained fabricated tool results (count={})",
+                            fabricated_tool_output_count
+                        )));
+                    }
+                }
+            }
 
             context
                 .add_assistant_message(final_text.clone(), Some(tool_use_blocks))
@@ -331,6 +521,37 @@ impl ReactOrchestrator {
                     let deduplicated_calls =
                         crate::agent::core::utils::deduplicate_tool_uses(tool_calls);
                     if deduplicated_calls.len() < tool_calls.len() {
+                        let kept_ids: HashSet<String> = deduplicated_calls
+                            .iter()
+                            .map(|(id, _, _)| id.clone())
+                            .collect();
+                        let now = Utc::now();
+                        for (call_id, tool_name, input) in tool_calls.iter() {
+                            if kept_ids.contains(call_id) {
+                                continue;
+                            }
+                            if tool_block_visibility.get(call_id).copied().unwrap_or(false) {
+                                let started_at = tool_block_started_at
+                                    .get(call_id)
+                                    .cloned()
+                                    .unwrap_or(now);
+                                context
+                                    .assistant_upsert_block(Block::Tool(ToolBlock {
+                                        id: call_id.clone(),
+                                        call_id: call_id.clone(),
+                                        name: tool_name.clone(),
+                                        status: ToolStatus::Cancelled,
+                                        input: input.clone(),
+                                        output: None,
+                                        compacted_at: None,
+                                        started_at,
+                                        finished_at: Some(now),
+                                        duration_ms: Some(0),
+                                    }))
+                                    .await?;
+                            }
+                        }
+
                         let duplicates_count = tool_calls.len() - deduplicated_calls.len();
                         warn!(
                             "Detected {} duplicate tool calls in iteration {}",
@@ -410,6 +631,8 @@ impl ReactOrchestrator {
                     thinking: _,
                     output,
                 } => {
+                    tracing::info!("✅ Task completed successfully at iteration {}", iteration);
+
                     context
                         .states
                         .react_runtime
@@ -428,12 +651,16 @@ impl ReactOrchestrator {
                         iteration
                     );
 
+                    tracing::warn!("⚠️  Empty LLM response at iteration {}, terminating task", iteration);
+
                     let snapshot = iter_ctx.finalize();
                     Self::update_session_stats(context, &snapshot).await;
                     break;
                 }
             }
         }
+
+        tracing::info!("🏁 ReAct loop finished");
         Ok(())
     }
 
@@ -498,6 +725,32 @@ impl ReactOrchestrator {
 
         Ok(())
     }
+}
+
+fn contains_fabricated_tool_output(text: &str, tool_names: &HashSet<String>) -> bool {
+    if tool_names.is_empty() {
+        return false;
+    }
+
+    let lower = text.to_lowercase();
+    for name in tool_names {
+        let name_lower = name.to_lowercase();
+        let name_spaced = name_lower.replace('_', " ");
+        if lower.contains("tool ")
+            && (lower.contains(&name_lower) || lower.contains(&name_spaced))
+            && (lower.contains("completed")
+                || lower.contains("successfully")
+                || lower.contains("failed")
+                || lower.contains("error")
+                || lower.contains("完成")
+                || lower.contains("成功")
+                || lower.contains("失败")
+                || lower.contains("错误"))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 // Compaction business rules live in `agent/compaction/*` (not in the orchestrator).

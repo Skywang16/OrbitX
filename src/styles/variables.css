@@ -10,6 +10,17 @@ body.orbitx-tab-dragging * {
   -webkit-user-select: none !important;
 }
 
+/* Dragging/resizing panels: prevent accidental text selection (especially xterm selection) */
+body.orbitx-resizing,
+body.orbitx-resizing * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.orbitx-resizing .terminal-container {
+  pointer-events: none !important;
+}
+
 .orbitx-drag-preview {
   position: fixed;
   top: 0;

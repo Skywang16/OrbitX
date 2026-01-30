@@ -475,3 +475,10 @@ impl Default for ConfigPaths {
         Self::new().expect("无法创建默认配置路径")
     }
 }
+
+/// 获取全局 Skills 目录路径的便捷函数
+///
+/// 返回 `~/.config/orbitx/skills` (或对应平台的路径)
+pub fn skills_dir() -> PathBuf {
+    ConfigPaths::default().skills_dir().to_path_buf()
+}

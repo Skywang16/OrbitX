@@ -7,6 +7,7 @@
 
 export { aiApi } from './ai'
 export { agentApi } from './agent'
+export { agentTerminalApi } from './agent-terminal'
 export { appApi } from './app'
 export { vectorDbApi } from './vector-db'
 export { completionApi } from './completion'

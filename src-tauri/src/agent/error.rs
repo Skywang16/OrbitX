@@ -105,6 +105,10 @@ pub enum TaskExecutorError {
     #[error("Task execution interrupted")]
     TaskInterrupted,
 
+    #[error("Too many active tasks globally: {current}/{limit}")]
+    TooManyActiveTasksGlobal { current: usize, limit: usize },
+
+
     #[error("Invalid task state transition: {from} -> {to}")]
     InvalidStateTransition { from: String, to: String },
 
@@ -130,6 +134,7 @@ impl TaskExecutorError {
             TaskExecutorError::DatabaseError(_) => true,
             TaskExecutorError::RepositoryError(_) => true,
             TaskExecutorError::TaskInterrupted => true,
+            TaskExecutorError::TooManyActiveTasksGlobal { .. } => false,
             TaskExecutorError::InvalidStateTransition { .. } => false,
             TaskExecutorError::InternalError(_) => false,
         }
@@ -152,6 +157,7 @@ impl TaskExecutorError {
             TaskExecutorError::DatabaseError(_) => ErrorSeverity::Error,
             TaskExecutorError::RepositoryError(_) => ErrorSeverity::Error,
             TaskExecutorError::TaskInterrupted => ErrorSeverity::Info,
+            TaskExecutorError::TooManyActiveTasksGlobal { .. } => ErrorSeverity::Warning,
             TaskExecutorError::InvalidStateTransition { .. } => ErrorSeverity::Error,
             TaskExecutorError::InternalError(_) => ErrorSeverity::Critical,
         }

@@ -846,12 +846,119 @@ impl TaskContext {
         .await
     }
 
+    pub async fn assistant_upsert_block(&self, block: Block) -> TaskExecutorResult<()> {
+        let block_id = match &block {
+            Block::Thinking(b) => b.id.clone(),
+            Block::Text(b) => b.id.clone(),
+            Block::Tool(b) => b.id.clone(),
+            Block::Subtask(b) => b.id.clone(),
+            _ => {
+                return Err(TaskExecutorError::StatePersistenceFailed(
+                    "block type does not support upsert".to_string(),
+                ))
+            }
+        };
+
+        let mut message = self
+            .states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .clone()
+            .ok_or_else(|| {
+                TaskExecutorError::StatePersistenceFailed(
+                    "assistant message not initialized".to_string(),
+                )
+            })?;
+
+        let message_id = message.id;
+        let index_opt = find_block_index(&message.blocks, &block_id);
+        let existed = index_opt.is_some();
+        if let Some(index) = index_opt {
+            message.blocks[index] = block.clone();
+        } else {
+            message.blocks.push(block.clone());
+        }
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        self.states.messages.lock().await.assistant_message = Some(message);
+
+        if existed {
+            self.emit_event(TaskEvent::BlockUpdated {
+                task_id: self.task_id.to_string(),
+                message_id,
+                block_id,
+                block,
+            })
+            .await
+        } else {
+            self.emit_event(TaskEvent::BlockAppended {
+                task_id: self.task_id.to_string(),
+                message_id,
+                block,
+            })
+            .await
+        }
+    }
+
     /// 计算当前会话的上下文占用
     pub async fn calculate_context_usage(
         &self,
-        _model_id: &str,
+        model_id: &str,
     ) -> Option<crate::agent::types::ContextUsage> {
-        None
+        use crate::agent::utils::tokenizer::{count_text_tokens, count_message_param_tokens};
+
+        // 获取模型的上下文窗口大小
+        let context_window = match model_id {
+            // Claude models
+            s if s.contains("claude-3-5-sonnet") => 200_000,
+            s if s.contains("claude-3-5-haiku") => 200_000,
+            s if s.contains("claude-3-opus") => 200_000,
+            s if s.contains("claude-3-sonnet") => 200_000,
+            s if s.contains("claude-3-haiku") => 200_000,
+            // GPT models
+            s if s.contains("gpt-4") => 128_000,
+            s if s.contains("gpt-3.5-turbo") => 16_384,
+            // 默认值
+            _ => 128_000,
+        };
+
+        let mut tokens_used = 0usize;
+
+        let execution = self.states.execution.read().await;
+
+        // 统计系统提示
+        if let Some(system_prompt) = &execution.system_prompt {
+            match system_prompt {
+                SystemPrompt::Text(t) => {
+                    tokens_used += count_text_tokens(t);
+                }
+                SystemPrompt::Blocks(blocks) => {
+                    for block in blocks {
+                        tokens_used += count_text_tokens(&block.text);
+                    }
+                }
+            }
+        }
+
+        // 统计对话历史
+        for msg in &execution.messages {
+            tokens_used += count_message_param_tokens(msg);
+        }
+
+        // 确保不超过上下文窗口
+        let tokens_used = (tokens_used as u32).min(context_window);
+
+        Some(crate::agent::types::ContextUsage {
+            tokens_used,
+            context_window,
+        })
     }
 
     pub async fn finish_assistant_message(
@@ -907,10 +1014,100 @@ impl TaskContext {
     }
 
     pub async fn fail_assistant_message(&self, error: ErrorBlock) -> TaskExecutorResult<()> {
-        self.assistant_append_block(Block::Error(error.clone()))
-            .await?;
-        self.finish_assistant_message(MessageStatus::Error, None, None)
-            .await?;
+        let Some(mut message) = self.states.messages.lock().await.assistant_message.clone() else {
+            return Ok(());
+        };
+
+        let now = Utc::now();
+        let mut changed_blocks: Vec<(String, Block)> = Vec::new();
+
+        let appended = Block::Error(error);
+        message.blocks.push(appended.clone());
+
+        for block in &mut message.blocks {
+            match block {
+                Block::Thinking(b) => {
+                    if b.is_streaming {
+                        b.is_streaming = false;
+                        changed_blocks.push((b.id.clone(), Block::Thinking(b.clone())));
+                    }
+                }
+                Block::Text(b) => {
+                    if b.is_streaming {
+                        b.is_streaming = false;
+                        changed_blocks.push((b.id.clone(), Block::Text(b.clone())));
+                    }
+                }
+                Block::Tool(b) => {
+                    if matches!(b.status, ToolStatus::Running | ToolStatus::Pending) {
+                        b.status = ToolStatus::Error;
+                        b.finished_at = Some(now);
+                        b.duration_ms = Some(
+                            now.signed_duration_since(b.started_at)
+                                .num_milliseconds()
+                                .max(0),
+                        );
+                        changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
+                    }
+                }
+                Block::Subtask(b) => {
+                    if matches!(b.status, SubtaskStatus::Running | SubtaskStatus::Pending) {
+                        b.status = SubtaskStatus::Error;
+                        if b.summary.is_none() {
+                            b.summary = Some("Parent task failed".to_string());
+                        }
+                        changed_blocks.push((b.id.clone(), Block::Subtask(b.clone())));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        message.status = MessageStatus::Error;
+        message.finished_at = Some(now);
+        message.duration_ms = Some(
+            now.signed_duration_since(message.created_at)
+                .num_milliseconds()
+                .max(0),
+        );
+
+        self.agent_persistence()
+            .messages()
+            .update(&message)
+            .await
+            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+
+        let message_id = message.id;
+        self.states.messages.lock().await.assistant_message = Some(message.clone());
+
+        self.emit_event(TaskEvent::BlockAppended {
+            task_id: self.task_id.to_string(),
+            message_id,
+            block: appended,
+        })
+        .await?;
+
+        for (block_id, block) in changed_blocks {
+            let _ = self
+                .emit_event(TaskEvent::BlockUpdated {
+                    task_id: self.task_id.to_string(),
+                    message_id,
+                    block_id,
+                    block,
+                })
+                .await;
+        }
+
+        self.emit_event(TaskEvent::MessageFinished {
+            task_id: self.task_id.to_string(),
+            message_id,
+            status: MessageStatus::Error,
+            finished_at: now,
+            duration_ms: message.duration_ms.unwrap_or(0),
+            token_usage: None,
+            context_usage: None,
+        })
+        .await?;
         Ok(())
     }
 
@@ -937,7 +1134,7 @@ impl TaskContext {
                     }
                 }
                 Block::Tool(b) => {
-                    if matches!(b.status, ToolStatus::Running) {
+                    if matches!(b.status, ToolStatus::Running | ToolStatus::Pending) {
                         b.status = ToolStatus::Cancelled;
                         b.finished_at = Some(now);
                         b.duration_ms = Some(
@@ -946,6 +1143,15 @@ impl TaskContext {
                                 .max(0),
                         );
                         changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
+                    }
+                }
+                Block::Subtask(b) => {
+                    if matches!(b.status, SubtaskStatus::Running | SubtaskStatus::Pending) {
+                        b.status = SubtaskStatus::Cancelled;
+                        if b.summary.is_none() {
+                            b.summary = Some("Parent task cancelled".to_string());
+                        }
+                        changed_blocks.push((b.id.clone(), Block::Subtask(b.clone())));
                     }
                 }
                 _ => {}

@@ -9,7 +9,7 @@ pub mod error;
 pub mod event_handler;
 #[cfg(test)]
 pub mod integration_test;
-pub mod replay;
+pub mod scrollback;
 pub mod types;
 
 pub use channel_manager::TerminalChannelManager;
@@ -19,11 +19,12 @@ pub use context_registry::ActiveTerminalContextRegistry;
 pub use context_service::{CacheStats, TerminalContextService};
 pub use error::{
     ContextRegistryError, ContextRegistryResult, ContextServiceError, ContextServiceResult,
-    EventHandlerError, EventHandlerResult, ReplayError, ReplayResult, TerminalError,
-    TerminalResult, TerminalValidationError, TerminalValidationResult,
+    EventHandlerError, EventHandlerResult, TerminalError, TerminalResult, TerminalValidationError,
+    TerminalValidationResult,
 };
 pub use event_handler::{create_terminal_event_handler, TerminalEventHandler};
 pub use types::*;
+pub use scrollback::TerminalScrollback;
 
 // 从统一events模块导出Context事件
 pub use crate::events::TerminalContextEvent;

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import workspaceService, { type SessionRecord, type WorkspaceRecord } from '@/api/workspace/service'
 import type { Message } from '@/types'
+import type { TabState } from '@/types/domain/storage'
 import { useTerminalStore } from '@/stores/Terminal'
 import { useSessionStore } from '@/stores/session'
 import { getWorkspacePathForTab } from '@/tabs/context'
@@ -21,18 +22,20 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
   const isLoading = ref(false)
   const recentWorkspaces = ref<WorkspaceRecord[]>([])
 
-  // 工作区路径：终端 tab 用终端 cwd，其他 tab 用未分组
+  const sessionStore = useSessionStore()
+  const terminalStore = useTerminalStore()
+
+  const resolveTabPath = (tab: TabState): string | null => {
+    const path = getWorkspacePathForTab(tab, { terminals: terminalStore.terminals })
+    return path && path !== '~' ? path : null
+  }
+
+  // 工作区路径：始终以当前选中的 tab 为唯一来源
   const currentWorkspacePath = computed(() => {
-    const sessionStore = useSessionStore()
-    const terminalStore = useTerminalStore()
-
     const activeTab = sessionStore.activeTab
-
     if (!activeTab) return UNGROUPED_WORKSPACE_PATH
 
-    const path = getWorkspacePathForTab(activeTab, { terminals: terminalStore.terminals })
-    if (!path || path === '~') return UNGROUPED_WORKSPACE_PATH
-    return path
+    return resolveTabPath(activeTab) ?? UNGROUPED_WORKSPACE_PATH
   })
 
   const loadRecentWorkspaces = async (limit = 10) => {

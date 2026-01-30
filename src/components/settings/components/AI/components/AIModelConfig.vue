@@ -34,7 +34,7 @@
     modelType: 'chat' as const,
     options: {
       maxContextTokens: 128000,
-      temperature: 0.7,
+      temperature: 0.5,
       timeout: 300000,
       maxTokens: -1,
     },
@@ -104,7 +104,7 @@
     formData.useCustomBaseUrl = model.useCustomBaseUrl || false
     formData.options = {
       maxContextTokens: model.options?.maxContextTokens ?? 128000,
-      temperature: model.options?.temperature ?? 0.7,
+      temperature: model.options?.temperature ?? 0.5,
       timeout: model.options?.timeout ?? 300000,
       maxTokens: model.options?.maxTokens ?? -1,
     }

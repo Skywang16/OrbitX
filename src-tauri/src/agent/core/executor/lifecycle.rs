@@ -26,6 +26,57 @@ use crate::{
     agent::common::llm_text::extract_text_from_llm_message, llm::service::LLMService,
 };
 
+struct RunTaskLoopDropGuard {
+    executor: TaskExecutor,
+    ctx: Arc<TaskContext>,
+    armed: bool,
+}
+
+impl RunTaskLoopDropGuard {
+    fn new(executor: TaskExecutor, ctx: Arc<TaskContext>) -> Self {
+        Self {
+            executor,
+            ctx,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for RunTaskLoopDropGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+
+        let ctx = Arc::clone(&self.ctx);
+        let executor = self.executor.clone();
+        ctx.abort();
+
+        task::spawn(async move {
+            // If we're being dropped mid-flight, make sure the UI isn't left with streaming blocks
+            // and pending tools. Treat it as cancellation unless a terminal state was already set.
+            let status = ctx.status().await;
+            if matches!(
+                status,
+                AgentTaskStatus::Created | AgentTaskStatus::Running | AgentTaskStatus::Paused
+            ) {
+                let _ = ctx.set_status(AgentTaskStatus::Cancelled).await;
+                let _ = ctx.cancel_assistant_message().await;
+            }
+
+            ctx.tool_registry()
+                .cancel_pending_confirmations_for_task(&ctx, ctx.task_id.as_ref())
+                .await;
+
+            executor.active_tasks().remove(ctx.task_id.as_ref());
+        });
+    }
+}
+
 impl TaskExecutor {
     pub async fn execute_task(
         &self,
@@ -166,6 +217,26 @@ impl TaskExecutor {
                 Ok(v) => v,
                 Err(e) => {
                     error!("Failed to build task prompts: {}", e);
+                    ctx_for_spawn.abort();
+                    let _ = ctx_for_spawn.set_status(AgentTaskStatus::Error).await;
+
+                    let error_block = ErrorBlock {
+                        code: "task.prompt_build_failed".to_string(),
+                        message: e.to_string(),
+                        details: None,
+                    };
+
+                    let _ = ctx_for_spawn.fail_assistant_message(error_block.clone()).await;
+                    if ctx_for_spawn.emits_task_events() {
+                        let _ = ctx_for_spawn
+                            .emit_event(TaskEvent::TaskError {
+                                task_id: ctx_for_spawn.task_id.to_string(),
+                                error: error_block,
+                            })
+                            .await;
+                    }
+
+                    executor.active_tasks().remove(ctx_for_spawn.task_id.as_ref());
                     return;
                 }
             };
@@ -190,6 +261,7 @@ impl TaskExecutor {
     ) -> TaskExecutorResult<()> {
         const MAX_SYNTAX_REPAIR_ROUNDS: usize = 2;
 
+        let mut drop_guard = RunTaskLoopDropGuard::new(self.clone(), Arc::clone(&ctx));
         let mut repair_round = 0usize;
 
         loop {
@@ -248,6 +320,7 @@ impl TaskExecutor {
                         };
 
                         error!("Task failed: {}", error_block.message);
+                        ctx.abort();
                         ctx.set_status(AgentTaskStatus::Error).await?;
                         let _ = ctx.fail_assistant_message(error_block.clone()).await;
                         if ctx.emits_task_events() {
@@ -264,6 +337,7 @@ impl TaskExecutor {
                     continue;
                 }
                 Err(e) => {
+                    ctx.abort();
                     // Cancellation/interruption is not an "error". Treat it as a graceful stop so
                     // the UI doesn't see "Task execution interrupted" when the user cancels or
                     // when a new user message supersedes the current run.
@@ -306,8 +380,14 @@ impl TaskExecutor {
             }
         }
 
+        ctx.abort();
+        ctx.tool_registry()
+            .cancel_pending_confirmations_for_task(&ctx, ctx.task_id.as_ref())
+            .await;
+
         // 任务结束后立刻从 active_tasks 移除，避免内存/确认状态泄漏
         self.active_tasks().remove(ctx.task_id.as_ref());
+        drop_guard.disarm();
 
         Ok(())
     }

@@ -117,13 +117,13 @@
 
   .session-select :deep(.x-select__arrow) {
     right: 4px;
-    width: 10px;
-    height: 10px;
+    width: 18px;
+    height: 18px;
   }
 
   .session-select :deep(.x-select__arrow svg) {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
   }
 
   .session-select :deep(.x-select__option) {

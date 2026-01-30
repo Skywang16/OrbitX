@@ -8,9 +8,9 @@ use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
     ToolResultStatus,
 };
-use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::singleton::get_mux;
 use crate::mux::PaneId;
+use crate::terminal::TerminalScrollback;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,47 +39,15 @@ impl RunnableTool for ReadTerminalTool {
     }
 
     fn description(&self) -> &str {
-        r#"Reads the current visible content from the active terminal pane for analysis and debugging.
+        r#"Reads the current visible content from the active terminal pane.
 
 Usage:
 - Returns the terminal output buffer that the user is currently viewing
 - Includes recent command outputs, error messages, and terminal history
-- Preserves ANSI escape codes and terminal formatting for accurate representation
-- Useful for analyzing terminal errors, command outputs, or debugging issues
+- Useful for analyzing terminal errors or debugging command failures
+- Use maxLines parameter to control how much history to retrieve (default: 1000)
 
-When to Use:
-- User asks you to analyze what they see in the terminal
-- Debugging command failures or error messages
-- Checking the output of recently executed commands
-- Understanding the current terminal state before running new commands
-
-When NOT to Use:
-- This is NOT for general code editing - use read_file for reading source files
-- Don't use for reading file contents - terminal output may be truncated or formatted
-- Not suitable for reading large files that were displayed with cat/less
-
-Terminal Content Analysis:
-- Content may include ANSI color codes and formatting
-- Command prompts and user input are included
-- Output may be truncated if it exceeds terminal buffer size
-- Recent content appears at the bottom of the output
-
-Parameters:
-- maxLines: Controls how much terminal history to retrieve (default: 1000)
-- Use lower values (100-500) for recent output analysis
-- Use higher values (1000-5000) for comprehensive history review
-
-Examples:
-- Check recent output: {"maxLines": 100}
-- Full terminal history: {"maxLines": 2000}
-- Default analysis: {} (uses 1000 lines)
-
-Common Use Cases:
-- Analyzing compilation errors from build commands
-- Checking test results and failure messages
-- Understanding why a command failed
-- Reviewing the output of deployment or installation scripts
-- Debugging shell script execution"#
+Note: This is NOT for reading source files - use read_file instead."#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -119,13 +87,7 @@ Common Use Cases:
             }
         })?;
 
-        // 从OutputAnalyzer获取终端缓冲区内容
-        let buffer = match OutputAnalyzer::global().get_pane_buffer(pane_id.as_u32()) {
-            Ok(content) => content,
-            Err(err) => {
-                return Ok(tool_error(format!("Failed to read terminal buffer: {err}")));
-            }
-        };
+        let buffer = TerminalScrollback::global().get_text_lossy(pane_id.as_u32());
 
         if buffer.is_empty() {
             return Ok(ToolResult {
@@ -177,15 +139,5 @@ Common Use Cases:
                 }
             })),
         })
-    }
-}
-
-fn tool_error(message: impl Into<String>) -> ToolResult {
-    ToolResult {
-        content: vec![ToolResultContent::Error(message.into())],
-        status: ToolResultStatus::Error,
-        cancel_reason: None,
-        execution_time_ms: None,
-        ext_info: None,
     }
 }

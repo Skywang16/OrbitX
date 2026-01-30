@@ -477,7 +477,15 @@
   }
 
   .file-item--selected {
-    background: var(--color-active);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+
+  .file-item--selected:hover {
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  .file-item--selected .file-actions {
+    opacity: 1;
   }
 
   .file-item--conflicted {

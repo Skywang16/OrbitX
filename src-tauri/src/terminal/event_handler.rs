@@ -9,6 +9,7 @@ use tracing::{error, warn};
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::events::{ShellEvent, TerminalContextEvent};
 use crate::mux::{MuxNotification, PaneId, SubscriberCallback, TerminalMux};
+use crate::terminal::TerminalScrollback;
 use crate::terminal::error::EventHandlerResult;
 
 /// 统一的终端事件处理器
@@ -40,6 +41,8 @@ impl TerminalEventHandler {
         let app_handle_for_mux = app_handle.clone();
         let mux_subscriber: SubscriberCallback = Box::new(move |notification| match notification {
             MuxNotification::PaneOutput { pane_id, data } => {
+                TerminalScrollback::global().append(pane_id.as_u32(), data.as_ref());
+
                 let state = app_handle_for_mux
                     .state::<crate::terminal::channel_state::TerminalChannelState>();
                 state.manager.send_data(pane_id.as_u32(), data.as_ref());
@@ -56,6 +59,8 @@ impl TerminalEventHandler {
                 true
             }
             MuxNotification::PaneRemoved(pane_id) => {
+                TerminalScrollback::global().remove(pane_id.as_u32());
+
                 // 通知 Channel 已关闭
                 let state = app_handle_for_mux
                     .state::<crate::terminal::channel_state::TerminalChannelState>();

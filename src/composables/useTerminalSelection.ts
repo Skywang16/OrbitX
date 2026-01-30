@@ -39,17 +39,9 @@ export const useTerminalSelection = () => {
   })
 
   // 终端标签页相关计算属性
-  const hasTerminalTab = computed(() => {
-    const groupEntries = Object.values(sessionStore.workspaceState.groups)
-    for (const group of groupEntries) {
-      if (group.tabs.some(tab => tab.type === 'terminal')) return true
-    }
-    return false
-  })
-
   const currentTerminalTab = computed(() => {
     const activeTab = sessionStore.activeTab
-    if (!activeTab || activeTab.type !== 'terminal') return null
+    if (!activeTab || (activeTab.type !== 'terminal' && activeTab.type !== 'agent_terminal')) return null
 
     const terminal = terminalStore.terminals.find(t => t.id === activeTab.context.paneId)
     if (!terminal) return null
@@ -61,6 +53,8 @@ export const useTerminalSelection = () => {
       displayPath: getPathBasename(terminal.cwd),
     }
   })
+
+  const hasTerminalTab = computed(() => !!currentTerminalTab.value)
 
   // 设置选中文本 - 简化逻辑
   const setSelectedText = (text: string, startLine = 1, endLine?: number, path?: string) => {

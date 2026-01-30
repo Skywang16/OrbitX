@@ -21,17 +21,23 @@
   }))
 
   const startDrag = (event: MouseEvent) => {
+    event.preventDefault()
+
     isDragging.value = true
+    document.body.classList.add('orbitx-resizing')
+
     const startX = event.clientX
     const startWidth = gitStore.panelWidth
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
       const deltaX = e.clientX - startX
       gitStore.setPanelWidth(startWidth + deltaX)
     }
 
     const handleMouseUp = () => {
       isDragging.value = false
+      document.body.classList.remove('orbitx-resizing')
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -41,11 +47,16 @@
   }
 
   const startDividerDrag = (event: MouseEvent) => {
+    event.preventDefault()
+
     isDraggingDivider.value = true
+    document.body.classList.add('orbitx-resizing')
+
     const startY = event.clientY
     const startHeight = changesHeight.value
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
       const deltaY = e.clientY - startY
       const newHeight = Math.max(100, Math.min(startHeight + deltaY, 500))
       changesHeight.value = newHeight
@@ -53,6 +64,7 @@
 
     const handleMouseUp = () => {
       isDraggingDivider.value = false
+      document.body.classList.remove('orbitx-resizing')
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -143,7 +155,7 @@
         <div
           class="git-panel__divider"
           :class="{ 'git-panel__divider--dragging': isDraggingDivider }"
-          @mousedown="startDividerDrag"
+          @mousedown.stop.prevent="startDividerDrag"
         />
 
         <div class="git-panel__history">
@@ -211,17 +223,6 @@
     height: 4px;
     background: var(--border-200);
     cursor: ns-resize;
-    transition: background 0.15s ease;
-    position: relative;
-  }
-
-  .git-panel__divider::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: 0;
-    right: 0;
-    bottom: -4px;
   }
 
   .git-panel__divider:hover,

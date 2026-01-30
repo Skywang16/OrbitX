@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// ClaudeCode-compatible permissions JSON format.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PermissionRules {
     #[serde(default)]

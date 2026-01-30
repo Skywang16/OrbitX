@@ -154,7 +154,7 @@ impl GitService {
         };
 
         let output =
-            match Self::execute_optional(&["status", "--porcelain=v1", "--branch", "-z"], &root)
+            match Self::execute_optional(&["status", "--porcelain=v1", "--branch", "-z", "-uall"], &root)
                 .await?
             {
                 Some(bytes) => bytes,

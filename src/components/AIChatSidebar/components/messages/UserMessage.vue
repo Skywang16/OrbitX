@@ -105,8 +105,9 @@
 
   .user-message-text {
     font-size: var(--font-size-md);
-    line-height: 1.4;
+    line-height: 1.6;
     margin: 0;
+    letter-spacing: 0.01em;
   }
 
   .user-message-images {

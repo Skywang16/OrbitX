@@ -11,6 +11,9 @@ export const getWorkspacePathFromContext = (context: TabContext, deps: TabContex
   if (context.kind === 'terminal') {
     return deps.terminals.find(t => t.id === context.paneId)?.cwd ?? null
   }
+  if (context.kind === 'agent_terminal') {
+    return deps.terminals.find(t => t.id === context.paneId)?.cwd ?? null
+  }
   return null
 }
 

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::agent::context::ContextBuilder;
 use crate::agent::core::context::{TaskContext, ToolCallResult};
+use crate::agent::core::utils::should_render_tool_block;
 use crate::agent::core::executor::{ReactHandler, TaskExecutor};
 use crate::agent::error::TaskExecutorResult;
 use crate::agent::tools::{
@@ -45,9 +46,23 @@ impl ReactHandler for TaskExecutor {
             .options
             .as_ref()
             .and_then(|opts| opts.get("maxTokens"))
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u32)
-            .unwrap_or(4096);
+            .and_then(|v| v.as_i64())
+            .and_then(|v| {
+                if v > 0 {
+                    Some(v as u32)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                model_config
+                    .options
+                    .as_ref()
+                    .and_then(|opts| opts.get("maxContextTokens"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v.min(32_768) as u32)
+            })
+            .unwrap_or(32_768);
 
         let temperature = model_config
             .options
@@ -130,7 +145,7 @@ impl ReactHandler for TaskExecutor {
             rendered_tool_blocks.insert(call_id.clone(), render);
             if render {
                 context
-                    .assistant_append_block(Block::Tool(ToolBlock {
+                    .assistant_upsert_block(Block::Tool(ToolBlock {
                         id: call_id.clone(),
                         call_id: call_id.clone(),
                         name: tool_name.clone(),
@@ -243,13 +258,6 @@ impl ReactHandler for TaskExecutor {
         let file_tracker = context.file_tracker();
         Arc::new(ContextBuilder::new(file_tracker))
     }
-}
-
-async fn should_render_tool_block(context: &TaskContext, tool_name: &str) -> bool {
-    let Some(meta) = context.tool_registry().get_tool_metadata(tool_name).await else {
-        return true;
-    };
-    !meta.tags.iter().any(|t| t == "ui:hidden")
 }
 
 /// 转换 ToolResult 到 (status, json_value)

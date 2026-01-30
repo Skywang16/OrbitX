@@ -130,6 +130,21 @@ pub async fn run_subtask(
         .tool_filter
         .merge(&ToolFilter::blacklist(["task", "todowrite"]));
 
+    // 初始化 Skill 系统 (与 parent 共享同一个工作区)
+    let skill_manager = {
+        let manager = Arc::new(crate::agent::skill::SkillManager::new());
+        let global_skills_dir = crate::config::paths::skills_dir();
+        
+        if let Err(e) = manager
+            .discover_skills(Some(&global_skills_dir), Some(&workspace_root))
+            .await
+        {
+            tracing::warn!("Failed to discover skills for subtask: {}", e);
+        }
+        
+        Some(manager)
+    };
+
     let tool_registry = crate::agent::tools::create_tool_registry(
         "agent",
         effective.permissions,
@@ -137,6 +152,7 @@ pub async fn run_subtask(
         executor.tool_confirmations(),
         mcp_tools,
         executor.vector_search_engine(),
+        skill_manager,
     )
     .await;
 

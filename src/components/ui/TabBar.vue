@@ -487,7 +487,6 @@
     display: flex;
     align-items: center;
     width: 100%;
-    height: 100%;
     padding-top: calc((var(--titlebar-height) - var(--titlebar-element-height)) / 2);
     padding-bottom: calc((var(--titlebar-height) - var(--titlebar-element-height)) / 2);
     padding-left: var(--spacing-sm);

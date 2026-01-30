@@ -24,6 +24,31 @@ const DEFAULT_MAX_RESULTS: usize = 10;
 const MAX_RESULTS_LIMIT: usize = 50;
 const SNIPPET_MAX_LEN: usize = 200;
 
+/// 内置忽略目录 - 搜索时自动跳过这些大目录
+/// 注意：如果用户直接指定这些目录作为搜索路径，仍然可以搜索
+const BUILTIN_SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    ".svn",
+    ".hg",
+    "dist",
+    "build",
+    "target",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".cache",
+    ".turbo",
+    "__pycache__",
+    ".pytest_cache",
+    "venv",
+    ".venv",
+    "vendor",
+    "coverage",
+    ".nyc_output",
+    "bower_components",
+];
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GrepArgs {
@@ -86,6 +111,21 @@ impl GrepTool {
             .git_ignore(true)
             .git_global(true)
             .git_exclude(true)
+            .filter_entry(|entry| {
+                // depth 0 是根目录本身，不过滤（允许用户直接指定 node_modules 搜索）
+                if entry.depth() == 0 {
+                    return true;
+                }
+                // 只过滤目录
+                let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+                if is_dir {
+                    let name = entry.file_name().to_string_lossy();
+                    if BUILTIN_SKIP_DIRS.contains(&name.as_ref()) {
+                        return false;
+                    }
+                }
+                true
+            })
             .build();
 
         'outer: for entry in walker.flatten() {
@@ -149,29 +189,18 @@ impl RunnableTool for GrepTool {
         r#"Fast regex code search powered by ripgrep. Use instead of shell grep/rg.
 
 Usage:
-- Provide a regex pattern to search across all code files
+- Searches file contents using regex patterns
 - Automatically respects .gitignore and skips binary files
-- Returns file paths, line numbers, and matching snippets
-
-Search Strategy:
-1. Use grep to find code patterns, function calls, or definitions
-2. Use read_file to examine the matching files in detail
-3. Use list_files if you need to explore directory structure first
-
-When to Use vs Other Tools:
-- Use grep for finding specific patterns (function names, imports, TODOs)
-- Use semantic_search for finding code by describing what it does
-- Use read_file with mode="symbol" to read specific functions after finding them
+- Returns file paths, line numbers, and matching content
+- Filter files by pattern with the include parameter (e.g., "*.js", "*.{ts,tsx}")
+- Use maxResults to limit output for broad patterns
+- Keep patterns simple, avoid over-escaping special characters
 
 Examples:
 - Find function definitions: {"pattern": "fn main", "path": "/project/src"}
 - Find TODOs: {"pattern": "TODO|FIXME"}
 - Find imports: {"pattern": "^import.*react"}
-- Find usages: {"pattern": "getUserById"}
-
-Tips:
-- Keep patterns simple, avoid over-escaping special characters
-- Use maxResults to limit output for broad patterns"#
+- Find usages: {"pattern": "getUserById"}"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

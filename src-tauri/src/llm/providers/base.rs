@@ -8,18 +8,6 @@ use crate::llm::types::{EmbeddingRequest, EmbeddingResponse};
 
 /// LLM Provider 统一接口
 ///
-/// **设计哲学**（Linus Torvalds风格）：
-///
-/// "好品味"的关键：直接使用Anthropic原生类型，不做中间抽象。
-/// - Anthropic provider：零转换，直接使用官方类型
-/// - 其他providers：内部实现transform层，输入输出仍是Anthropic类型
-/// - 特殊情况（各家API差异）在provider内部消化，不泄漏到接口
-///
-/// 为什么是Anthropic类型？因为它的设计最清晰：
-/// - MessageParam: role + content（纯粹）
-/// - ContentBlock: tagged union（正确）
-/// - StreamEvent: 细粒度事件流（完整）
-///
 /// "Never break userspace": 对调用方来说，只看到Anthropic类型。
 #[async_trait]
 pub trait LLMProvider: Send + Sync {

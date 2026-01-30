@@ -4,6 +4,7 @@
 export type {
   SessionState,
   TabState,
+  AgentTerminalTabState,
   TerminalTabState,
   SettingsTabState,
   RuntimeTerminalState,

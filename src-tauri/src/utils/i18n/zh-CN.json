@@ -97,6 +97,7 @@
       "update_failed": "更新会话失败"
     },
     "execute_failed": "执行任务失败",
+    "too_many_active_tasks_global": "当前应用最多只能同时运行 5 个 Agent 任务",
     "execute_tree_failed": "执行任务树失败",
     "list_failed": "获取任务列表失败",
     "pause_failed": "暂停任务失败",

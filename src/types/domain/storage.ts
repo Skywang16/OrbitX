@@ -84,6 +84,7 @@ export const createTabId = (prefix: string): TabId => {
 export type TabContext =
   | { kind: 'none' }
   | { kind: 'terminal'; paneId: number }
+  | { kind: 'agent_terminal'; paneId: number; terminalId: string }
   | { kind: 'workspace'; path: string }
   | { kind: 'git'; repoPath: string }
 
@@ -106,6 +107,20 @@ export interface TerminalTabData {
 export type TerminalTabState = BaseTabState<'terminal', { kind: 'terminal'; paneId: number }, TerminalTabData>
 
 /**
+ * Agent Terminal tab 状态（持久化）
+ */
+export interface AgentTerminalTabData {
+  command: string
+  label?: string
+}
+
+export type AgentTerminalTabState = BaseTabState<
+  'agent_terminal',
+  { kind: 'agent_terminal'; paneId: number; terminalId: string },
+  AgentTerminalTabData
+>
+
+/**
  * Settings tab 持久化数据
  */
 export interface PersistedSettingsTabData {
@@ -120,7 +135,7 @@ export type SettingsTabState = BaseTabState<'settings', { kind: 'none' }, Persis
 /**
  * Tab 状态 - union type
  */
-export type TabState = TerminalTabState | SettingsTabState | DiffTabState
+export type TabState = TerminalTabState | AgentTerminalTabState | SettingsTabState | DiffTabState
 
 /**
  * Diff tab 持久化数据

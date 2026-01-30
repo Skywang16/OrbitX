@@ -1,12 +1,15 @@
 /* Highlight.js 主题样式 - 映射到 OrbitX 主题变量 */
 
+/* 核心容器样式已移至 AIMessage.vue，此处仅保留少量重置 */
 .hljs {
   display: block;
   overflow-x: auto;
-  padding: var(--spacing-sm);
-  background: var(--bg-500);
-  color: var(--text-200);
-  border-radius: var(--border-radius);
+  background: transparent; /* 背景由父容器接管 */
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-family: var(--font-family-mono);
+  -webkit-font-smoothing: auto;
 }
 
 /* 注释 */

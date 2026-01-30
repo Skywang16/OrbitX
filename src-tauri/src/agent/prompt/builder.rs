@@ -20,8 +20,6 @@ pub struct SystemPromptParts {
     pub reminder: Option<String>,
     /// 用户自定义指令（CLAUDE.md / project rules）
     pub custom_instructions: Option<String>,
-    /// 工具描述
-    pub tools_description: Option<String>,
 }
 
 /// Prompt 构建器
@@ -67,12 +65,7 @@ impl PromptBuilder {
             sections.push(env_info);
         }
 
-        // 5. 工具描述
-        if let Some(tools) = parts.tools_description {
-            sections.push(format!("# Available Tools\n\n{}", tools));
-        }
-
-        // 6. 用户自定义指令
+        // 5. 用户自定义指令
         if let Some(custom) = parts.custom_instructions {
             if !custom.trim().is_empty() {
                 sections.push(format!("# Project Instructions\n\n{}", custom.trim()));

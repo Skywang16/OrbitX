@@ -103,27 +103,18 @@ impl RunnableTool for SemanticSearchTool {
     }
 
     fn description(&self) -> &str {
-        r#"AI-powered semantic code search. Find code by describing what it does.
+        r#"AI-powered semantic code search. Find code by describing what it does in natural language.
 
 Usage:
-- Describe the functionality you're looking for in natural language
+- Describe the functionality you're looking for (e.g., "error handling and retry logic")
 - Returns relevant code snippets ranked by semantic similarity
-
-Search Strategy:
-1. Use semantic_search when you don't know exact patterns or names
-2. Use read_file to examine the matching files in detail
-3. Use grep if you need exact pattern matching
-
-When to Use vs Other Tools:
-- Use semantic_search for "find code that handles X" queries
-- Use grep for exact patterns like function names or imports
-- Use list_files to explore directory structure
+- Use this when you don't know exact patterns or function names
+- Use grep instead for exact pattern matching
 
 Examples:
 - {"query": "error handling and retry logic"}
 - {"query": "database connection pooling"}
-- {"query": "user authentication flow"}
-- {"query": "file upload validation"}"#
+- {"query": "user authentication flow"}"#
     }
 
     fn parameters_schema(&self) -> serde_json::Value {

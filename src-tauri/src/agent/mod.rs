@@ -16,6 +16,7 @@ pub mod permissions; // settings.json permissions (allow/deny/ask)
 pub mod persistence; // 持久化与仓库抽象
 pub mod react; // ReAct 策略与解析
 pub mod shell; // Shell 执行模块
+pub mod terminal; // Agent terminal subsystem
 pub mod state; // 任务上下文与错误
 pub mod tools; // 工具接口与内置工具
 pub mod utils; // 工具函数

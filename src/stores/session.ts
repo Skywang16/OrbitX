@@ -44,6 +44,12 @@ const isTabContext = (value: unknown): value is TabContext => {
   if (kind === 'terminal') {
     return typeof (value as { paneId?: unknown }).paneId === 'number'
   }
+  if (kind === 'agent_terminal') {
+    return (
+      typeof (value as { paneId?: unknown }).paneId === 'number' &&
+      typeof (value as { terminalId?: unknown }).terminalId === 'string'
+    )
+  }
   if (kind === 'workspace') return typeof (value as { path?: unknown }).path === 'string'
   if (kind === 'git') return typeof (value as { repoPath?: unknown }).repoPath === 'string'
   return false
@@ -74,7 +80,7 @@ const normalizeLoadedWorkspaceState = (value: unknown): WorkspaceState | null =>
         const tab = tabRaw as Record<string, unknown>
 
         const type = tab.type
-        if (type !== 'terminal' && type !== 'settings' && type !== 'diff') return null
+        if (type !== 'terminal' && type !== 'agent_terminal' && type !== 'settings' && type !== 'diff') return null
 
         const originalId = tab.id
         if (typeof originalId !== 'string' || !originalId) return null
@@ -103,6 +109,21 @@ const normalizeLoadedWorkspaceState = (value: unknown): WorkspaceState | null =>
             data: {
               cwd: typeof data.cwd === 'string' ? data.cwd : undefined,
               shellName: typeof data.shellName === 'string' ? data.shellName : undefined,
+            },
+          } as TabState
+        }
+
+        if (type === 'agent_terminal') {
+          if (context.kind !== 'agent_terminal') return null
+          if (typeof data.command !== 'string') return null
+          return {
+            type: 'agent_terminal',
+            id,
+            isActive,
+            context,
+            data: {
+              command: data.command,
+              label: typeof data.label === 'string' ? data.label : undefined,
             },
           } as TabState
         }

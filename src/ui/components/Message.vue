@@ -73,38 +73,43 @@
 
 <style scoped>
   .x-message {
+    --x-message-bg: var(--bg-400);
+    --x-message-border: var(--border-300);
+    --x-message-fg: var(--text-100);
+
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 14px 18px;
     margin-bottom: 10px;
-    background: var(--bg-400);
+    background: var(--x-message-bg);
+    border: 1px solid var(--x-message-border);
     border-radius: var(--border-radius-xl);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--x-shadow-md);
     font-size: 14px;
-    color: var(--text-200);
+    color: var(--x-message-fg);
     max-width: 320px;
     min-width: 240px;
   }
 
   .x-message--success {
-    background: #d1fae5;
-    border: 1px solid #10b981;
+    --x-message-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-400));
+    --x-message-border: color-mix(in srgb, var(--color-success) 55%, var(--border-300));
   }
 
   .x-message--error {
-    background: #fee2e2;
-    border: 1px solid #ef4444;
+    --x-message-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-400));
+    --x-message-border: color-mix(in srgb, var(--color-error) 55%, var(--border-300));
   }
 
   .x-message--warning {
-    background: #fef3c7;
-    border: 1px solid #f59e0b;
+    --x-message-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-400));
+    --x-message-border: color-mix(in srgb, var(--color-warning) 55%, var(--border-300));
   }
 
   .x-message--info {
-    background: #dbeafe;
-    border: 1px solid #3b82f6;
+    --x-message-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-400));
+    --x-message-border: color-mix(in srgb, var(--color-info) 55%, var(--border-300));
   }
 
   .x-message__content {
@@ -113,7 +118,7 @@
 
   .x-message__text {
     margin: 0;
-    color: var(--text-200);
+    color: inherit;
   }
 
   .x-message__close {
@@ -122,17 +127,17 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--x-message-fg) 12%, transparent);
     border: none;
-    color: var(--text-400);
+    color: color-mix(in srgb, var(--x-message-fg) 75%, transparent);
     cursor: pointer;
     border-radius: 50%;
     opacity: 0.7;
   }
 
   .x-message__close:hover {
-    color: var(--text-200);
-    background: rgba(255, 255, 255, 0.3);
+    color: var(--x-message-fg);
+    background: color-mix(in srgb, var(--x-message-fg) 18%, transparent);
     opacity: 1;
   }
 

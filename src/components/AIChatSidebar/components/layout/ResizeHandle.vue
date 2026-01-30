@@ -19,36 +19,20 @@
   })
 
   const emit = defineEmits<Emits>()
-
-  const handleMouseDown = (event: MouseEvent) => {
-    emit('mousedown', event)
-  }
-
-  const handleMouseEnter = () => {
-    emit('mouseenter')
-  }
-
-  const handleMouseLeave = () => {
-    emit('mouseleave')
-  }
-
-  const handleDoubleClick = () => {
-    emit('dblclick')
-  }
 </script>
 
 <template>
   <div
     class="resize-handle"
     :class="{
-      'resize-handle--dragging': isDragging,
-      'resize-handle--hovering': isHovering,
+      'resize-handle--active': isDragging || isHovering,
       'resize-handle--right': side === 'right',
     }"
-    @mousedown="handleMouseDown"
-    @mouseenter="handleMouseEnter"
-    @mouseleave="handleMouseLeave"
-    @dblclick="handleDoubleClick"
+    @mousedown.stop.prevent="emit('mousedown', $event)"
+    @dragstart.prevent
+    @mouseenter="emit('mouseenter')"
+    @mouseleave="emit('mouseleave')"
+    @dblclick.stop.prevent="emit('dblclick')"
   />
 </template>
 
@@ -61,7 +45,7 @@
     height: 100%;
     cursor: col-resize;
     z-index: 10;
-    background: transparent;
+    touch-action: none;
   }
 
   .resize-handle--right {
@@ -69,29 +53,7 @@
     right: -2px;
   }
 
-  .resize-handle:hover {
-    background: var(--color-primary-alpha);
-  }
-
-  .resize-handle--dragging {
-    background: var(--color-primary-alpha);
-    opacity: 2;
-  }
-
-  .resize-handle__indicator {
-    display: none;
-  }
-
-  .resize-handle--dragging {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: transparent !important;
-    cursor: col-resize !important;
-    z-index: 9999 !important;
+  .resize-handle--active {
+    background: var(--color-primary);
   }
 </style>

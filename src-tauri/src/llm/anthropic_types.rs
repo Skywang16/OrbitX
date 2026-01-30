@@ -1,15 +1,5 @@
 //! Anthropic Messages API 类型定义
 //!
-//! 直接映射 Anthropic 官方 API 结构，无中间抽象层
-//! 参考: https://docs.claude.com/en/api/messages
-//!
-//! ## 设计原则
-//!
-//! 1. **零抽象**：直接翻译官方API文档，字段名、类型完全一致
-//! 2. **Serde优先**：用 `#[serde]` 属性处理所有序列化需求
-//! 3. **可选字段**：用 `Option<T>` + `skip_serializing_if` 处理可选参数
-//! 4. **扩展性**：新字段默认不会破坏旧代码（serde的优势）
-//!
 //! ## 与 TypeScript SDK 对应关系
 //!
 //! | Rust 类型 | TypeScript (@anthropic-ai/sdk) |
@@ -179,7 +169,6 @@ pub enum ToolResultBlock {
 
 /// Prompt Cache 控制
 ///
-/// 参考: https://docs.claude.com/en/docs/build-with-claude/prompt-caching
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CacheControl {
     /// 缓存类型（目前只支持 "ephemeral"）
@@ -409,7 +398,6 @@ impl Usage {
 
 /// SSE 流式事件
 ///
-/// 参考: https://docs.claude.com/en/api/messages-streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StreamEvent {

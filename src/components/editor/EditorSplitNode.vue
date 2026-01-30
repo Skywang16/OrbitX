@@ -217,7 +217,6 @@
     min-width: 0;
     min-height: 0;
     display: flex;
-    position: relative;
   }
 
   .editor-split.row {
@@ -233,14 +232,11 @@
     min-height: 0;
     overflow: hidden;
     display: flex;
-    will-change: flex; /* 提示浏览器优化 flex 变化 */
   }
 
   .editor-split__divider {
-    flex: 0 0 auto;
+    flex-shrink: 0;
     background: var(--border-200);
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
-    z-index: 10;
   }
 
   .editor-split__divider.col {
@@ -254,7 +250,7 @@
   }
 
   .editor-split__divider:hover {
-    background: var(--border-300);
+    background: var(--color-primary);
   }
 
   .editor-split__divider.corner {

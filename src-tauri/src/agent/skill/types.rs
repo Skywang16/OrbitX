@@ -84,25 +84,7 @@ pub struct SkillEntry {
     pub last_modified: SystemTime,
 }
 
-/// 技能匹配模式
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillMatchingMode {
-    /// 仅 @skill 显式引用
-    Explicit,
-
-    /// 基于 description 的语义匹配
-    Semantic,
-
-    /// 混合模式 (默认)
-    Hybrid,
-}
-
-impl Default for SkillMatchingMode {
-    fn default() -> Self {
-        Self::Hybrid
-    }
-}
+// SkillMatchingMode 已移除，改为通过 Tool 机制让 LLM 决定何时激活技能
 
 /// 技能验证结果
 #[derive(Debug, Clone, Serialize, Deserialize)]

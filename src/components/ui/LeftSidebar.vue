@@ -16,17 +16,23 @@
   }))
 
   const startDrag = (event: MouseEvent) => {
+    event.preventDefault()
+
     isDragging.value = true
+    document.body.classList.add('orbitx-resizing')
+
     const startX = event.clientX
     const startWidth = layoutStore.leftSidebarWidth
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
       const deltaX = e.clientX - startX
       layoutStore.setLeftSidebarWidth(startWidth + deltaX)
     }
 
     const handleMouseUp = () => {
       isDragging.value = false
+      document.body.classList.remove('orbitx-resizing')
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }

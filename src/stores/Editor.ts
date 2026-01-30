@@ -4,7 +4,15 @@ import { useSessionStore } from './session'
 import { useTerminalStore } from './Terminal'
 import { dockApi } from '@/api'
 import { getTabDefinition } from '@/tabs/registry'
-import type { DiffTabState, GroupId, TabGroupState, TabId, TabState, TerminalTabState } from '@/types/domain/storage'
+import type {
+  AgentTerminalTabState,
+  DiffTabState,
+  GroupId,
+  TabGroupState,
+  TabId,
+  TabState,
+  TerminalTabState,
+} from '@/types/domain/storage'
 import { createGroupId, createTabId } from '@/types/domain/storage'
 import { getPathBasename } from '@/utils/path'
 import {
@@ -229,6 +237,94 @@ export const useEditorStore = defineStore('Editor', () => {
     return paneId
   }
 
+  const findAgentTerminalTab = (terminalId: string): { groupId: GroupId; tab: AgentTerminalTabState } | null => {
+    for (const group of Object.values(workspace.value.groups)) {
+      const tab = group.tabs.find(t => t.type === 'agent_terminal' && t.context.terminalId === terminalId) as
+        | AgentTerminalTabState
+        | undefined
+      if (tab) {
+        return { groupId: group.id, tab }
+      }
+    }
+    return null
+  }
+
+  const openAgentTerminalTab = async (args: {
+    terminalId: string
+    paneId: number
+    command: string
+    label?: string
+    activate?: boolean
+    groupId?: GroupId
+  }): Promise<TabId> => {
+    const existing = findAgentTerminalTab(args.terminalId)
+    if (existing) {
+      // Keep the existing tab in sync with the latest terminal metadata (command/label)
+      // and ensure the paneId is updated in case the backend recreated the pane.
+      if (!terminalStore.terminals.some(t => t.id === args.paneId)) {
+        terminalStore.registerRuntimeTerminal({
+          id: args.paneId,
+          cwd: '~',
+          shell: 'agent',
+        })
+      }
+
+      const current = workspace.value
+      const group = current.groups[existing.groupId]
+      if (group) {
+        const nextTabs = group.tabs.map(t => {
+          if (t.id !== existing.tab.id || t.type !== 'agent_terminal') return t
+          return {
+            ...t,
+            context: { ...t.context, paneId: args.paneId },
+            data: { ...t.data, command: args.command, label: args.label },
+          }
+        })
+
+        updateWorkspace({
+          ...current,
+          groups: {
+            ...current.groups,
+            [existing.groupId]: {
+              ...group,
+              tabs: nextTabs,
+            },
+          },
+        })
+      }
+
+      if (args.activate !== false) {
+        await setActiveTab(existing.groupId, existing.tab.id)
+      }
+      return existing.tab.id
+    }
+
+    // The agent terminal pane may exist in the backend, but not yet be registered in the frontend runtime list.
+    // If we try to activate a missing pane, TerminalStore.setActiveTerminal will no-op and the first render may appear blank.
+    if (!terminalStore.terminals.some(t => t.id === args.paneId)) {
+      terminalStore.registerRuntimeTerminal({
+        id: args.paneId,
+        cwd: '~',
+        shell: 'agent',
+      })
+    }
+
+    const groupId = args.groupId ?? activeGroupId.value
+    const tab: AgentTerminalTabState = {
+      type: 'agent_terminal',
+      id: createTabId('agent_terminal'),
+      isActive: false,
+      context: { kind: 'agent_terminal', paneId: args.paneId, terminalId: args.terminalId },
+      data: {
+        command: args.command,
+        label: args.label,
+      },
+    }
+
+    await addTabToGroup(groupId, tab, { activate: args.activate ?? true })
+    return tab.id
+  }
+
   const createTerminalTabWithShell = async (args: {
     shellName: string
     directory?: string
@@ -290,7 +386,9 @@ export const useEditorStore = defineStore('Editor', () => {
 
     const nextGroups: typeof current.groups = {}
     for (const group of Object.values(current.groups)) {
-      const remaining = group.tabs.filter(tab => !(tab.type === 'terminal' && tab.context.paneId === paneId))
+      const remaining = group.tabs.filter(
+        tab => !((tab.type === 'terminal' || tab.type === 'agent_terminal') && tab.context.paneId === paneId)
+      )
       if (remaining.length === group.tabs.length) {
         nextGroups[group.id] = group
         continue
@@ -601,7 +699,7 @@ export const useEditorStore = defineStore('Editor', () => {
   const reconcileTerminalTabs = async () => {
     await terminalStore.refreshRuntimeTerminals()
 
-    const runtimeMap = new Map(terminalStore.terminals.map(r => [r.id, r]))
+    const runtimeMap = new Map(terminalStore.terminals.filter(t => t.shell !== 'agent').map(r => [r.id, r]))
     const current = workspace.value
     const nextGroups: typeof current.groups = {}
     let changed = false
@@ -699,6 +797,7 @@ export const useEditorStore = defineStore('Editor', () => {
     closeAllTabs,
     createTerminalTab,
     createTerminalTabWithShell,
+    openAgentTerminalTab,
     openDiffTab,
     createSettingsTab,
     updateSettingsTabSection,
