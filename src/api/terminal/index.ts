@@ -10,6 +10,7 @@
 import { invoke } from '@/utils/request'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  CommandEventPayload,
   CreateTerminalWithShellOptions,
   ShellInfo,
   TerminalCreateOptions,
@@ -116,6 +117,24 @@ export class TerminalApi {
    */
   onCwdChanged = async (callback: (payload: { paneId: number; cwd: string }) => void): Promise<UnlistenFn> => {
     return listen<{ paneId: number; cwd: string }>('pane_cwd_changed', event => callback(event.payload))
+  }
+
+  /**
+   * 监听窗口标题变化事件 (OSC 0/1/2)
+   */
+  onTitleChanged = async (callback: (payload: { paneId: number; title: string }) => void): Promise<UnlistenFn> => {
+    return listen<{ paneId: number; title: string }>('pane_title_changed', event => callback(event.payload))
+  }
+
+  /**
+   * 监听命令事件（命令开始、执行、完成等）
+   */
+  onCommandEvent = async (
+    callback: (payload: { paneId: number; command: CommandEventPayload }) => void
+  ): Promise<UnlistenFn> => {
+    return listen<{ paneId: number; command: CommandEventPayload }>('pane_command_event', event =>
+      callback(event.payload)
+    )
   }
 }
 

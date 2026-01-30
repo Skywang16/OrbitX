@@ -178,10 +178,11 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::agent::core::commands::agent_validate_skill,
         crate::agent::core::commands::agent_switch_session_agent,
         // 存储系统命令（State/Runtime）
-        crate::ai::tool::storage::storage_save_session_state,
-        crate::ai::tool::storage::storage_load_session_state,
-        crate::ai::tool::storage::storage_get_terminals_state,
-        crate::ai::tool::storage::storage_get_terminal_cwd,
+        crate::ai::tool::storage::commands::storage_save_session_state,
+        crate::ai::tool::storage::commands::storage_load_session_state,
+        crate::ai::tool::storage::commands::storage_get_terminals_state,
+        crate::ai::tool::storage::commands::storage_get_terminal_state,
+        crate::ai::tool::storage::commands::storage_get_terminal_cwd,
         // Node.js 版本管理命令
         crate::node::commands::node_check_project,
         crate::node::commands::node_get_version_manager,

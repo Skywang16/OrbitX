@@ -179,6 +179,8 @@ pub struct TerminalRuntimeState {
     pub id: u32,
     pub cwd: String,
     pub shell: String,
+    /// Pre-computed display title for the tab, calculated by the backend.
+    pub display_title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -34,7 +34,8 @@ end
             r#"
 # Shell Integration支持 (OSC 133)
 function __orbitx_preexec --on-event fish_preexec
-    printf '\e]133;C\e\\'
+    # $argv[1] is the command line in fish preexec
+    printf '\e]133;C;%s\e\\' "$argv[1]"
 end
 
 function __orbitx_postcmd --on-event fish_postexec
@@ -43,12 +44,10 @@ function __orbitx_postcmd --on-event fish_postexec
     printf '\e]133;A\e\\'
 end
 
-# 函数在提示符显示时执行
 function __orbitx_prompt_start --on-event fish_prompt
     printf '\e]133;A\e\\'
 end
 
-# 用户开始输入命令时
 function __orbitx_prompt_end --on-event fish_preexec
     printf '\e]133;B\e\\'
 end

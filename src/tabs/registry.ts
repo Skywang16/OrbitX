@@ -5,6 +5,7 @@ import SettingsView from '@/views/Settings/SettingsView.vue'
 import type {
   AgentTerminalTabState,
   DiffTabState,
+  RuntimeTerminalState,
   SettingsTabState,
   TabState,
   TerminalTabState,
@@ -26,7 +27,7 @@ export interface TabBarPresentation {
 
 export interface TabUiContext {
   t: (key: string) => string
-  getTerminalCwd: (paneId: number) => string
+  getTerminal: (paneId: number) => RuntimeTerminalState | undefined
 }
 
 export interface TabActionContext {
@@ -43,11 +44,6 @@ export interface TabDefinition<TTab extends TabState = TabState> {
   isClosable: (tab: TTab) => boolean
   activate: (tab: TTab, ctx: TabActionContext) => Promise<void>
   dispose?: (tab: TTab, ctx: TabActionContext) => Promise<void>
-  /**
-   * Whether this tab type should affect the workspace context.
-   * - true: switching to this tab will change currentWorkspacePath (e.g. terminal tabs)
-   * - false: switching to this tab preserves the current workspace (e.g. settings, agent terminals)
-   */
   affectsWorkspace: boolean
 }
 
@@ -60,11 +56,14 @@ const terminalTab: TabDefinition<TerminalTabState> = {
     isActive: tab.isActive,
   }),
   getPresentation: (tab, ctx) => {
-    const cwd = ctx.getTerminalCwd(tab.context.paneId)
+    const terminal = ctx.getTerminal(tab.context.paneId)
+    const cwd = terminal?.cwd ?? '~'
+    const title = terminal?.displayTitle ?? getPathBasename(cwd)
+
     return {
       tooltip: cwd,
       badge: { text: tab.data.shellName ?? 'shell', variant: 'shell' },
-      title: getPathBasename(cwd),
+      title,
     }
   },
   isClosable: () => true,
@@ -80,7 +79,7 @@ const terminalTab: TabDefinition<TerminalTabState> = {
 const agentTerminalTab: TabDefinition<AgentTerminalTabState> = {
   kind: 'agent_terminal',
   component: Terminal,
-  affectsWorkspace: false, // Agent terminals are auxiliary tools, don't change workspace
+  affectsWorkspace: false,
   getComponentProps: tab => ({
     terminalId: tab.context.paneId,
     isActive: tab.isActive,
@@ -98,23 +97,18 @@ const agentTerminalTab: TabDefinition<AgentTerminalTabState> = {
     await ctx.setActiveTerminalPane(tab.context.paneId)
     ctx.setActiveTabId(tab.id)
   },
-  dispose: async () => {
-    // Closing the tab only hides the agent terminal; do not close the pane.
-  },
+  dispose: async () => {},
 }
 
 const settingsTab: TabDefinition<SettingsTabState> = {
   kind: 'settings',
   component: SettingsView,
-  affectsWorkspace: false, // Settings are global, don't change workspace
+  affectsWorkspace: false,
   getComponentProps: () => ({}),
-  getPresentation: (tab, ctx) => {
-    void tab
-    return {
-      tooltip: ctx.t('settings.title'),
-      title: ctx.t('settings.title'),
-    }
-  },
+  getPresentation: (_tab, ctx) => ({
+    tooltip: ctx.t('settings.title'),
+    title: ctx.t('settings.title'),
+  }),
   isClosable: () => true,
   activate: async (tab, ctx) => {
     ctx.setActiveTabId(tab.id)
@@ -124,7 +118,7 @@ const settingsTab: TabDefinition<SettingsTabState> = {
 const diffTab: TabDefinition<DiffTabState> = {
   kind: 'diff',
   component: DiffView,
-  affectsWorkspace: false, // Diff tabs are for viewing file changes, don't change workspace context
+  affectsWorkspace: false,
   getComponentProps: tab => ({
     repoPath: tab.context.repoPath,
     filePath: tab.data.filePath,

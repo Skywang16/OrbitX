@@ -55,8 +55,9 @@ __orbitx_update_cwd() {
             r#"
 # Shell Integration支持 - OSC 133序列
 __orbitx_preexec() {
-    # C: 命令执行开始
-    printf '\e]133;C\e\\'
+    # C: 命令执行开始，携带命令内容
+    # $1 是 zsh preexec 传入的完整命令行
+    printf '\e]133;C;%s\e\\' "$1"
 }
 
 __orbitx_precmd() {
@@ -66,9 +67,8 @@ __orbitx_precmd() {
     __orbitx_update_cwd 2>/dev/null || true
     # A: 提示符开始
     printf '\e]133;A\e\\'
-    # B: 命令开始（提示符结束，准备接收用户输入）
+    # B: 命令输入区开始
     printf '\e]133;B\e\\'
-    # 在 A/B 之后再上报 Node 版本，避免 UI 在 A 时清空
     __orbitx_detect_node_version
 }
 

@@ -266,6 +266,7 @@ export const useEditorStore = defineStore('Editor', () => {
           id: args.paneId,
           cwd: '~',
           shell: 'agent',
+          displayTitle: 'Agent',
         })
       }
 
@@ -306,6 +307,7 @@ export const useEditorStore = defineStore('Editor', () => {
         id: args.paneId,
         cwd: '~',
         shell: 'agent',
+        displayTitle: args.label || 'Agent',
       })
     }
 

@@ -128,3 +128,15 @@ export interface APIResponse<T = unknown> {
   error?: string
   code?: string
 }
+
+// ===== 命令事件类型 =====
+
+export type CommandStatus = 'Running' | { Finished: { exit_code: number | null } }
+
+export interface CommandEventPayload {
+  id: number
+  exit_code: number | null
+  status: CommandStatus
+  command_line: string | null
+  working_directory: string | null
+}

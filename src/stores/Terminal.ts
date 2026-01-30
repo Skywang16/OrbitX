@@ -1,9 +1,10 @@
-import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
 import type { ShellInfo } from '@/api'
+import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
 import type { RuntimeTerminalState } from '@/types'
+import { getPathBasename } from '@/utils/path'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
-import { computed, ref, nextTick } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 interface TerminalEventListeners {
   onOutput: (data: string) => void
@@ -212,13 +213,24 @@ export const useTerminalStore = defineStore('Terminal', () => {
                 console.warn('Failed to record recent workspace:', error)
               })
           }
+
+          // Refresh display title (cwd change affects title)
+          refreshTerminalState(payload.paneId)
         }
       } catch (error) {
         console.error('Error handling terminal CWD change event:', error)
       }
     })
 
-    globalListenersUnlisten = [unlistenExit, unlistenCwdChanged]
+    const unlistenTitleChanged = await terminalApi.onTitleChanged(payload => {
+      refreshTerminalState(payload.paneId)
+    })
+
+    const unlistenCommandEvent = await terminalApi.onCommandEvent(payload => {
+      refreshTerminalState(payload.paneId)
+    })
+
+    globalListenersUnlisten = [unlistenExit, unlistenCwdChanged, unlistenTitleChanged, unlistenCommandEvent]
     isListenerSetup = true
   }
 
@@ -301,6 +313,7 @@ export const useTerminalStore = defineStore('Terminal', () => {
       id: paneId,
       cwd: initialDirectory || '~',
       shell: 'shell',
+      displayTitle: getPathBasename(initialDirectory || '~'),
     }
 
     if (typeof options?.shellName === 'string') {
@@ -439,6 +452,31 @@ export const useTerminalStore = defineStore('Terminal', () => {
       const activeStillExists = terminals.value.some(t => t.id === activeTerminalId.value)
       if (!activeStillExists) activeTerminalId.value = null
     }
+  }
+
+  /** Debounce timers per pane for title refresh */
+  const titleRefreshTimers = new Map<number, ReturnType<typeof setTimeout>>()
+
+  /** Refresh a single terminal's state from backend (for display title updates) */
+  const refreshTerminalState = (paneId: number): void => {
+    // Debounce: 短命令（ls, pwd 等）执行太快会导致 title 闪烁
+    // 150ms 窗口内的多次事件合并为一次查询
+    const existing = titleRefreshTimers.get(paneId)
+    if (existing) clearTimeout(existing)
+
+    titleRefreshTimers.set(
+      paneId,
+      setTimeout(async () => {
+        titleRefreshTimers.delete(paneId)
+        const state = await storageApi.getTerminalState(paneId)
+        if (!state) return
+
+        const index = terminals.value.findIndex(t => t.id === paneId)
+        if (index !== -1) {
+          terminals.value[index] = state
+        }
+      }, 150)
+    )
   }
 
   const subscribeToTerminalExit = (callback: TerminalExitCallback) => {

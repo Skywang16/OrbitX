@@ -28,15 +28,14 @@
     return classes
   }
 
-  const getTerminalCwd = (paneId: number): string => {
-    const terminal = terminalStore.terminals.find(t => t.id === paneId)
-    return terminal?.cwd ?? ''
+  const getTerminal = (paneId: number) => {
+    return terminalStore.terminals.find(t => t.id === paneId)
   }
 
   const getPresentation = (tab: TabState) => {
     return getTabDefinition(tab.type).getPresentation(tab as never, {
       t,
-      getTerminalCwd,
+      getTerminal,
     })
   }
 
@@ -296,7 +295,7 @@
     const menuItems = []
 
     if (isTerminalTab(tab)) {
-      const cwd = getTerminalCwd(tab.context.paneId)
+      const cwd = getTerminal(tab.context.paneId)?.cwd ?? ''
       menuItems.push({
         label: '复制',
         disabled: !cwd,

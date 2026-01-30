@@ -48,8 +48,9 @@ if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
             r#"
     # Shell Integration 支持 - OSC 133 标记
     __orbitx_preexec() {
-        # C: 命令执行开始（提示符结束）
-        printf '\e]133;C\e\\' >/dev/tty
+        # C: 命令执行开始，携带命令内容
+        # $1 是通过 DEBUG trap 传入的 BASH_COMMAND
+        printf '\e]133;C;%s\e\\' "$1" >/dev/tty
     }
 
     __orbitx_precmd() {
@@ -58,9 +59,8 @@ if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
         printf '\e]133;D;%d\e\\' "$exit_code" >/dev/tty
         # A: 提示符开始
         printf '\e]133;A\e\\' >/dev/tty
-        # B: 命令开始（提示符结束，准备接收用户输入）
+        # B: 命令输入区开始
         printf '\e]133;B\e\\' >/dev/tty
-        # 在 A/B 之后再上报 Node 版本，避免 UI 在 A 时清空
         __orbitx_detect_node_version
     }
 "#,

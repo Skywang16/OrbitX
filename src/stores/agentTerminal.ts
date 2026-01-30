@@ -28,6 +28,7 @@ export const useAgentTerminalStore = defineStore('agentTerminal', () => {
         id: terminal.paneId,
         cwd: '~',
         shell: 'agent',
+        displayTitle: terminal.label || 'Agent',
       })
     }
   }

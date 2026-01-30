@@ -158,6 +158,8 @@ export interface RuntimeTerminalState {
   id: number
   cwd: string
   shell: string
+  /** Pre-computed display title for the tab */
+  displayTitle: string
 }
 
 export interface UiState {
