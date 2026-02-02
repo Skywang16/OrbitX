@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { themeAPI } from '@/api/config'
-import type { ThemeConfigStatus, Theme, ThemeInfo } from '@/types/domain/theme'
+import type { ThemeConfigStatus, Theme } from '@/types/domain/theme'
 import { applyThemeToUI } from '@/utils/themeApplier'
 
 enum ThemeOperationState {
@@ -35,7 +35,7 @@ interface StateSnapshot {
 export const useThemeStore = defineStore('theme', () => {
   const configStatus = ref<ThemeConfigStatus | null>(null)
   const currentTheme = ref<Theme | null>(null)
-  const availableThemes = ref<ThemeInfo[]>([])
+  const availableThemes = ref<Theme[]>([])
 
   const operationState = ref<ThemeOperationState>(ThemeOperationState.IDLE)
   const error = ref<string | null>(null)
@@ -48,11 +48,14 @@ export const useThemeStore = defineStore('theme', () => {
   const isLoading = computed(() => operationState.value !== ThemeOperationState.IDLE)
 
   const themeOptions = computed(() => {
+    const currentName = currentThemeName.value
     return availableThemes.value.map(theme => ({
       value: theme.name,
       label: theme.name,
       type: theme.themeType,
-      isCurrent: theme.isCurrent,
+      isCurrent: theme.name === currentName,
+      // 完整的主题数据用于预览
+      ui: theme.ui,
     }))
   })
 
@@ -91,11 +94,6 @@ export const useThemeStore = defineStore('theme', () => {
 
         // 4. 应用真实主题到UI（覆盖乐观更新）
         applyThemeToUI(newTheme)
-
-        // 5. 确保 availableThemes 状态与真实主题同步（如果主题名称不同）
-        if (newTheme.name !== themeName) {
-          this.syncAvailableThemesState(newTheme.name)
-        }
       })
     }
 
@@ -119,9 +117,6 @@ export const useThemeStore = defineStore('theme', () => {
 
         // 4. 应用主题到UI
         applyThemeToUI(newTheme)
-
-        // 5. 确保 availableThemes 状态与真实主题同步
-        this.syncAvailableThemesState(newTheme.name)
       })
     }
 
@@ -158,9 +153,6 @@ export const useThemeStore = defineStore('theme', () => {
           },
         }
       }
-
-      // 立即更新 availableThemes 中的 isCurrent 状态以提供即时反馈
-      this.syncAvailableThemesState(themeName)
     }
 
     private optimisticUpdateFollowSystem = (followSystem: boolean, lightTheme?: string, darkTheme?: string): void => {
@@ -191,23 +183,6 @@ export const useThemeStore = defineStore('theme', () => {
       // 如果有当前主题，需要重新应用到UI以回滚视觉效果
       if (snapshot.currentTheme) {
         applyThemeToUI(snapshot.currentTheme)
-        // 同时回滚 availableThemes 状态
-        this.syncAvailableThemesState(snapshot.currentTheme.name)
-      }
-    }
-
-    private syncAvailableThemesState = (currentThemeName: string): void => {
-      // 只有在状态真正需要改变时才更新，避免不必要的响应式更新
-      const needsUpdate = availableThemes.value.some(
-        theme =>
-          (theme.name === currentThemeName && !theme.isCurrent) || (theme.name !== currentThemeName && theme.isCurrent)
-      )
-
-      if (needsUpdate) {
-        availableThemes.value = availableThemes.value.map(theme => ({
-          ...theme,
-          isCurrent: theme.name === currentThemeName,
-        }))
       }
     }
   }
@@ -219,9 +194,12 @@ export const useThemeStore = defineStore('theme', () => {
   const loadThemeConfigStatus = async (): Promise<void> => {
     try {
       operationState.value = ThemeOperationState.UPDATING_CONFIG
-      const status = await themeAPI.getThemeConfigStatus()
+      const [status, themes] = await Promise.all([
+        themeAPI.getThemeConfigStatus(),
+        themeAPI.getAvailableThemes(),
+      ])
       configStatus.value = status
-      availableThemes.value = status.availableThemes
+      availableThemes.value = themes
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err)
       throw err

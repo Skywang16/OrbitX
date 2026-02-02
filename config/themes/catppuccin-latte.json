@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "catppuccin-latte",
-    "theme_type": "light",
+    "themeType": "light",
     "ansi": {
       "black": "#5c5f77",
       "red": "#d20f39",

@@ -10,9 +10,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeConfig {
-    /// 自动切换时间
-    pub auto_switch_time: String,
-
     /// 终端主题名称，引用themes/目录下的文件
     pub terminal_theme: String,
 
@@ -47,6 +44,7 @@ impl std::fmt::Display for ThemeType {
 
 /// 主题定义
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Theme {
     /// 主题名称
     pub name: String,

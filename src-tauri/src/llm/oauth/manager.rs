@@ -14,8 +14,6 @@ use tracing::{debug, info};
 
 /// 等待中的 OAuth 流程
 struct PendingFlow {
-    provider: String,
-    pkce: PkceCodes,
     receiver: oneshot::Receiver<OAuthResult<(String, PkceCodes)>>,
 }
 
@@ -73,11 +71,7 @@ impl OAuthManager {
         drop(server);
 
         // 保存 pending flow
-        let pending = PendingFlow {
-            provider: provider_type.to_string(),
-            pkce,
-            receiver,
-        };
+        let pending = PendingFlow { receiver };
         self.pending_flows
             .lock()
             .await

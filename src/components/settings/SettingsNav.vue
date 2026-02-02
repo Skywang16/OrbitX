@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
 
   interface Props {
@@ -17,38 +17,31 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  const searchQuery = ref('')
-
   const navigationItems = computed(() => [
     {
       id: 'general',
       label: t('settings.general.title'),
       icon: 'settings',
-      description: t('settings.general.description'),
     },
     {
       id: 'ai',
       label: t('settings.ai.title'),
       icon: 'brain',
-      description: t('settings.ai.description'),
     },
     {
       id: 'theme',
       label: t('settings.theme.title'),
       icon: 'palette',
-      description: t('settings.theme.description'),
     },
     {
       id: 'shortcuts',
       label: t('settings.shortcuts.title'),
       icon: 'keyboard',
-      description: t('settings.shortcuts.description'),
     },
     {
       id: 'language',
       label: t('language.title'),
       icon: 'globe',
-      description: t('settings.language.description'),
     },
   ])
 
@@ -57,33 +50,14 @@
       emit('change', sectionId)
     }
   }
-
-  const filteredNavigationItems = computed(() => {
-    if (!searchQuery.value) {
-      return navigationItems.value
-    }
-
-    const query = searchQuery.value.toLowerCase()
-    return navigationItems.value.filter(
-      item => item.label.toLowerCase().includes(query) || item.description.toLowerCase().includes(query)
-    )
-  })
 </script>
 
 <template>
   <nav class="settings-nav">
-    <div class="settings-nav-header">
-      <x-search-input
-        v-model="searchQuery"
-        :placeholder="t('settings.search_placeholder')"
-        class="settings-nav-search"
-      />
-    </div>
-
     <div class="settings-nav-content">
       <ul class="settings-nav-list">
         <li
-          v-for="item in filteredNavigationItems"
+          v-for="item in navigationItems"
           :key="item.id"
           class="settings-nav-item"
           :class="{ active: item.id === activeSection }"
@@ -164,14 +138,6 @@
         </li>
       </ul>
     </div>
-
-    <div v-if="filteredNavigationItems.length === 0" class="settings-nav-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-nav-empty-icon">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
-      </svg>
-      <span>{{ t('settings.no_results') || 'No results found' }}</span>
-    </div>
   </nav>
 </template>
 
@@ -181,16 +147,6 @@
     flex-direction: column;
     height: 100%;
     background: var(--bg-200);
-  }
-
-  .settings-nav-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--border-100);
-    flex-shrink: 0;
-  }
-
-  .settings-nav-search {
-    width: 100%;
   }
 
   .settings-nav-content {
@@ -243,16 +199,11 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    transition: transform 0.15s ease;
   }
 
   .settings-nav-icon svg {
     width: 18px;
     height: 18px;
-  }
-
-  .settings-nav-item:hover .settings-nav-icon {
-    transform: scale(1.05);
   }
 
   .settings-nav-label {
@@ -278,26 +229,5 @@
 
   .settings-nav-item.active .settings-nav-indicator {
     transform: translateY(-50%) scaleY(1);
-  }
-
-  .settings-nav-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 32px 16px;
-    color: var(--text-500);
-    text-align: center;
-  }
-
-  .settings-nav-empty-icon {
-    width: 32px;
-    height: 32px;
-    opacity: 0.5;
-  }
-
-  .settings-nav-empty span {
-    font-size: 13px;
   }
 </style>

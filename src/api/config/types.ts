@@ -34,7 +34,6 @@ export interface AppConfig {
     animations_enabled: boolean
     opacity: number
     theme_config: {
-      auto_switch_time: string
       terminal_theme: string
       light_theme: string
       dark_theme: string
@@ -100,4 +99,4 @@ export interface ConfigSectionUpdate<T = unknown> {
 
 // ===== 主题相关类型 =====
 
-export type { ThemeConfigStatus, ThemeInfo, Theme } from '@/types'
+export type { Theme, ThemeConfigStatus } from '@/types'

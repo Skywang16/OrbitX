@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "light",
-    "theme_type": "light",
+    "themeType": "light",
     "ansi": {
       "black": "#24292e",
       "red": "#d73a49",

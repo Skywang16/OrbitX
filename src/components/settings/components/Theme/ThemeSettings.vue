@@ -1,17 +1,40 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue'
+  import { computed, ref, watch, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useThemeStore } from '@/stores/theme'
   import { getWindowOpacity, setWindowOpacity } from '@/api/window/opacity'
-  import { XSelect } from '@/ui'
-  import type { SelectOption } from '@/ui'
   import type { ThemeOption } from '@/types/domain/theme'
   import SettingsCard from '../../SettingsCard.vue'
 
   const themeStore = useThemeStore()
   const { t } = useI18n()
 
-  // 初始化方法，供外部调用
+  // 从主题的 ui 颜色中提取预览所需的颜色
+  const getThemeColors = (option: ThemeOption) => {
+    const ui = option.ui
+    if (!ui) {
+      // 降级：如果没有 ui 数据，根据类型返回默认颜色
+      const isDark = option.type === 'dark'
+      return {
+        bg: isDark ? '#1a1a1a' : '#ffffff',
+        sidebar: isDark ? '#242424' : '#f5f5f5',
+        card: isDark ? '#2d2d2d' : '#fafafa',
+        line: isDark ? '#3d3d3d' : '#e8e8e8',
+        text: isDark ? '#e0e0e0' : '#1a1a1a',
+        primary: isDark ? '#11a8cd' : '#6f42c1',
+      }
+    }
+    return {
+      bg: ui.bg_200,
+      sidebar: ui.bg_300,
+      card: ui.bg_400,
+      line: ui.bg_500,
+      text: ui.text_200,
+      primary: ui.primary,
+    }
+  }
+
+  // 初始化方法
   const init = async () => {
     await themeStore.initialize()
     const config = themeStore.themeConfig
@@ -25,6 +48,11 @@
     }
     await syncOpacityFromConfig()
   }
+
+  // 组件挂载时自动初始化
+  onMounted(async () => {
+    await init()
+  })
 
   // 暴露初始化方法给父组件
   defineExpose({
@@ -47,29 +75,21 @@
       value: option.value,
       label: option.label,
       type: option.type,
-      icon: getThemeIcon(option.type),
       isCurrent: option.isCurrent,
+      ui: option.ui,
     }))
   })
 
   const manualThemeOptions = computed(() => themeOptionsCache.value)
 
-  const lightThemeOptions = computed((): SelectOption[] => {
-    return themeOptionsCache.value
-      .filter(option => option.type === 'light' || option.type === 'auto')
-      .map(option => ({
-        label: option.label,
-        value: option.value,
-      }))
+  // 跟随系统时的浅色主题选项（完整 ThemeOption，用于卡片预览）
+  const systemLightThemeOptions = computed(() => {
+    return themeOptionsCache.value.filter(option => option.type === 'light' || option.type === 'auto')
   })
 
-  const darkThemeOptions = computed((): SelectOption[] => {
-    return themeOptionsCache.value
-      .filter(option => option.type === 'dark' || option.type === 'auto')
-      .map(option => ({
-        label: option.label,
-        value: option.value,
-      }))
+  // 跟随系统时的深色主题选项（完整 ThemeOption，用于卡片预览）
+  const systemDarkThemeOptions = computed(() => {
+    return themeOptionsCache.value.filter(option => option.type === 'dark' || option.type === 'auto')
   })
 
   watch(
@@ -86,19 +106,6 @@
     },
     { immediate: true }
   )
-
-  const getThemeIcon = (themeType: string) => {
-    switch (themeType) {
-      case 'light':
-        return 'sun'
-      case 'dark':
-        return 'moon'
-      case 'auto':
-        return 'monitor'
-      default:
-        return 'palette'
-    }
-  }
 
   const handleModeChange = async (mode: 'manual' | 'system') => {
     if (currentMode.value === mode) {
@@ -118,13 +125,17 @@
     await themeStore.switchToTheme(themeName)
   }
 
-  const handleSystemThemeChange = async () => {
+  const handleLightThemeSelect = async (themeName: string) => {
+    selectedLightTheme.value = themeName
     if (currentMode.value === 'system') {
-      try {
-        await themeStore.setFollowSystem(true, selectedLightTheme.value, selectedDarkTheme.value)
-      } catch (error) {
-        console.error('Failed to set follow system theme:', error)
-      }
+      await themeStore.setFollowSystem(true, themeName, selectedDarkTheme.value)
+    }
+  }
+
+  const handleDarkThemeSelect = async (themeName: string) => {
+    selectedDarkTheme.value = themeName
+    if (currentMode.value === 'system') {
+      await themeStore.setFollowSystem(true, selectedLightTheme.value, themeName)
     }
   }
 
@@ -215,23 +226,26 @@
           v-for="option in manualThemeOptions"
           :key="option.value"
           class="theme-card"
-          :class="{ selected: option.isCurrent, light: option.type === 'light', dark: option.type === 'dark' }"
+          :class="{ selected: option.isCurrent }"
           @click="handleThemeSelect(option.value)"
         >
-          <div class="theme-preview">
+          <div class="theme-preview" :style="{ background: getThemeColors(option).bg }">
             <div class="preview-header">
               <div class="preview-dots">
-                <span></span>
-                <span></span>
-                <span></span>
+                <span :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
               </div>
             </div>
             <div class="preview-content">
-              <div class="preview-sidebar"></div>
-              <div class="preview-main">
-                <div class="preview-line short"></div>
-                <div class="preview-line"></div>
-                <div class="preview-line medium"></div>
+              <div class="preview-sidebar" :style="{ background: getThemeColors(option).sidebar }"></div>
+              <div class="preview-main" :style="{ background: getThemeColors(option).card }">
+                <div
+                  class="preview-line short"
+                  :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"
+                ></div>
+                <div class="preview-line" :style="{ background: getThemeColors(option).line }"></div>
+                <div class="preview-line medium" :style="{ background: getThemeColors(option).line }"></div>
               </div>
             </div>
           </div>
@@ -252,61 +266,122 @@
       </div>
     </div>
 
-    <!-- System Theme Selection -->
+    <!-- System Theme Selection - Light -->
     <div v-if="currentMode === 'system'" class="settings-section">
-      <h3 class="settings-section-title">{{ t('theme_settings.system_themes') || 'System Theme Mapping' }}</h3>
+      <h3 class="settings-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        {{ t('theme_settings.light_theme') }}
+      </h3>
+      <p class="settings-section-description">{{ t('theme_settings.light_theme_description') }}</p>
 
-      <SettingsCard>
-        <div class="settings-item">
-          <div class="settings-item-header">
-            <div class="settings-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="item-icon">
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-              {{ t('theme_settings.light_theme') }}
+      <div class="theme-grid">
+        <div
+          v-for="option in systemLightThemeOptions"
+          :key="option.value"
+          class="theme-card"
+          :class="{ selected: selectedLightTheme === option.value }"
+          @click="handleLightThemeSelect(option.value)"
+        >
+          <div class="theme-preview" :style="{ background: getThemeColors(option).bg }">
+            <div class="preview-header">
+              <div class="preview-dots">
+                <span :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
+              </div>
             </div>
-            <div class="settings-description">{{ t('theme_settings.light_theme_description') }}</div>
+            <div class="preview-content">
+              <div class="preview-sidebar" :style="{ background: getThemeColors(option).sidebar }"></div>
+              <div class="preview-main" :style="{ background: getThemeColors(option).card }">
+                <div
+                  class="preview-line short"
+                  :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"
+                ></div>
+                <div class="preview-line" :style="{ background: getThemeColors(option).line }"></div>
+                <div class="preview-line medium" :style="{ background: getThemeColors(option).line }"></div>
+              </div>
+            </div>
           </div>
-          <div class="settings-item-control">
-            <XSelect
-              v-model="selectedLightTheme"
-              :options="lightThemeOptions"
-              :placeholder="t('theme.select_light')"
-              size="medium"
-              @change="handleSystemThemeChange"
-            />
+          <div class="theme-info">
+            <span class="theme-name">{{ option.label }}</span>
+            <svg
+              v-if="selectedLightTheme === option.value"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              class="check-icon"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
           </div>
         </div>
+      </div>
+    </div>
 
-        <div class="settings-item">
-          <div class="settings-item-header">
-            <div class="settings-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="item-icon">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-              {{ t('theme_settings.dark_theme') }}
+    <!-- System Theme Selection - Dark -->
+    <div v-if="currentMode === 'system'" class="settings-section">
+      <h3 class="settings-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+        {{ t('theme_settings.dark_theme') }}
+      </h3>
+      <p class="settings-section-description">{{ t('theme_settings.dark_theme_description') }}</p>
+
+      <div class="theme-grid">
+        <div
+          v-for="option in systemDarkThemeOptions"
+          :key="option.value"
+          class="theme-card"
+          :class="{ selected: selectedDarkTheme === option.value }"
+          @click="handleDarkThemeSelect(option.value)"
+        >
+          <div class="theme-preview" :style="{ background: getThemeColors(option).bg }">
+            <div class="preview-header">
+              <div class="preview-dots">
+                <span :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
+                <span :style="{ background: getThemeColors(option).text, opacity: 0.3 }"></span>
+              </div>
             </div>
-            <div class="settings-description">{{ t('theme_settings.dark_theme_description') }}</div>
+            <div class="preview-content">
+              <div class="preview-sidebar" :style="{ background: getThemeColors(option).sidebar }"></div>
+              <div class="preview-main" :style="{ background: getThemeColors(option).card }">
+                <div
+                  class="preview-line short"
+                  :style="{ background: getThemeColors(option).primary, opacity: 0.8 }"
+                ></div>
+                <div class="preview-line" :style="{ background: getThemeColors(option).line }"></div>
+                <div class="preview-line medium" :style="{ background: getThemeColors(option).line }"></div>
+              </div>
+            </div>
           </div>
-          <div class="settings-item-control">
-            <XSelect
-              v-model="selectedDarkTheme"
-              :options="darkThemeOptions"
-              :placeholder="t('theme.select_dark')"
-              size="medium"
-              @change="handleSystemThemeChange"
-            />
+          <div class="theme-info">
+            <span class="theme-name">{{ option.label }}</span>
+            <svg
+              v-if="selectedDarkTheme === option.value"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              class="check-icon"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
           </div>
         </div>
-      </SettingsCard>
+      </div>
     </div>
 
     <!-- Window Opacity Section -->
@@ -350,6 +425,24 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--text-400);
+  }
+
+  .settings-section-description {
+    font-size: 13px;
+    color: var(--text-400);
+    margin: -4px 0 4px 0;
   }
 
   /* Item Icons */
@@ -410,7 +503,6 @@
 
   .theme-card:hover {
     border-color: var(--border-300);
-    transform: translateY(-2px);
   }
 
   .theme-card.selected {
@@ -421,18 +513,10 @@
   /* Theme Preview */
   .theme-preview {
     aspect-ratio: 16 / 10;
-    background: var(--bg-300);
     padding: 6px;
     display: flex;
     flex-direction: column;
-  }
-
-  .theme-card.light .theme-preview {
-    background: #f5f5f5;
-  }
-
-  .theme-card.dark .theme-preview {
-    background: #1a1a1a;
+    border-radius: 10px 10px 0 0;
   }
 
   .preview-header {
@@ -452,16 +536,6 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--text-500);
-    opacity: 0.5;
-  }
-
-  .theme-card.light .preview-dots span {
-    background: #999;
-  }
-
-  .theme-card.dark .preview-dots span {
-    background: #666;
   }
 
   .preview-content {
@@ -474,16 +548,7 @@
 
   .preview-sidebar {
     width: 25%;
-    background: var(--bg-400);
     border-radius: 3px;
-  }
-
-  .theme-card.light .preview-sidebar {
-    background: #e0e0e0;
-  }
-
-  .theme-card.dark .preview-sidebar {
-    background: #2a2a2a;
   }
 
   .preview-main {
@@ -492,21 +557,11 @@
     flex-direction: column;
     gap: 3px;
     padding: 4px;
-    background: var(--bg-200);
     border-radius: 3px;
-  }
-
-  .theme-card.light .preview-main {
-    background: #fff;
-  }
-
-  .theme-card.dark .preview-main {
-    background: #222;
   }
 
   .preview-line {
     height: 4px;
-    background: var(--bg-400);
     border-radius: 2px;
   }
 
@@ -516,14 +571,6 @@
 
   .preview-line.medium {
     width: 70%;
-  }
-
-  .theme-card.light .preview-line {
-    background: #ddd;
-  }
-
-  .theme-card.dark .preview-line {
-    background: #3a3a3a;
   }
 
   /* Theme Info */

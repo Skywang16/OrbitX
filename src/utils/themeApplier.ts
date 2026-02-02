@@ -95,6 +95,7 @@ const updateCSSVariables = (theme: Theme): void => {
     style.setProperty('--syntax-number', theme.syntax.number)
     style.setProperty('--syntax-function', theme.syntax.function)
     style.setProperty('--syntax-variable', theme.syntax.variable)
+    style.setProperty('--syntax-type-name', theme.syntax.type_name)
     style.setProperty('--syntax-operator', theme.syntax.operator)
   }
 }
@@ -188,6 +189,7 @@ export const resetCSSVariables = (): void => {
     '--syntax-number',
     '--syntax-function',
     '--syntax-variable',
+    '--syntax-type-name',
     '--syntax-operator',
   ]
 

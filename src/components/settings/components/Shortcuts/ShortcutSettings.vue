@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { confirm } from '@tauri-apps/plugin-dialog'
 
@@ -89,6 +89,11 @@
     removeShortcut,
     resetToDefaults,
   } = useShortcuts()
+
+  // 组件挂载时自动初始化
+  onMounted(async () => {
+    await initialize()
+  })
 
   const editingActionKey = ref<string | null>(null)
   const capturedShortcut = ref<{ key: string; modifiers: string[] } | null>(null)

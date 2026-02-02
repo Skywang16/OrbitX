@@ -8,10 +8,8 @@ use reqwest::RequestBuilder;
 use serde_json::{json, Value};
 
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-const ISSUER: &str = "https://auth.openai.com";
 const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
 const TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
-const CODEX_API_ENDPOINT: &str = "https://chatgpt.com/backend-api/codex/responses";
 
 /// OpenAI Codex OAuth Provider
 pub struct OpenAiCodexProvider {

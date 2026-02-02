@@ -32,8 +32,8 @@ pub use terminal_commands::{
 pub use theme::{
     handle_system_theme_change, theme_get_available, theme_get_config_status, theme_get_current,
     theme_set_follow_system, theme_set_terminal, SystemThemeDetector, ThemeConfigStatus,
-    ThemeIndexEntry, ThemeInfo, ThemeManager, ThemeManagerOptions, ThemeService,
-    ThemeValidationResult, ThemeValidator,
+    ThemeIndexEntry, ThemeManager, ThemeManagerOptions, ThemeService, ThemeValidationResult,
+    ThemeValidator,
 };
 pub use types::*;
 

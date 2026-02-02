@@ -1,18 +1,22 @@
 <script setup lang="ts">
-  import { useI18n } from 'vue-i18n'
+  import { onMounted } from 'vue'
 
   import { useAISettingsStore } from './store'
   import AIModelConfig from './components/AIModelConfig.vue'
 
   const aiSettingsStore = useAISettingsStore()
-  const { t } = useI18n()
 
-  // 初始化方法，供外部调用
+  // 初始化方法
   const init = async () => {
     if (!aiSettingsStore.isInitialized && !aiSettingsStore.isLoading) {
       await aiSettingsStore.loadSettings()
     }
   }
+
+  // 组件挂载时自动初始化
+  onMounted(async () => {
+    await init()
+  })
 
   // 暴露初始化方法给父组件
   defineExpose({

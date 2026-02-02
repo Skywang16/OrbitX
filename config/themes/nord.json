@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "nord",
-    "theme_type": "dark",
+    "themeType": "dark",
     "ansi": {
       "black": "#3b4252",
       "red": "#bf616a",

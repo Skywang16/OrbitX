@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "catppuccin-mocha",
-    "theme_type": "dark",
+    "themeType": "dark",
     "ansi": {
       "black": "#45475a",
       "red": "#f38ba8",

@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "material-dark",
-    "theme_type": "dark",
+    "themeType": "dark",
     "ansi": {
       "black": "#263238",
       "red": "#f07178",

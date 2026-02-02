@@ -1,5 +1,5 @@
 import { invoke } from '@/utils/request'
-import type { AppConfig, Theme, ThemeInfo, ThemeConfigStatus } from './types'
+import type { AppConfig, Theme, ThemeConfigStatus } from './types'
 
 class ThemeAPI {
   getThemeConfigStatus = async (): Promise<ThemeConfigStatus> => {
@@ -10,8 +10,8 @@ class ThemeAPI {
     return await invoke<Theme>('theme_get_current')
   }
 
-  getAvailableThemes = async (): Promise<ThemeInfo[]> => {
-    return await invoke<ThemeInfo[]>('theme_get_available')
+  getAvailableThemes = async (): Promise<Theme[]> => {
+    return await invoke<Theme[]>('theme_get_available')
   }
 
   setTerminalTheme = async (name: string): Promise<void> => {
@@ -54,7 +54,7 @@ export class ConfigApi {
     return this.themeAPI.getCurrentTheme()
   }
 
-  getAvailableThemes = async (): Promise<ThemeInfo[]> => {
+  getAvailableThemes = async (): Promise<Theme[]> => {
     return this.themeAPI.getAvailableThemes()
   }
 

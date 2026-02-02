@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, onMounted } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { XSwitch, createMessage } from '@/ui'
   import { enable as enableAutostart, disable as disableAutostart, isEnabled } from '@tauri-apps/plugin-autostart'
@@ -38,10 +38,15 @@
     }
   }, 300)
 
-  // 初始化方法，供外部调用
+  // 初始化方法
   const init = async () => {
     await loadAutoStartStatus()
   }
+
+  // 组件挂载时自动初始化
+  onMounted(async () => {
+    await init()
+  })
 
   // 暴露初始化方法给父组件
   defineExpose({

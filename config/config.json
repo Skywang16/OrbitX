@@ -9,7 +9,6 @@
     "uiScale": 100,
     "animationsEnabled": true,
     "themeConfig": {
-      "autoSwitchTime": "18:00",
       "terminalTheme": "tokyo-night",
       "lightTheme": "light",
       "darkTheme": "dark",

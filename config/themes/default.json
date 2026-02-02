@@ -1,0 +1,64 @@
+{
+  "theme": {
+    "name": "default",
+    "themeType": "dark",
+    "ansi": {
+      "black": "#1e1e1e",
+      "red": "#f44747",
+      "green": "#6a9955",
+      "yellow": "#dcdcaa",
+      "blue": "#569cd6",
+      "magenta": "#c586c0",
+      "cyan": "#4ec9b0",
+      "white": "#d4d4d4"
+    },
+    "bright": {
+      "black": "#808080",
+      "red": "#f14c4c",
+      "green": "#89d185",
+      "yellow": "#f5f543",
+      "blue": "#6fc3df",
+      "magenta": "#d670d6",
+      "cyan": "#29b8db",
+      "white": "#ffffff"
+    },
+    "syntax": {
+      "comment": "#6a9955",
+      "keyword": "#569cd6",
+      "string": "#ce9178",
+      "number": "#b5cea8",
+      "function": "#dcdcaa",
+      "variable": "#9cdcfe",
+      "type_name": "#4ec9b0",
+      "operator": "#d4d4d4"
+    },
+    "ui": {
+      "bg_100": "#0d1117",
+      "bg_200": "#161b22",
+      "bg_300": "#1c2128",
+      "bg_400": "#21262d",
+      "bg_500": "#30363d",
+      "bg_600": "#484f58",
+      "bg_700": "#6e7681",
+      "border_200": "rgba(255, 255, 255, 0.06)",
+      "border_300": "rgba(255, 255, 255, 0.10)",
+      "border_400": "rgba(255, 255, 255, 0.14)",
+      "text_100": "#f0f6fc",
+      "text_200": "#e6edf3",
+      "text_300": "#c9d1d9",
+      "text_400": "#8b949e",
+      "text_500": "#6e7681",
+      "primary": "#58a6ff",
+      "primary_hover": "#79c0ff",
+      "primary_alpha": "rgba(88, 166, 255, 0.15)",
+      "success": "#3fb950",
+      "warning": "#d29922",
+      "error": "#f85149",
+      "info": "#58a6ff",
+      "hover": "rgba(255, 255, 255, 0.06)",
+      "active": "rgba(255, 255, 255, 0.10)",
+      "focus": "#58a6ff",
+      "selection": "rgba(88, 166, 255, 0.25)"
+    }
+  }
+}

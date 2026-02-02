@@ -15,20 +15,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
-/// 主题信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ThemeInfo {
-    /// 主题名称
-    pub name: String,
-
-    /// 主题类型
-    pub theme_type: String,
-
-    /// 是否为当前主题
-    pub is_current: bool,
-}
-
 /// 主题配置状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,9 +27,6 @@ pub struct ThemeConfigStatus {
 
     /// 系统是否为深色模式
     pub is_system_dark: Option<bool>,
-
-    /// 所有可用主题
-    pub available_themes: Vec<ThemeInfo>,
 }
 
 /// 获取当前主题配置状态
@@ -62,25 +45,10 @@ pub async fn theme_get_config_status(
 
     let current_theme_name = theme_service.get_current_theme_name(theme_config, is_system_dark);
 
-    let theme_list = match theme_service.theme_manager().list_themes().await {
-        Ok(list) => list,
-        Err(_) => return Ok(api_error!("config.get_failed")),
-    };
-
-    let available_themes = theme_list
-        .into_iter()
-        .map(|theme_entry| ThemeInfo {
-            name: theme_entry.name.clone(),
-            theme_type: theme_entry.theme_type,
-            is_current: theme_entry.name == current_theme_name,
-        })
-        .collect();
-
     Ok(api_success!(ThemeConfigStatus {
         current_theme_name,
         theme_config: theme_config.clone(),
         is_system_dark,
-        available_themes,
     }))
 }
 
@@ -206,24 +174,22 @@ pub async fn theme_set_follow_system<R: Runtime>(
     Ok(api_success!())
 }
 
-/// 获取所有可用主题列表
+/// 获取所有可用主题列表（返回完整主题数据）
 #[tauri::command]
 pub async fn theme_get_available(
     theme_service: State<'_, Arc<ThemeService>>,
-) -> TauriApiResult<Vec<ThemeInfo>> {
+) -> TauriApiResult<Vec<Theme>> {
     let theme_list = match theme_service.theme_manager().list_themes().await {
         Ok(list) => list,
         Err(_) => return Ok(api_error!("config.get_failed")),
     };
 
-    let themes = theme_list
-        .into_iter()
-        .map(|theme_entry| ThemeInfo {
-            name: theme_entry.name,
-            theme_type: theme_entry.theme_type,
-            is_current: false, // 这里不设置当前状态，由前端决定
-        })
-        .collect();
+    let mut themes = Vec::new();
+    for entry in theme_list {
+        if let Ok(theme) = theme_service.theme_manager().load_theme(&entry.name).await {
+            themes.push(theme);
+        }
+    }
 
     Ok(api_success!(themes))
 }

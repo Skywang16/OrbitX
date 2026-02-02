@@ -6,14 +6,7 @@
 
 export type ThemeType = 'light' | 'dark' | 'auto'
 
-export interface ThemeInfo {
-  name: string
-  themeType: string
-  isCurrent: boolean
-}
-
 export interface ThemeConfig {
-  autoSwitchTime: string
   terminalTheme: string
   lightTheme: string
   darkTheme: string
@@ -24,7 +17,6 @@ export interface ThemeConfigStatus {
   currentThemeName: string
   themeConfig: ThemeConfig
   isSystemDark: boolean | null
-  availableThemes: ThemeInfo[]
 }
 
 // ===== 颜色配置类型 =====
@@ -79,6 +71,7 @@ export interface SyntaxHighlight {
   operator: string
   function: string
   variable: string
+  type_name: string
 }
 
 export interface Theme {
@@ -97,6 +90,7 @@ export interface ThemeOption {
   label: string
   type: string
   isCurrent: boolean
+  ui?: UIColors
 }
 
 // ===== 主题管理类型 =====

@@ -10,7 +10,6 @@
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
   import SettingsCard from '../../../SettingsCard.vue'
   import OAuthAuthorizationDialog from '../../../OAuthAuthorizationDialog.vue'
-  import Button from '@/ui/components/Button.vue'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
@@ -24,82 +23,29 @@
   const isSaving = ref(false)
   const showAdvancedOptions = ref(false)
   const showOAuthDialog = ref(false)
-
-  // OAuth 订阅提供商配置（可扩展）
-  const oauthProviders = [
-    {
-      id: OAuthProvider.OpenAiCodex,
-      name: 'ChatGPT Plus/Pro',
-      icon: 'openai',
-      color: '#10a37f',
-      models: [
-        { value: 'gpt-4o', label: 'GPT-4o' },
-        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-        { value: 'o1', label: 'o1' },
-        { value: 'o1-mini', label: 'o1 Mini' },
-        { value: 'o1-pro', label: 'o1 Pro (Pro 订阅)' },
-        { value: 'gpt-4', label: 'GPT-4' },
-        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-      ],
-      available: true,
-    },
-    {
-      id: OAuthProvider.ClaudePro,
-      name: 'Claude Pro',
-      icon: 'anthropic',
-      color: '#d97706',
-      models: [
-        { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
-        { value: 'claude-3-opus', label: 'Claude 3 Opus' },
-      ],
-      available: false, // 暂未支持
-    },
-    {
-      id: OAuthProvider.GeminiAdvanced,
-      name: 'Gemini Advanced',
-      icon: 'google',
-      color: '#4285f4',
-      models: [
-        { value: 'gemini-ultra', label: 'Gemini Ultra' },
-        { value: 'gemini-pro', label: 'Gemini Pro' },
-      ],
-      available: false, // 暂未支持
-    },
-  ]
+  const showAddForm = ref(false)
 
   const formData = reactive({
     authType: 'apikey' as 'apikey' | 'oauth',
-    // API Key 模式
     provider: '' as string,
     apiUrl: '',
     apiKey: '',
     model: '',
     useCustomBaseUrl: false,
-    // OAuth 模式
     oauthProvider: '' as string,
     oauthConfig: undefined as OAuthConfig | undefined,
-    // 通用
     options: { maxContextTokens: 128000, temperature: 0.5, timeout: 300000, maxTokens: -1 },
   })
 
-  // 当前选中的 OAuth 提供商配置
-  const currentOAuthProvider = computed(() => {
-    return oauthProviders.find(p => p.id === formData.oauthProvider)
-  })
 
-  // OAuth 提供商下拉选项
-  const oauthProviderOptions = computed(() => {
-    return oauthProviders.map(p => ({
-      value: p.id,
-      label: p.name + (p.available ? '' : ' (即将支持)'),
-      disabled: !p.available,
-    }))
-  })
-
-  // 当前可用模型列表
   const availableModels = computed(() => {
     if (formData.authType === 'oauth') {
-      return currentOAuthProvider.value?.models || []
+      return [
+        { value: 'gpt-4o', label: 'GPT-4o' },
+        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+        { value: 'o1', label: 'o1' },
+        { value: 'o1-mini', label: 'o1 Mini' },
+      ]
     }
     return hasPresetModels.value ? getChatModelOptions(formData.provider) : []
   })
@@ -127,10 +73,17 @@
     formData.options = { maxContextTokens: 128000, temperature: 0.7, timeout: 300000, maxTokens: -1 }
     showAdvancedOptions.value = false
     editingId.value = null
+    showAddForm.value = false
+  }
+
+  const startAdding = () => {
+    resetForm()
+    showAddForm.value = true
   }
 
   const startEditing = (model: AIModelConfig) => {
     editingId.value = model.id
+    showAddForm.value = true
     if (model.authType === AuthType.OAuth) {
       formData.authType = 'oauth'
       formData.oauthProvider = model.oauthConfig?.provider || OAuthProvider.OpenAiCodex
@@ -152,7 +105,6 @@
       timeout: model.options?.timeout ?? 300000,
       maxTokens: model.options?.maxTokens ?? -1,
     }
-    showAdvancedOptions.value = false
   }
 
   const switchAuthType = (type: 'apikey' | 'oauth') => {
@@ -162,23 +114,12 @@
       formData.provider = ''
       formData.apiKey = ''
       formData.apiUrl = ''
-      // 默认选择第一个可用的 OAuth 提供商
-      const firstAvailable = oauthProviders.find(p => p.available)
-      if (firstAvailable) {
-        formData.oauthProvider = firstAvailable.id
-        formData.model = firstAvailable.models[0]?.value || ''
-      }
+      formData.oauthProvider = OAuthProvider.OpenAiCodex
+      formData.model = 'gpt-4o'
     } else {
       formData.oauthConfig = undefined
       formData.oauthProvider = ''
     }
-  }
-
-  const handleOAuthProviderChange = (value: string) => {
-    formData.oauthProvider = value
-    formData.oauthConfig = undefined
-    const provider = oauthProviders.find(p => p.id === value)
-    formData.model = provider?.models[0]?.value || ''
   }
 
   const handleProviderChange = (value: string) => {
@@ -231,7 +172,7 @@
       const modelData =
         formData.authType === 'oauth'
           ? {
-              provider: 'openai_compatible' as AIProvider, // TODO: 根据 oauthProvider 动态设置
+              provider: 'openai_compatible' as AIProvider,
               authType: AuthType.OAuth,
               apiUrl: '',
               apiKey: '',
@@ -274,362 +215,272 @@
     }
     return !!formData.provider && !!formData.model && !!formData.apiKey?.trim()
   })
-
-  // 获取模型显示信息
-  const getModelBadge = (model: AIModelConfig) => {
-    if (model.authType === AuthType.OAuth) {
-      const provider = oauthProviders.find(p => p.id === model.oauthConfig?.provider)
-      return { name: provider?.name || 'OAuth', color: provider?.color || '#10a37f' }
-    }
-    return null
-  }
 </script>
 
 <template>
   <div class="ai-model-config">
     <!-- Loading State -->
-    <div v-if="loading" class="settings-loading">
-      <div class="settings-loading-spinner"></div>
+    <div v-if="loading" class="loading-state">
+      <div class="loading-spinner"></div>
       <span>{{ t('ai_model.loading') }}</span>
     </div>
 
     <template v-else>
-      <!-- Add/Edit Model Form -->
+      <!-- Configured Models List -->
       <div class="settings-section">
+        <div class="section-header">
+          <h3 class="settings-section-title">{{ t('ai_model.configured_models') || 'Configured Models' }}</h3>
+          <button v-if="!showAddForm && models.length > 0" class="add-btn" @click="startAdding">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {{ t('ai_model.add_model') || 'Add Model' }}
+          </button>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="models.length === 0 && !showAddForm" class="empty-state">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path
+                d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"
+              />
+              <path
+                d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"
+              />
+            </svg>
+          </div>
+          <div class="empty-text">
+            <h4>{{ t('ai_model.no_models') || 'No AI models configured' }}</h4>
+            <p>{{ t('ai_model.no_models_description') || 'Add a model to start using AI features' }}</p>
+          </div>
+          <button class="primary-btn" @click="startAdding">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {{ t('ai_model.add_first_model') || 'Add Your First Model' }}
+          </button>
+        </div>
+
+        <!-- Models List -->
+        <div v-if="models.length > 0" class="models-list">
+          <div v-for="model in models" :key="model.id" class="model-card">
+            <div class="model-main">
+              <div class="model-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"
+                  />
+                  <path
+                    d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"
+                  />
+                </svg>
+              </div>
+              <div class="model-info">
+                <div class="model-name">{{ model.model }}</div>
+                <div class="model-meta">
+                  <span class="model-provider">{{ model.provider }}</span>
+                  <span class="model-badge" :class="model.authType === AuthType.OAuth ? 'oauth' : 'apikey'">
+                    {{ model.authType === AuthType.OAuth ? 'OAuth' : 'API Key' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="model-actions">
+              <button class="icon-btn" @click="startEditing(model)" :title="t('common.edit')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+              <button class="icon-btn danger" @click="deleteModel(model.id)" :title="t('common.delete')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add/Edit Form -->
+      <div v-if="showAddForm" class="settings-section">
         <h3 class="settings-section-title">
           {{ editingId ? t('ai_model.edit_model') || 'Edit Model' : t('ai_model.add_model') || 'Add Model' }}
         </h3>
 
         <SettingsCard>
-          <div class="model-form">
-            <!-- Auth Type Selection -->
-            <div class="form-section">
-              <div class="form-label">{{ t('ai_model.connection_type') || '连接方式' }}</div>
-              <div class="auth-type-selector">
-                <button
-                  type="button"
-                  class="auth-type-btn"
-                  :class="{ active: formData.authType === 'apikey' }"
-                  @click="switchAuthType('apikey')"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-type-icon">
-                    <path
-                      d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
-                    />
-                  </svg>
-                  <span>API Key</span>
-                </button>
-                <button
-                  type="button"
-                  class="auth-type-btn"
-                  :class="{ active: formData.authType === 'oauth' }"
-                  @click="switchAuthType('oauth')"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="auth-type-icon">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>{{ t('ai_model.subscription') || '订阅账号' }}</span>
-                </button>
-              </div>
+          <!-- Auth Type Tabs -->
+          <div class="auth-tabs">
+            <button
+              class="auth-tab"
+              :class="{ active: formData.authType === 'apikey' }"
+              @click="switchAuthType('apikey')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path
+                  d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+                />
+              </svg>
+              API Key
+            </button>
+            <button
+              class="auth-tab"
+              :class="{ active: formData.authType === 'oauth' }"
+              @click="switchAuthType('oauth')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              {{ t('ai_model.subscription') || 'Subscription' }}
+            </button>
+          </div>
+
+          <!-- API Key Form -->
+          <div v-if="formData.authType === 'apikey'" class="form-body">
+            <div class="form-group">
+              <label class="form-label">{{ t('ai_model.provider') }}</label>
+              <x-select
+                v-model="formData.provider"
+                :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
+                :placeholder="t('ai_model.select_provider')"
+                @update:modelValue="handleProviderChange"
+              />
             </div>
 
-            <!-- API Key Mode -->
-            <template v-if="formData.authType === 'apikey'">
-              <div class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.provider') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <x-select
-                    v-model="formData.provider"
-                    :options="providerOptions.map(p => ({ value: p.value, label: p.label }))"
-                    :placeholder="t('ai_model.select_provider')"
-                    @update:modelValue="handleProviderChange"
-                  />
-                </div>
-              </div>
+            <div v-if="formData.provider" class="form-group">
+              <label class="form-label">{{ t('ai_model.api_key') }}</label>
+              <input
+                v-model="formData.apiKey"
+                type="password"
+                class="form-input mono"
+                :placeholder="t('ai_model.api_key_placeholder')"
+              />
+            </div>
 
-              <div v-if="formData.provider" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.api_key') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <input
-                    v-model="formData.apiKey"
-                    type="password"
-                    class="settings-input mono"
-                    :placeholder="t('ai_model.api_key_placeholder')"
-                  />
-                </div>
-              </div>
+            <div v-if="formData.provider && availableModels.length > 0" class="form-group">
+              <label class="form-label">{{ t('ai_model.model') }}</label>
+              <x-select v-model="formData.model" :options="availableModels" :placeholder="t('ai_model.select_model')" />
+            </div>
 
-              <div v-if="formData.provider && availableModels.length > 0" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.model') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <x-select
-                    v-model="formData.model"
-                    :options="availableModels"
-                    :placeholder="t('ai_model.select_model')"
-                  />
-                </div>
-              </div>
+            <div v-else-if="formData.provider" class="form-group">
+              <label class="form-label">{{ t('ai_model.model_name') }}</label>
+              <input
+                v-model="formData.model"
+                type="text"
+                class="form-input"
+                :placeholder="t('ai_model.model_name_placeholder')"
+              />
+            </div>
 
-              <div v-else-if="formData.provider" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.model_name') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <input
-                    v-model="formData.model"
-                    type="text"
-                    class="settings-input"
-                    :placeholder="t('ai_model.model_name_placeholder')"
-                  />
-                </div>
-              </div>
+            <div v-if="formData.provider && hasPresetModels" class="form-group inline">
+              <label class="form-label">{{ t('ai_model.use_custom_base_url') }}</label>
+              <x-switch
+                :modelValue="formData.useCustomBaseUrl"
+                @update:modelValue="
+                  (v: boolean) => {
+                    formData.useCustomBaseUrl = v
+                    handleCustomUrlToggle()
+                  }
+                "
+              />
+            </div>
 
-              <div v-if="formData.provider && hasPresetModels" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.use_custom_base_url') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <x-switch
-                    :modelValue="formData.useCustomBaseUrl"
-                    @update:modelValue="
-                      (v: boolean) => {
-                        formData.useCustomBaseUrl = v
-                        handleCustomUrlToggle()
-                      }
-                    "
-                  />
-                </div>
-              </div>
+            <div v-if="formData.provider && (formData.useCustomBaseUrl || !hasPresetModels)" class="form-group">
+              <label class="form-label">{{ t('ai_model.api_url') }}</label>
+              <input
+                v-model="formData.apiUrl"
+                type="url"
+                class="form-input mono"
+                :placeholder="t('ai_model.api_url_placeholder')"
+              />
+            </div>
+          </div>
 
-              <div v-if="formData.provider && (formData.useCustomBaseUrl || !hasPresetModels)" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">
-                    {{ hasPresetModels ? t('ai_model.custom_base_url') : t('ai_model.api_url') }}
-                  </div>
+          <!-- OAuth Form -->
+          <div v-else class="form-body">
+            <div class="oauth-info">
+              <div class="oauth-provider-card">
+                <div class="oauth-provider-icon">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                      d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.8956zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"
+                    />
+                  </svg>
                 </div>
-                <div class="settings-item-control">
-                  <input
-                    v-model="formData.apiUrl"
-                    type="url"
-                    class="settings-input mono"
-                    :placeholder="t('ai_model.api_url_placeholder')"
-                  />
-                </div>
-              </div>
-            </template>
-
-            <!-- OAuth Mode -->
-            <template v-else>
-              <div class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.subscription_service') || '订阅服务' }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <x-select
-                    v-model="formData.oauthProvider"
-                    :options="oauthProviderOptions"
-                    :placeholder="t('ai_model.select_subscription') || '选择订阅服务'"
-                    @update:modelValue="handleOAuthProviderChange"
-                  />
-                </div>
-              </div>
-
-              <div v-if="formData.oauthProvider && currentOAuthProvider?.available" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.authorization') || '账号授权' }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <div class="oauth-status-container">
-                    <div class="oauth-status" :class="{ authorized: formData.oauthConfig }">
-                      <svg
-                        v-if="formData.oauthConfig"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        class="oauth-status-icon success"
-                      >
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                        <polyline points="22 4 12 14.01 9 11.01" />
-                      </svg>
-                      <svg
-                        v-else
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        class="oauth-status-icon"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                      </svg>
-                      <span>
-                        {{
-                          formData.oauthConfig
-                            ? t('ai_model.authorized') || '已授权'
-                            : t('ai_model.not_authorized') || '未授权'
-                        }}
-                      </span>
-                    </div>
-                    <Button
-                      :variant="formData.oauthConfig ? 'secondary' : 'primary'"
-                      size="small"
-                      @click="showOAuthDialog = true"
-                    >
-                      {{
-                        formData.oauthConfig
-                          ? t('ai_model.reauthorize') || '重新授权'
-                          : t('ai_model.start_authorization') || '开始授权'
-                      }}
-                    </Button>
+                <div class="oauth-provider-info">
+                  <div class="oauth-provider-name">ChatGPT Plus/Pro</div>
+                  <div class="oauth-provider-desc">
+                    {{ t('ai_model.oauth_description') || 'Use your ChatGPT subscription' }}
                   </div>
                 </div>
               </div>
 
-              <div v-if="formData.oauthProvider && currentOAuthProvider?.available" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.model') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <x-select
-                    v-model="formData.model"
-                    :options="availableModels"
-                    :placeholder="t('ai_model.select_model')"
-                  />
-                </div>
-              </div>
-            </template>
-
-            <!-- Advanced Options Toggle -->
-            <div
-              v-if="
-                (formData.authType === 'apikey' && formData.provider) ||
-                (formData.authType === 'oauth' && formData.oauthProvider)
-              "
-              class="settings-item clickable advanced-toggle"
-              @click="showAdvancedOptions = !showAdvancedOptions"
-            >
-              <div class="settings-item-header">
-                <div class="settings-label">
+              <div class="oauth-status-row">
+                <div class="oauth-status" :class="{ authorized: formData.oauthConfig }">
                   <svg
-                    class="toggle-chevron"
-                    :class="{ expanded: showAdvancedOptions }"
+                    v-if="formData.oauthConfig"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    class="status-icon success"
+                  >
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                  <svg
+                    v-else
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     stroke-width="2"
+                    class="status-icon"
                   >
-                    <polyline points="9 18 15 12 9 6" />
+                    <circle cx="12" cy="12" r="10" />
                   </svg>
-                  {{ t('ai_model.advanced_options') }}
+                  <span>
+                    {{
+                      formData.oauthConfig
+                        ? t('ai_model.authorized') || 'Authorized'
+                        : t('ai_model.not_authorized') || 'Not authorized'
+                    }}
+                  </span>
                 </div>
+                <button class="auth-btn" :class="{ secondary: formData.oauthConfig }" @click="showOAuthDialog = true">
+                  {{
+                    formData.oauthConfig
+                      ? t('ai_model.reauthorize') || 'Re-authorize'
+                      : t('ai_model.start_authorization') || 'Authorize'
+                  }}
+                </button>
               </div>
             </div>
 
-            <!-- Advanced Options -->
-            <template v-if="showAdvancedOptions">
-              <div class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.context_window') }}</div>
-                  <div class="settings-description">{{ t('ai_model.context_window_description') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <input
-                    v-model.number="formData.options.maxContextTokens"
-                    type="number"
-                    class="settings-input mono"
-                    placeholder="128000"
-                    min="1000"
-                    max="2000000"
-                  />
-                </div>
-              </div>
-              <div v-if="formData.authType === 'apikey'" class="settings-item">
-                <div class="settings-item-header">
-                  <div class="settings-label">{{ t('ai_model.max_output_tokens') }}</div>
-                  <div class="settings-description">{{ t('ai_model.max_output_tokens_description') }}</div>
-                </div>
-                <div class="settings-item-control">
-                  <input
-                    v-model.number="formData.options.maxTokens"
-                    type="number"
-                    class="settings-input mono"
-                    placeholder="-1"
-                    min="-1"
-                    max="200000"
-                  />
-                </div>
-              </div>
-            </template>
-
-            <!-- Form Actions -->
-            <div class="form-actions">
-              <Button v-if="editingId" variant="ghost" size="small" @click="resetForm">
-                {{ t('common.cancel') }}
-              </Button>
-              <Button
-                v-if="formData.authType === 'apikey'"
-                variant="secondary"
-                size="small"
-                :loading="isTesting"
-                :disabled="!isFormValid"
-                @click="testConnection"
-              >
-                {{ isTesting ? t('ai_model.testing') : t('ai_model.test_connection') }}
-              </Button>
-              <Button variant="primary" size="small" :loading="isSaving" :disabled="!isFormValid" @click="saveModel">
-                {{ editingId ? t('common.save') : t('common.add') }}
-              </Button>
+            <div v-if="formData.oauthConfig" class="form-group">
+              <label class="form-label">{{ t('ai_model.model') }}</label>
+              <x-select v-model="formData.model" :options="availableModels" :placeholder="t('ai_model.select_model')" />
             </div>
           </div>
-        </SettingsCard>
-      </div>
 
-      <!-- Configured Models List -->
-      <div v-if="models.length > 0" class="settings-section">
-        <h3 class="settings-section-title">{{ t('ai_model.configured_models') || 'Configured Models' }}</h3>
-
-        <SettingsCard>
-          <div v-for="model in models" :key="model.id" class="settings-item model-item">
-            <div class="settings-item-header">
-              <div class="model-info">
-                <div class="model-name">{{ model.model }}</div>
-                <div class="model-meta">
-                  <template v-if="getModelBadge(model)">
-                    <span class="model-badge oauth" :style="{ '--badge-color': getModelBadge(model)?.color }">
-                      {{ getModelBadge(model)?.name }}
-                    </span>
-                  </template>
-                  <template v-else>
-                    <span class="model-provider">{{ model.provider }}</span>
-                    <span class="model-badge apikey">API Key</span>
-                  </template>
-                  <span v-if="model.useCustomBaseUrl" class="model-tag">custom url</span>
-                </div>
-              </div>
-            </div>
-            <div class="settings-item-control">
-              <Button variant="ghost" size="small" @click="startEditing(model)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </Button>
-              <Button variant="ghost" size="small" class="danger-btn" @click="deleteModel(model.id)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </Button>
-            </div>
+          <!-- Form Actions -->
+          <div class="form-actions">
+            <button class="cancel-btn" @click="resetForm">{{ t('common.cancel') }}</button>
+            <button
+              v-if="formData.authType === 'apikey'"
+              class="secondary-btn"
+              :disabled="!isFormValid || isTesting"
+              @click="testConnection"
+            >
+              {{ isTesting ? t('ai_model.testing') : t('ai_model.test_connection') }}
+            </button>
+            <button class="primary-btn" :disabled="!isFormValid || isSaving" @click="saveModel">
+              {{ editingId ? t('common.save') : t('common.add') }}
+            </button>
           </div>
         </SettingsCard>
       </div>
@@ -658,80 +509,439 @@
     gap: 12px;
   }
 
-  /* Form Section */
-  .model-form {
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Loading State */
+  .loading-state {
     display: flex;
     flex-direction: column;
-  }
-
-  .model-form :deep(.settings-item)::after {
-    display: none !important;
-  }
-
-  .form-section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-100);
-  }
-
-  .form-label {
-    font-size: 12px;
-    font-weight: 500;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 64px 32px;
     color: var(--text-400);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-bottom: 12px;
   }
 
-  /* Auth Type Selector */
-  .auth-type-selector {
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border-200);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Empty State */
+  .empty-state {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 48px 32px;
+    background: var(--bg-200);
+    border: 1px solid var(--border-100);
+    border-radius: 12px;
+    text-align: center;
   }
 
-  .auth-type-btn {
-    flex: 1;
+  .empty-icon {
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
     background: var(--bg-300);
-    border: 1px solid var(--border-200);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    color: var(--text-300);
-    font-size: 13px;
-    font-weight: 500;
+    border-radius: 14px;
+    color: var(--text-400);
   }
 
-  .auth-type-btn:hover {
-    border-color: var(--border-300);
+  .empty-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .empty-text h4 {
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text-100);
+    margin: 0 0 4px;
   }
 
-  .auth-type-btn.active {
-    border-color: var(--color-primary);
-    background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-300));
-    color: var(--color-primary);
+  .empty-text p {
+    font-size: 13px;
+    color: var(--text-400);
+    margin: 0;
   }
 
-  .auth-type-icon {
-    width: 18px;
-    height: 18px;
+  /* Models List */
+  .models-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  /* OAuth Status */
-  .oauth-status-container {
+  .model-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--bg-200);
+    border: 1px solid var(--border-100);
+    border-radius: 10px;
+    transition: border-color 0.15s ease;
+  }
+
+  .model-card:hover {
+    border-color: var(--border-200);
+  }
+
+  .model-main {
     display: flex;
     align-items: center;
     gap: 12px;
   }
 
-  .oauth-status {
+  .model-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-300);
+    border-radius: 8px;
+    color: var(--text-300);
+  }
+
+  .model-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .model-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .model-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-100);
+    font-family: var(--font-family-mono);
+  }
+
+  .model-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .model-provider {
+    font-size: 12px;
+    color: var(--text-400);
+  }
+
+  .model-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .model-badge.apikey {
+    color: var(--text-400);
+    background: var(--bg-400);
+  }
+
+  .model-badge.oauth {
+    color: #10a37f;
+    background: color-mix(in srgb, #10a37f 15%, var(--bg-400));
+  }
+
+  .model-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  /* Buttons */
+  .add-btn {
     display: flex;
     align-items: center;
     gap: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-primary);
+    background: transparent;
+    border: 1px solid var(--color-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .add-btn:hover {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+
+  .add-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-400);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .icon-btn:hover {
+    background: var(--bg-300);
+    color: var(--text-100);
+  }
+
+  .icon-btn.danger:hover {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    color: var(--color-error);
+  }
+
+  .icon-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .primary-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .primary-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .primary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .primary-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .secondary-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-200);
+    background: var(--bg-300);
+    border: 1px solid var(--border-200);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .secondary-btn:hover:not(:disabled) {
+    background: var(--bg-400);
+  }
+
+  .secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cancel-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-300);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .cancel-btn:hover {
+    color: var(--text-100);
+    background: var(--bg-300);
+  }
+
+  /* Auth Tabs */
+  .auth-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-100);
+  }
+
+  .auth-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-400);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .auth-tab:hover {
+    color: var(--text-200);
+    background: var(--bg-250);
+  }
+
+  .auth-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .auth-tab svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Form */
+  .form-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-group.inline {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .form-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-200);
+  }
+
+  .form-input {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text-100);
+    background: var(--bg-300);
+    border: 1px solid var(--border-200);
+    border-radius: 6px;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+
+  .form-input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+
+  .form-input.mono {
+    font-family: var(--font-family-mono);
+  }
+
+  .form-input::placeholder {
+    color: var(--text-500);
+  }
+
+  /* OAuth */
+  .oauth-info {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .oauth-provider-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--bg-300);
+    border-radius: 10px;
+  }
+
+  .oauth-provider-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #10a37f;
+    border-radius: 10px;
+    color: white;
+  }
+
+  .oauth-provider-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .oauth-provider-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-100);
+  }
+
+  .oauth-provider-desc {
+    font-size: 12px;
+    color: var(--text-400);
+  }
+
+  .oauth-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-250);
+    border-radius: 8px;
+  }
+
+  .oauth-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 13px;
     color: var(--text-400);
   }
@@ -740,31 +950,38 @@
     color: var(--color-success, #22c55e);
   }
 
-  .oauth-status-icon {
-    width: 16px;
-    height: 16px;
+  .status-icon {
+    width: 18px;
+    height: 18px;
   }
 
-  .oauth-status-icon.success {
+  .status-icon.success {
     color: var(--color-success, #22c55e);
   }
 
-  /* Advanced Toggle */
-  .advanced-toggle .settings-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text-400);
+  .auth-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .toggle-chevron {
-    width: 14px;
-    height: 14px;
-    transition: transform 0.2s ease;
+  .auth-btn:hover {
+    filter: brightness(1.1);
   }
 
-  .toggle-chevron.expanded {
-    transform: rotate(90deg);
+  .auth-btn.secondary {
+    color: var(--text-200);
+    background: var(--bg-400);
+  }
+
+  .auth-btn.secondary:hover {
+    background: var(--bg-500);
   }
 
   /* Form Actions */
@@ -775,80 +992,6 @@
     gap: 8px;
     padding: 16px 20px;
     border-top: 1px solid var(--border-100);
-    background: var(--bg-250, color-mix(in srgb, var(--bg-300) 30%, var(--bg-200)));
-  }
-
-  /* Model List */
-  .model-item {
-    padding: 14px 20px !important;
-  }
-
-  .model-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .model-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-100);
-    font-family: var(--font-family-mono);
-  }
-
-  .model-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .model-provider {
-    font-size: 12px;
-    color: var(--text-400);
-  }
-
-  .model-badge {
-    display: inline-flex;
-    align-items: center;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-
-  .model-badge.apikey {
-    color: var(--text-400);
-    background: var(--bg-400);
-  }
-
-  .model-badge.oauth {
-    color: var(--badge-color, #10a37f);
-    background: color-mix(in srgb, var(--badge-color, #10a37f) 15%, var(--bg-400));
-  }
-
-  .model-tag {
-    font-size: 10px;
-    color: var(--text-500);
-    background: var(--bg-400);
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  /* Button Icons */
-  .btn-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  .danger-btn {
-    color: var(--text-400);
-  }
-
-  .danger-btn:hover {
-    color: var(--color-error, #ef4444);
-    background: color-mix(in srgb, var(--color-error, #ef4444) 10%, transparent);
+    background: var(--bg-250);
   }
 </style>

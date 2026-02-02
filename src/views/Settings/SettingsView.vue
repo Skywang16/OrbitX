@@ -116,12 +116,12 @@
         <SettingsNav :activeSection="activeSection" @change="handleNavigationChange" />
 
         <div class="settings-sidebar-footer">
-          <x-button variant="ghost" size="small" @click="handleOpenConfigFolder" class="config-folder-btn">
+          <button class="config-folder-btn" @click="handleOpenConfigFolder">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             </svg>
             {{ t('settings.general.config_open_folder') }}
-          </x-button>
+          </button>
         </div>
       </div>
 
@@ -155,21 +155,32 @@
   }
 
   .settings-sidebar-footer {
-    padding: 12px 12px 16px;
+    padding: 12px;
     border-top: 1px solid var(--border-100);
     background: var(--bg-200);
   }
 
   .config-folder-btn {
     width: 100%;
-    justify-content: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-300);
-    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--border-200);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
   .config-folder-btn:hover {
     color: var(--text-100);
+    background: var(--bg-300);
+    border-color: var(--border-300);
   }
 
   .config-folder-btn .btn-icon {

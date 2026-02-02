@@ -16,8 +16,9 @@ export const useShortcuts = () => {
 
   // 初始化
   const initialize = async () => {
-    if (!store.initialized) {
-      await store.initialize()
+    // 如果没有初始化过，或者 config 为空，都需要加载数据
+    if (!store.initialized || !store.config) {
+      await store.refreshConfig()
     }
   }
 

@@ -11,7 +11,6 @@ export * from './ui'
 
 export type {
   ThemeType,
-  ThemeInfo,
   ThemeConfig,
   ThemeConfigStatus,
   AnsiColors,

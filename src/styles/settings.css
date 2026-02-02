@@ -55,6 +55,7 @@
   background: var(--bg-100);
   scrollbar-width: thin;
   scrollbar-color: var(--bg-400) transparent;
+  scrollbar-gutter: stable;
 }
 
 .settings-main::-webkit-scrollbar {

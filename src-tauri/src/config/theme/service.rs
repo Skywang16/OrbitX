@@ -274,7 +274,6 @@ mod tests {
 
     fn create_test_theme_config() -> ThemeConfig {
         ThemeConfig {
-            auto_switch_time: "18:00".to_string(),
             terminal_theme: "test-theme".to_string(),
             light_theme: "test-light".to_string(),
             dark_theme: "test-dark".to_string(),

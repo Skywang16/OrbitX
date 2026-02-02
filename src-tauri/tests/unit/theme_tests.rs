@@ -32,7 +32,6 @@ async fn test_theme_service_logic() {
 
     // 创建测试主题配置
     let theme_config = ThemeConfig {
-        auto_switch_time: "18:00".to_string(),
         terminal_theme: "test-theme".to_string(),
         light_theme: "test-light".to_string(),
         dark_theme: "test-dark".to_string(),

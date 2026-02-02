@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "github-dark",
-    "theme_type": "dark",
+    "themeType": "dark",
     "ansi": {
       "black": "#484f58",
       "red": "#ff7b72",

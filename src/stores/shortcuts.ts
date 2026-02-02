@@ -78,10 +78,16 @@ export const useShortcutStore = defineStore('shortcuts', () => {
    */
   const refreshConfig = async (): Promise<void> => {
     return withLoading(async () => {
-      const [configData, stats] = await Promise.all([shortcutsApi.getConfig(), shortcutsApi.getStatistics()])
+      const [configData, platform, stats] = await Promise.all([
+        shortcutsApi.getConfig(),
+        shortcutsApi.getCurrentPlatform(),
+        shortcutsApi.getStatistics(),
+      ])
 
       config.value = configData
+      currentPlatform.value = platform
       statistics.value = stats
+      initialized.value = true
 
       // 刷新后重新验证
       await Promise.all([validateCurrentConfig(), detectCurrentConflicts()])

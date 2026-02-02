@@ -1,7 +1,7 @@
 {
   "theme": {
     "name": "tokyo-night",
-    "theme_type": "dark",
+    "themeType": "dark",
     "ansi": {
       "black": "#15161e",
       "red": "#f7768e",
