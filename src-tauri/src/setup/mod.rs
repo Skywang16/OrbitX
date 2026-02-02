@@ -222,6 +222,16 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     };
     app.manage(llm_state);
 
+    // 初始化 OAuthManager（OAuth 授权管理器）
+    let oauth_manager = {
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        Arc::new(crate::llm::oauth::OAuthManager::new(database))
+    };
+    app.manage(oauth_manager);
+
     // 初始化 Checkpoint 服务（提前创建，供 TaskExecutor 使用）
     let checkpoint_service = {
         use crate::checkpoint::{

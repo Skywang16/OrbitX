@@ -632,7 +632,7 @@
     margin-bottom: 10px;
     border: 1px solid var(--border-300);
     border-radius: 16px;
-    background-color: var(--bg-400);
+    background-color: var(--bg-300);
     transition: border-color 0.1s ease;
   }
 
@@ -766,7 +766,7 @@
   }
 
   .image-upload-button:hover:not(:disabled) {
-    background: var(--bg-300);
+    background: var(--bg-400);
     color: var(--color-primary);
   }
 
@@ -794,7 +794,7 @@
   }
 
   .database-button:hover {
-    background: var(--bg-300);
+    background: var(--bg-400);
     color: var(--accent-500);
   }
 
@@ -814,7 +814,7 @@
   }
 
   .database-button.has-index:hover {
-    background: var(--bg-300);
+    background: var(--bg-400);
     color: var(--accent-500);
   }
 
@@ -838,7 +838,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    border: 1px solid var(--bg-400);
+    border: 1px solid var(--bg-300);
   }
 
   .status-indicator.ready {

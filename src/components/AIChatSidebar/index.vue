@@ -55,7 +55,7 @@
   }
 
   const handleCreateSession = async () => {
-    await aiChatStore.createSession()
+    await aiChatStore.startNewChat()
   }
 
   const handleRefreshSessions = async () => {

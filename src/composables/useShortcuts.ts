@@ -4,9 +4,9 @@
  * 提供便捷的快捷键使用和管理接口
  */
 
-import { computed } from 'vue'
-import { useShortcutStore } from '@/stores/shortcuts'
 import type { ShortcutBinding } from '@/api'
+import { useShortcutStore } from '@/stores/shortcuts'
+import { computed } from 'vue'
 
 /**
  * 快捷键管理组合式API

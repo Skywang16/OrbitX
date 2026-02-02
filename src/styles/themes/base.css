@@ -15,6 +15,7 @@
 
   --font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   --font-family-mono: Menlo, Monaco, 'Courier New', monospace;
+  --font-mono: var(--font-family-mono);
   --font-size-xs: 12px;
   --font-size-sm: 13px;
   --font-size-md: 14px;

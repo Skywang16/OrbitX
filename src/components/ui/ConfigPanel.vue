@@ -35,7 +35,6 @@
   const isReloadingWorkspaceMcp = ref(false)
   const workspaceMcpStatuses = ref<McpServerStatus[]>([])
 
-  // Skills 相关状态
   const isLoadingSkills = ref(false)
   const globalSkills = ref<SkillSummary[]>([])
   const workspaceSkills = ref<SkillSummary[]>([])
@@ -181,13 +180,6 @@
     return { global, workspace }
   })
 
-  const statusDotClass = (status: McpServerStatus['status']): string => {
-    if (status === 'connected') return 'config-panel__dot config-panel__dot--ok'
-    if (status === 'error') return 'config-panel__dot config-panel__dot--error'
-    return 'config-panel__dot config-panel__dot--off'
-  }
-
-  // 展开的服务器列表
   const expandedServers = ref<Set<string>>(new Set())
 
   const toggleServer = (name: string) => {
@@ -215,188 +207,203 @@
 
 <template>
   <div class="config-panel">
-    <div class="config-panel__header">
-      <div class="config-panel__tabs">
+    <!-- Header with Tabs -->
+    <div class="panel-header">
+      <!-- Tab Buttons - matches Git's action buttons -->
+      <div class="config-tabs">
         <button
-          class="config-panel__tab"
-          :class="{ 'config-panel__tab--active': activeTab === 'global' }"
+          class="config-tab"
+          :class="{ 'config-tab--active': activeTab === 'global' }"
           @click="activeTab = 'global'"
         >
-          {{ t('config.global') }}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path
+              d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+            />
+          </svg>
+          <span>{{ t('config.global') }}</span>
         </button>
         <button
-          class="config-panel__tab"
-          :class="{ 'config-panel__tab--active': activeTab === 'workspace' }"
+          class="config-tab"
+          :class="{ 'config-tab--active': activeTab === 'workspace' }"
           @click="activeTab = 'workspace'"
         >
-          {{ t('config.workspace') }}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+          <span>{{ t('config.workspace') }}</span>
         </button>
       </div>
     </div>
 
     <!-- Global Tab -->
-    <div v-if="activeTab === 'global'" class="config-panel__content">
-      <div v-if="globalError" class="config-panel__error">{{ globalError }}</div>
-
-      <div class="config-panel__section">
-        <div class="config-panel__section-header">
-          <span class="config-panel__section-title">{{ t('config.rules') }}</span>
-        </div>
-        <textarea
-          v-model="globalRules"
-          class="config-panel__textarea"
-          rows="4"
-          :placeholder="t('config.rules')"
-          :disabled="isLoadingGlobal || isSavingGlobal"
-        />
+    <div v-if="activeTab === 'global'" class="panel-content">
+      <!-- Error -->
+      <div v-if="globalError" class="config-error">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+        <span>{{ globalError }}</span>
       </div>
 
-      <div class="config-panel__section">
-        <div class="config-panel__section-header">
-          <span class="config-panel__section-title">{{ t('config.mcp_servers') }}</span>
+      <!-- Rules Section -->
+      <div class="config-section">
+        <div class="section-header">
+          <div class="section-header__left">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+            </svg>
+            <span class="section-title">{{ t('config.rules') }}</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <textarea
+            v-model="globalRules"
+            class="config-textarea"
+            rows="4"
+            :placeholder="t('config.rules_placeholder') || 'Enter rules...'"
+            :disabled="isLoadingGlobal || isSavingGlobal"
+          />
+        </div>
+      </div>
+
+      <!-- MCP Servers Section -->
+      <div class="config-section">
+        <div class="section-header">
+          <div class="section-header__left">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="7" rx="2" />
+              <rect x="2" y="14" width="20" height="7" rx="2" />
+              <circle cx="6" cy="6.5" r="1" fill="currentColor" />
+              <circle cx="6" cy="17.5" r="1" fill="currentColor" />
+            </svg>
+            <span class="section-title">{{ t('config.mcp_servers') }}</span>
+            <span v-if="globalMcpStatuses.length > 0" class="section-badge">{{ globalMcpStatuses.length }}</span>
+          </div>
           <button
             v-if="hasWorkspace"
-            class="config-panel__icon-btn"
-            :class="{ 'config-panel__icon-btn--loading': isReloadingGlobalMcp }"
+            class="action-btn"
+            :class="{ 'action-btn--loading': isReloadingGlobalMcp }"
             :disabled="isLoadingGlobal || isSavingGlobal"
             :title="t('common.reload')"
             @click="reloadGlobalMcp"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 4v6h6" />
-              <path d="M23 20v-6h-6" />
-              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+              <path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.5 2.8L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.5-2.8l2.5-2.2" />
+              <path d="M21 21v-5h-5" />
             </svg>
           </button>
         </div>
-        <textarea
-          v-model="globalMcpJson"
-          class="config-panel__textarea"
-          rows="8"
-          :disabled="isLoadingGlobal || isSavingGlobal"
-        />
+        <div class="section-body">
+          <textarea
+            v-model="globalMcpJson"
+            class="config-textarea config-textarea--code"
+            rows="6"
+            :disabled="isLoadingGlobal || isSavingGlobal"
+          />
 
-        <div v-if="globalMcpStatuses.length > 0" class="config-panel__status-list">
-          <div
-            v-for="s in globalMcpStatuses"
-            :key="s.name"
-            class="config-panel__server-block"
-            @click="toggleServer(s.name)"
-          >
-            <div class="config-panel__status-item">
-              <svg
-                class="config-panel__chevron"
-                :class="{ 'config-panel__chevron--expanded': isExpanded(s.name) }"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <svg
-                class="config-panel__server-icon"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <rect x="2" y="3" width="12" height="4" rx="1" />
-                <rect x="2" y="9" width="12" height="4" rx="1" />
-                <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
-                <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
-              </svg>
-              <span :class="statusDotClass(s.status)"></span>
-              <span class="config-panel__status-name">{{ s.name }}</span>
-              <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-              <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
-            </div>
-            <div v-if="isExpanded(s.name) && s.tools.length > 0" class="config-panel__tools-drawer">
-              <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
-                <div class="config-panel__tool-info">
-                  <span class="config-panel__tool-name">{{ tool.name }}</span>
-                  <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+          <!-- Server List -->
+          <div v-if="globalMcpStatuses.length > 0" class="server-list">
+            <div v-for="s in globalMcpStatuses" :key="s.name" class="server-card" @click="toggleServer(s.name)">
+              <div class="server-card__main">
+                <svg
+                  class="server-chevron"
+                  :class="{ 'server-chevron--open': isExpanded(s.name) }"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+                <div
+                  class="server-dot"
+                  :class="s.status === 'connected' ? 'server-dot--ok' : s.status === 'error' ? 'server-dot--error' : ''"
+                ></div>
+                <span class="server-name">{{ s.name }}</span>
+                <span class="server-badge">{{ s.tools.length }} tools</span>
+                <span v-if="s.error" class="server-error-icon" :title="s.error">!</span>
+              </div>
+              <div v-if="isExpanded(s.name)" class="server-card__tools">
+                <div v-if="s.tools.length > 0" class="tools-list">
+                  <div v-for="tool in s.tools" :key="tool.name" class="tool-row">
+                    <span class="tool-name">{{ tool.name }}</span>
+                    <span v-if="tool.description" class="tool-desc">{{ tool.description }}</span>
+                  </div>
                 </div>
+                <div v-else class="tools-empty">No tools available</div>
               </div>
             </div>
-            <div v-else-if="isExpanded(s.name) && s.tools.length === 0" class="config-panel__tools-empty">
-              No tools available
-            </div>
           </div>
-        </div>
-        <div v-else-if="hasWorkspace && !isLoadingGlobal" class="config-panel__hint">
-          {{ t('config.no_mcp_servers') }}
+          <div v-else-if="hasWorkspace && !isLoadingGlobal" class="section-hint">
+            {{ t('config.no_mcp_servers') }}
+          </div>
         </div>
       </div>
 
       <!-- Skills Section -->
-      <div class="config-panel__section">
-        <div class="config-panel__section-header">
-          <span class="config-panel__section-title">{{ t('config.global_skills') }}</span>
+      <div class="config-section">
+        <div class="section-header">
+          <div class="section-header__left">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <span class="section-title">{{ t('config.global_skills') }}</span>
+            <span v-if="globalSkills.length > 0" class="section-badge">{{ globalSkills.length }}</span>
+          </div>
         </div>
-
-        <div v-if="isLoadingSkills" class="config-panel__hint">{{ t('common.loading') }}</div>
-
-        <div v-else-if="globalSkills.length > 0" class="config-panel__status-list">
-          <div
-            v-for="skill in globalSkills"
-            :key="skill.name"
-            class="config-panel__server-block"
-            @click="toggleServer(`skill:global:${skill.name}`)"
-          >
-            <div class="config-panel__status-item">
-              <svg
-                class="config-panel__chevron"
-                :class="{ 'config-panel__chevron--expanded': isExpanded(`skill:global:${skill.name}`) }"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <svg
-                class="config-panel__server-icon"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path d="M2 3h12v10H2z" />
-                <path d="M5 1v2M11 1v2" />
-                <path d="M2 6h12" />
-              </svg>
-              <span class="config-panel__status-name">{{ skill.name }}</span>
-            </div>
-            <div v-if="isExpanded(`skill:global:${skill.name}`)" class="config-panel__tools-drawer">
-              <div class="config-panel__tool-item">
-                <div class="config-panel__tool-info">
-                  <span class="config-panel__tool-desc">{{ skill.description }}</span>
+        <div class="section-body">
+          <div v-if="isLoadingSkills" class="section-loading">
+            <div class="loading-spinner"></div>
+          </div>
+          <div v-else-if="globalSkills.length > 0" class="server-list">
+            <div
+              v-for="skill in globalSkills"
+              :key="skill.name"
+              class="server-card"
+              @click="toggleServer(`skill:global:${skill.name}`)"
+            >
+              <div class="server-card__main">
+                <svg
+                  class="server-chevron"
+                  :class="{ 'server-chevron--open': isExpanded(`skill:global:${skill.name}`) }"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+                <span class="server-name">{{ skill.name }}</span>
+              </div>
+              <div v-if="isExpanded(`skill:global:${skill.name}`)" class="server-card__tools">
+                <div class="tool-row">
+                  <span class="tool-desc">{{ skill.description }}</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        <div v-else-if="hasWorkspace && !isLoadingSkills" class="config-panel__hint">
-          {{ t('config.no_global_skills') }}
+          <div v-else-if="hasWorkspace" class="section-hint">
+            {{ t('config.no_global_skills') }}
+          </div>
         </div>
       </div>
 
-      <div class="config-panel__actions">
-        <button class="config-panel__btn config-panel__btn--ghost" :disabled="isSavingGlobal" @click="loadGlobal">
+      <!-- Actions -->
+      <div class="config-actions">
+        <button class="config-btn" :disabled="isSavingGlobal" @click="loadGlobal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 4v6h6" />
-            <path d="M23 20v-6h-6" />
-            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+            <path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.5 2.8L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.5-2.8l2.5-2.2" />
+            <path d="M21 21v-5h-5" />
           </svg>
           {{ t('common.refresh') }}
         </button>
-        <button class="config-panel__btn config-panel__btn--primary" :disabled="isLoadingGlobal" @click="saveGlobal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17,21 17,13 7,13 7,21" />
-            <polyline points="7,3 7,8 15,8" />
+        <button class="config-btn config-btn--primary" :disabled="isLoadingGlobal" @click="saveGlobal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12" />
           </svg>
           {{ t('common.save') }}
         </button>
@@ -404,232 +411,226 @@
     </div>
 
     <!-- Workspace Tab -->
-    <div v-else class="config-panel__content">
-      <div v-if="!hasWorkspace" class="config-panel__empty">
+    <div v-else class="panel-content">
+      <div v-if="!hasWorkspace" class="panel-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
-        <span class="config-panel__empty-text">{{ t('config.no_workspace') }}</span>
+        <span>{{ t('config.no_workspace') }}</span>
       </div>
 
       <template v-else>
-        <div v-if="workspaceError" class="config-panel__error">{{ workspaceError }}</div>
-
-        <div class="config-panel__section">
-          <div class="config-panel__section-header">
-            <span class="config-panel__section-title">{{ t('config.rules') }}</span>
-          </div>
-          <textarea
-            v-model="workspaceRules"
-            class="config-panel__textarea"
-            rows="4"
-            :placeholder="t('config.rules')"
-            :disabled="isLoadingWorkspace || isSavingWorkspace"
-          />
+        <!-- Error -->
+        <div v-if="workspaceError" class="config-error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
+          <span>{{ workspaceError }}</span>
         </div>
 
-        <div class="config-panel__section">
-          <div class="config-panel__section-header">
-            <span class="config-panel__section-title">{{ t('config.mcp_servers') }}</span>
+        <!-- Rules Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div class="section-header__left">
+              <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+              </svg>
+              <span class="section-title">{{ t('config.rules') }}</span>
+            </div>
+          </div>
+          <div class="section-body">
+            <textarea
+              v-model="workspaceRules"
+              class="config-textarea"
+              rows="4"
+              :placeholder="t('config.rules_placeholder') || 'Enter rules...'"
+              :disabled="isLoadingWorkspace || isSavingWorkspace"
+            />
+          </div>
+        </div>
+
+        <!-- MCP Servers Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div class="section-header__left">
+              <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="7" rx="2" />
+                <rect x="2" y="14" width="20" height="7" rx="2" />
+                <circle cx="6" cy="6.5" r="1" fill="currentColor" />
+                <circle cx="6" cy="17.5" r="1" fill="currentColor" />
+              </svg>
+              <span class="section-title">{{ t('config.mcp_servers') }}</span>
+              <span v-if="workspaceMcpStatuses.length > 0" class="section-badge">
+                {{ workspaceMcpStatuses.length }}
+              </span>
+            </div>
             <button
-              class="config-panel__icon-btn"
-              :class="{ 'config-panel__icon-btn--loading': isReloadingWorkspaceMcp }"
+              class="action-btn"
+              :class="{ 'action-btn--loading': isReloadingWorkspaceMcp }"
               :disabled="isLoadingWorkspace || isSavingWorkspace"
               :title="t('common.reload')"
               @click="reloadWorkspaceMcp"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 4v6h6" />
-                <path d="M23 20v-6h-6" />
-                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                <path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.5 2.8L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.5-2.8l2.5-2.2" />
+                <path d="M21 21v-5h-5" />
               </svg>
             </button>
           </div>
-          <textarea
-            v-model="workspaceMcpJson"
-            class="config-panel__textarea"
-            rows="8"
-            :disabled="isLoadingWorkspace || isSavingWorkspace"
-          />
+          <div class="section-body">
+            <textarea
+              v-model="workspaceMcpJson"
+              class="config-textarea config-textarea--code"
+              rows="6"
+              :disabled="isLoadingWorkspace || isSavingWorkspace"
+            />
 
-          <div v-if="workspaceMcpStatuses.length > 0" class="config-panel__status-list">
-            <template v-if="groupedWorkspaceMcpStatuses.global.length > 0">
-              <div class="config-panel__status-group">{{ t('config.global') }}</div>
-              <div
-                v-for="s in groupedWorkspaceMcpStatuses.global"
-                :key="`g:${s.name}`"
-                class="config-panel__server-block"
-                @click="toggleServer(`g:${s.name}`)"
-              >
-                <div class="config-panel__status-item">
-                  <svg
-                    class="config-panel__chevron"
-                    :class="{ 'config-panel__chevron--expanded': isExpanded(`g:${s.name}`) }"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                  <svg
-                    class="config-panel__server-icon"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <rect x="2" y="3" width="12" height="4" rx="1" />
-                    <rect x="2" y="9" width="12" height="4" rx="1" />
-                    <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
-                    <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
-                  </svg>
-                  <span :class="statusDotClass(s.status)"></span>
-                  <span class="config-panel__status-name">{{ s.name }}</span>
-                  <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-                  <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
-                </div>
-                <div v-if="isExpanded(`g:${s.name}`) && s.tools.length > 0" class="config-panel__tools-drawer">
-                  <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
-                    <div class="config-panel__tool-info">
-                      <span class="config-panel__tool-name">{{ tool.name }}</span>
-                      <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+            <!-- Server List -->
+            <div v-if="workspaceMcpStatuses.length > 0" class="server-list">
+              <template v-if="groupedWorkspaceMcpStatuses.global.length > 0">
+                <div class="server-group-label">{{ t('config.global') }}</div>
+                <div
+                  v-for="s in groupedWorkspaceMcpStatuses.global"
+                  :key="`g:${s.name}`"
+                  class="server-card"
+                  @click="toggleServer(`g:${s.name}`)"
+                >
+                  <div class="server-card__main">
+                    <svg
+                      class="server-chevron"
+                      :class="{ 'server-chevron--open': isExpanded(`g:${s.name}`) }"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                    </svg>
+                    <div
+                      class="server-dot"
+                      :class="
+                        s.status === 'connected' ? 'server-dot--ok' : s.status === 'error' ? 'server-dot--error' : ''
+                      "
+                    ></div>
+                    <span class="server-name">{{ s.name }}</span>
+                    <span class="server-badge">{{ s.tools.length }} tools</span>
+                  </div>
+                  <div v-if="isExpanded(`g:${s.name}`)" class="server-card__tools">
+                    <div v-if="s.tools.length > 0" class="tools-list">
+                      <div v-for="tool in s.tools" :key="tool.name" class="tool-row">
+                        <span class="tool-name">{{ tool.name }}</span>
+                        <span v-if="tool.description" class="tool-desc">{{ tool.description }}</span>
+                      </div>
                     </div>
+                    <div v-else class="tools-empty">No tools available</div>
                   </div>
                 </div>
-                <div v-else-if="isExpanded(`g:${s.name}`) && s.tools.length === 0" class="config-panel__tools-empty">
-                  No tools available
-                </div>
-              </div>
-            </template>
-            <template v-if="groupedWorkspaceMcpStatuses.workspace.length > 0">
-              <div class="config-panel__status-group">{{ t('config.workspace') }}</div>
-              <div
-                v-for="s in groupedWorkspaceMcpStatuses.workspace"
-                :key="`w:${s.name}`"
-                class="config-panel__server-block"
-                @click="toggleServer(`w:${s.name}`)"
-              >
-                <div class="config-panel__status-item">
-                  <svg
-                    class="config-panel__chevron"
-                    :class="{ 'config-panel__chevron--expanded': isExpanded(`w:${s.name}`) }"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                  <svg
-                    class="config-panel__server-icon"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <rect x="2" y="3" width="12" height="4" rx="1" />
-                    <rect x="2" y="9" width="12" height="4" rx="1" />
-                    <circle cx="4.5" cy="5" r="0.5" fill="currentColor" />
-                    <circle cx="4.5" cy="11" r="0.5" fill="currentColor" />
-                  </svg>
-                  <span :class="statusDotClass(s.status)"></span>
-                  <span class="config-panel__status-name">{{ s.name }}</span>
-                  <span class="config-panel__status-meta">{{ s.tools.length }} tools</span>
-                  <span v-if="s.error" class="config-panel__status-error" :title="s.error">!</span>
-                </div>
-                <div v-if="isExpanded(`w:${s.name}`) && s.tools.length > 0" class="config-panel__tools-drawer">
-                  <div v-for="tool in s.tools" :key="tool.name" class="config-panel__tool-item">
-                    <div class="config-panel__tool-info">
-                      <span class="config-panel__tool-name">{{ tool.name }}</span>
-                      <span v-if="tool.description" class="config-panel__tool-desc">{{ tool.description }}</span>
+              </template>
+              <template v-if="groupedWorkspaceMcpStatuses.workspace.length > 0">
+                <div class="server-group-label">{{ t('config.workspace') }}</div>
+                <div
+                  v-for="s in groupedWorkspaceMcpStatuses.workspace"
+                  :key="`w:${s.name}`"
+                  class="server-card"
+                  @click="toggleServer(`w:${s.name}`)"
+                >
+                  <div class="server-card__main">
+                    <svg
+                      class="server-chevron"
+                      :class="{ 'server-chevron--open': isExpanded(`w:${s.name}`) }"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                    </svg>
+                    <div
+                      class="server-dot"
+                      :class="
+                        s.status === 'connected' ? 'server-dot--ok' : s.status === 'error' ? 'server-dot--error' : ''
+                      "
+                    ></div>
+                    <span class="server-name">{{ s.name }}</span>
+                    <span class="server-badge">{{ s.tools.length }} tools</span>
+                  </div>
+                  <div v-if="isExpanded(`w:${s.name}`)" class="server-card__tools">
+                    <div v-if="s.tools.length > 0" class="tools-list">
+                      <div v-for="tool in s.tools" :key="tool.name" class="tool-row">
+                        <span class="tool-name">{{ tool.name }}</span>
+                        <span v-if="tool.description" class="tool-desc">{{ tool.description }}</span>
+                      </div>
                     </div>
+                    <div v-else class="tools-empty">No tools available</div>
                   </div>
                 </div>
-                <div v-else-if="isExpanded(`w:${s.name}`) && s.tools.length === 0" class="config-panel__tools-empty">
-                  No tools available
-                </div>
-              </div>
-            </template>
+              </template>
+            </div>
           </div>
         </div>
 
         <!-- Workspace Skills Section -->
-        <div class="config-panel__section">
-          <div class="config-panel__section-header">
-            <span class="config-panel__section-title">{{ t('config.workspace_skills') }}</span>
+        <div class="config-section">
+          <div class="section-header">
+            <div class="section-header__left">
+              <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path
+                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                />
+              </svg>
+              <span class="section-title">{{ t('config.workspace_skills') }}</span>
+              <span v-if="workspaceSkills.length > 0" class="section-badge">{{ workspaceSkills.length }}</span>
+            </div>
           </div>
-
-          <div v-if="isLoadingSkills" class="config-panel__hint">{{ t('common.loading') }}</div>
-
-          <div v-else-if="workspaceSkills.length > 0" class="config-panel__status-list">
-            <div
-              v-for="skill in workspaceSkills"
-              :key="skill.name"
-              class="config-panel__server-block"
-              @click="toggleServer(`skill:workspace:${skill.name}`)"
-            >
-              <div class="config-panel__status-item">
-                <svg
-                  class="config-panel__chevron"
-                  :class="{ 'config-panel__chevron--expanded': isExpanded(`skill:workspace:${skill.name}`) }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <svg
-                  class="config-panel__server-icon"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <path d="M2 3h12v10H2z" />
-                  <path d="M5 1v2M11 1v2" />
-                  <path d="M2 6h12" />
-                </svg>
-                <span class="config-panel__status-name">{{ skill.name }}</span>
-              </div>
-              <div v-if="isExpanded(`skill:workspace:${skill.name}`)" class="config-panel__tools-drawer">
-                <div class="config-panel__tool-item">
-                  <div class="config-panel__tool-info">
-                    <span class="config-panel__tool-desc">{{ skill.description }}</span>
+          <div class="section-body">
+            <div v-if="isLoadingSkills" class="section-loading">
+              <div class="loading-spinner"></div>
+            </div>
+            <div v-else-if="workspaceSkills.length > 0" class="server-list">
+              <div
+                v-for="skill in workspaceSkills"
+                :key="skill.name"
+                class="server-card"
+                @click="toggleServer(`skill:workspace:${skill.name}`)"
+              >
+                <div class="server-card__main">
+                  <svg
+                    class="server-chevron"
+                    :class="{ 'server-chevron--open': isExpanded(`skill:workspace:${skill.name}`) }"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                  </svg>
+                  <span class="server-name">{{ skill.name }}</span>
+                </div>
+                <div v-if="isExpanded(`skill:workspace:${skill.name}`)" class="server-card__tools">
+                  <div class="tool-row">
+                    <span class="tool-desc">{{ skill.description }}</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          <div v-else class="config-panel__hint">
-            {{ t('config.no_workspace_skills') }}
+            <div v-else class="section-hint">
+              {{ t('config.no_workspace_skills') }}
+            </div>
           </div>
         </div>
 
-        <div class="config-panel__actions">
-          <button
-            class="config-panel__btn config-panel__btn--ghost"
-            :disabled="isSavingWorkspace"
-            @click="loadWorkspace(currentWorkspacePath)"
-          >
+        <!-- Actions -->
+        <div class="config-actions">
+          <button class="config-btn" :disabled="isSavingWorkspace" @click="loadWorkspace(currentWorkspacePath)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 4v6h6" />
-              <path d="M23 20v-6h-6" />
-              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+              <path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.5 2.8L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.5-2.8l2.5-2.2" />
+              <path d="M21 21v-5h-5" />
             </svg>
             {{ t('common.refresh') }}
           </button>
-          <button
-            class="config-panel__btn config-panel__btn--primary"
-            :disabled="isLoadingWorkspace"
-            @click="saveWorkspace"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17,21 17,13 7,13 7,21" />
-              <polyline points="7,3 7,8 15,8" />
+          <button class="config-btn config-btn--primary" :disabled="isLoadingWorkspace" @click="saveWorkspace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
             {{ t('common.save') }}
           </button>
@@ -644,445 +645,441 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-50);
+    background: var(--bg-200);
     overflow: hidden;
   }
 
   /* Header */
-  .config-panel__header {
+  .panel-header {
     flex-shrink: 0;
-    padding: 12px;
-    border-bottom: 1px solid var(--border-200);
-    background: var(--bg-100);
+    padding: 16px;
+    background: var(--bg-50);
+    border-bottom: 1px solid var(--border-100);
   }
 
-  .config-panel__tabs {
+  /* Config Tabs */
+  .config-tabs {
     display: flex;
     gap: 8px;
   }
 
-  .config-panel__tab {
+  .config-tab {
     flex: 1;
-    height: 28px;
-    padding: 0 12px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-300);
-    background: var(--bg-50);
-    border: 1px solid var(--border-200);
-    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--bg-400);
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-md);
+    color: var(--text-400);
+    font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
-  .config-panel__tab:hover {
-    background: var(--bg-200);
-    color: var(--text-100);
+  .config-tab svg {
+    width: 15px;
+    height: 15px;
   }
 
-  .config-panel__tab--active {
-    background: var(--bg-200);
+  .config-tab:hover {
+    background: var(--bg-500);
+    color: var(--text-300);
+  }
+
+  .config-tab--active {
+    background: var(--color-primary-alpha);
     color: var(--text-100);
-    border-color: var(--border-300);
   }
 
   /* Content */
-  .config-panel__content {
+  .panel-content {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    padding: 8px;
   }
 
-  .config-panel__content::-webkit-scrollbar {
-    width: 6px;
+  /* Sections */
+  .config-section {
+    margin-bottom: 12px;
   }
 
-  .config-panel__content::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .config-panel__content::-webkit-scrollbar-thumb {
-    background: var(--border-300);
-    border-radius: 3px;
-  }
-
-  .config-panel__content::-webkit-scrollbar-thumb:hover {
-    background: var(--border-400);
-  }
-
-  /* Section */
-  .config-panel__section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .config-panel__section-header {
+  .section-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-100);
+    border: 1px solid var(--border-100);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
   }
 
-  .config-panel__section-title {
-    font-size: 11px;
+  .section-header__left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .section-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-400);
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     color: var(--text-200);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
-  /* Icon Button */
-  .config-panel__icon-btn {
-    width: 24px;
-    height: 24px;
+  .section-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-200);
+    color: var(--text-400);
+  }
+
+  .section-body {
+    background: var(--bg-50);
+    border: 1px solid var(--border-100);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 12px;
+  }
+
+  .section-hint {
+    font-size: 12px;
+    color: var(--text-500);
+    text-align: center;
+    padding: 16px;
+  }
+
+  .section-loading {
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  /* Action Button */
+  .action-btn {
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
     border: none;
-    background: transparent;
+    border-radius: 6px;
+    background: var(--bg-200);
     color: var(--text-400);
-    border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
-  .config-panel__icon-btn:hover {
-    background: var(--bg-200);
-    color: var(--text-200);
+  .action-btn:hover {
+    background: var(--bg-300);
+    color: var(--text-100);
   }
 
-  .config-panel__icon-btn:disabled {
+  .action-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .config-panel__icon-btn svg {
+  .action-btn svg {
     width: 14px;
     height: 14px;
   }
 
-  .config-panel__icon-btn--loading svg {
-    animation: config-spin 1s linear infinite;
-  }
-
-  @keyframes config-spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .action-btn--loading svg {
+    animation: spin 1s linear infinite;
   }
 
   /* Textarea */
-  .config-panel__textarea {
+  .config-textarea {
     width: 100%;
-    padding: 10px;
-    font-family: var(--font-mono, monospace);
-    font-size: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
     line-height: 1.5;
     color: var(--text-200);
     background: var(--bg-100);
-    border: 1px solid var(--border-200);
-    border-radius: 6px;
+    border: 1px solid var(--border-100);
+    border-radius: 8px;
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s ease;
+    transition: all 0.15s ease;
   }
 
-  .config-panel__textarea:focus {
-    border-color: var(--border-300);
+  .config-textarea--code {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
   }
 
-  .config-panel__textarea:disabled {
+  .config-textarea:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+
+  .config-textarea:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  /* Status List */
-  .config-panel__status-list {
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-100);
-    border: 1px solid var(--border-200);
-    border-radius: 6px;
-    padding: 8px;
+  /* Server List */
+  .server-list {
+    margin-top: 12px;
   }
 
-  .config-panel__status-group {
+  .server-group-label {
     font-size: 10px;
     font-weight: 600;
     color: var(--text-500);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin: 8px 0 4px 0;
+    padding: 8px 10px 4px;
   }
 
-  .config-panel__status-group:first-child {
-    margin-top: 0;
-  }
-
-  .config-panel__server-block {
-    display: flex;
-    flex-direction: column;
+  .server-card {
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 2px;
     cursor: pointer;
-    border-radius: 6px;
-    transition: background 0.15s ease;
-    margin-bottom: 4px;
+    transition: background 0.12s ease;
   }
 
-  .config-panel__server-block:last-child {
-    margin-bottom: 0;
+  .server-card:hover {
+    background: var(--color-hover);
   }
 
-  .config-panel__server-block:hover {
-    background: var(--bg-200);
-  }
-
-  .config-panel__status-item {
+  .server-card__main {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    font-size: 12px;
+    gap: 10px;
+    padding: 10px 12px;
   }
 
-  .config-panel__chevron {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
+  .server-chevron {
+    width: 16px;
+    height: 16px;
     color: var(--text-500);
-    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
   }
 
-  .config-panel__chevron--expanded {
+  .server-chevron--open {
     transform: rotate(90deg);
   }
 
-  .config-panel__server-icon {
-    width: 14px;
-    height: 14px;
+  .server-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-500);
     flex-shrink: 0;
-    color: var(--text-400);
   }
 
-  .config-panel__tools-drawer {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px;
-    margin-left: 8px;
-    border-left: 1px solid var(--border-200);
-    animation: drawer-slide 0.2s ease;
+  .server-dot--ok {
+    background: var(--color-success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 20%, transparent);
   }
 
-  @keyframes drawer-slide {
-    from {
-      opacity: 0;
-      transform: translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .server-dot--error {
+    background: var(--color-error);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 20%, transparent);
   }
 
-  .config-panel__tool-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: 4px;
-    transition: background 0.15s ease;
-  }
-
-  .config-panel__tool-item:hover {
-    background: var(--bg-200);
-  }
-
-  .config-panel__tool-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    margin-top: 1px;
-    color: var(--text-400);
-  }
-
-  .config-panel__tool-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .config-panel__tool-name {
-    font-size: 11px;
-    font-family: var(--font-mono, monospace);
-    color: var(--text-200);
-    word-break: break-all;
-  }
-
-  .config-panel__tool-desc {
-    font-size: 10px;
-    color: var(--text-500);
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
-  .config-panel__tools-empty {
-    padding: 8px 8px 8px 30px;
-    font-size: 11px;
-    color: var(--text-500);
-    font-style: italic;
-  }
-
-  .config-panel__status-name {
+  .server-name {
     flex: 1;
     min-width: 0;
-    color: var(--text-200);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-100);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .config-panel__status-meta {
-    flex-shrink: 0;
+  .server-badge {
     font-size: 11px;
-    color: var(--text-500);
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-200);
+    color: var(--text-400);
+    flex-shrink: 0;
   }
 
-  .config-panel__status-error {
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
+  .server-error-icon {
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 11px;
     font-weight: 600;
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
     border-radius: 50%;
     cursor: help;
-  }
-
-  .config-panel__dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
     flex-shrink: 0;
-    background: var(--text-500);
   }
 
-  .config-panel__dot--ok {
-    background: #22c55e;
+  .server-card__tools {
+    padding: 0 12px 12px 38px;
   }
 
-  .config-panel__dot--error {
-    background: #ef4444;
+  .tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  .config-panel__dot--off {
-    background: var(--text-500);
+  .tool-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    border-radius: var(--border-radius);
+    transition: background 0.12s ease;
+  }
+
+  .tool-row:hover {
+    background: var(--color-hover);
+  }
+
+  .tool-name {
+    font-size: 12px;
+    font-weight: 500;
+    font-family: var(--font-family-mono);
+    color: var(--text-200);
+  }
+
+  .tool-desc {
+    font-size: 11px;
+    color: var(--text-500);
+    line-height: 1.4;
+  }
+
+  .tools-empty {
+    font-size: 12px;
+    color: var(--text-500);
+    padding: 8px;
   }
 
   /* Actions */
-  .config-panel__actions {
+  .config-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    padding: 12px 8px 8px;
     margin-top: auto;
-    padding-top: 8px;
   }
 
-  .config-panel__btn {
-    height: 28px;
+  .config-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 12px;
+    gap: 8px;
+    padding: 10px 16px;
     font-size: 12px;
     font-weight: 500;
-    border: none;
-    border-radius: 6px;
+    border: 1px solid var(--border-100);
+    border-radius: 10px;
     cursor: pointer;
     transition: all 0.15s ease;
+    background: var(--bg-100);
+    color: var(--text-300);
   }
 
-  .config-panel__btn svg {
-    width: 14px;
-    height: 14px;
+  .config-btn svg {
+    width: 15px;
+    height: 15px;
   }
 
-  .config-panel__btn:disabled {
+  .config-btn:hover:not(:disabled) {
+    background: var(--bg-200);
+    border-color: var(--border-200);
+    color: var(--text-100);
+  }
+
+  .config-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .config-panel__btn--ghost {
-    color: var(--text-300);
-    background: transparent;
-    border: 1px solid var(--border-200);
-  }
-
-  .config-panel__btn--ghost:hover:not(:disabled) {
-    background: var(--bg-200);
-    color: var(--text-200);
-  }
-
-  .config-panel__btn--primary {
-    color: white;
+  .config-btn--primary {
     background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
   }
 
-  .config-panel__btn--primary:hover:not(:disabled) {
+  .config-btn--primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    transform: translateY(-1px);
   }
 
   /* Error */
-  .config-panel__error {
-    padding: 8px 12px;
+  .config-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin: 8px;
     font-size: 12px;
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    border-radius: 6px;
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+    border-radius: var(--border-radius-lg);
   }
 
-  /* Empty State */
-  .config-panel__empty {
+  .config-error svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Empty */
+  .panel-empty {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 24px;
-    color: var(--text-400);
+    padding: 40px 20px;
+    color: var(--text-500);
+    font-size: 13px;
   }
 
-  .config-panel__empty svg {
+  .panel-empty svg {
     width: 40px;
     height: 40px;
     opacity: 0.4;
   }
 
-  .config-panel__empty-text {
-    font-size: 13px;
+  .loading-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-200);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
   }
 
-  .config-panel__hint {
-    font-size: 11px;
-    color: var(--text-500);
-    text-align: center;
-    padding: 8px;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

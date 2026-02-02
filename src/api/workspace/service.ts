@@ -1,5 +1,5 @@
-import { invoke } from '@/utils/request'
 import type { Message } from '@/types'
+import { invoke } from '@/utils/request'
 
 export interface WorkspaceRecord {
   path: string
@@ -37,6 +37,9 @@ export const workspaceService = {
   },
   setActiveSession: async (path: string, sessionId: number): Promise<void> => {
     await invoke('workspace_set_active_session', { path, sessionId })
+  },
+  clearActiveSession: async (path: string): Promise<void> => {
+    await invoke('workspace_clear_active_session', { path })
   },
   listRecent: async (limit?: number): Promise<WorkspaceRecord[]> => {
     return await invoke<WorkspaceRecord[]>('workspace_get_recent', { limit })

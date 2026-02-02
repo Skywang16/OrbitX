@@ -1,7 +1,7 @@
 use super::types::{OAuthError, OAuthResult, PkceCodes};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, error, info, warn};
 use url::form_urlencoded;
 
@@ -18,15 +18,27 @@ struct PendingOAuthFlow {
 pub struct OAuthCallbackServer {
     pending_flows: Arc<Mutex<HashMap<String, PendingOAuthFlow>>>,
     server_handle: Option<tokio::task::JoinHandle<()>>,
+    started: bool,
 }
 
 impl OAuthCallbackServer {
-    /// 创建并启动服务器
+    /// 创建服务器（不立即启动，延迟到第一次使用时）
     pub fn new() -> Arc<Mutex<Self>> {
-        let server = Arc::new(Mutex::new(Self {
+        Arc::new(Mutex::new(Self {
             pending_flows: Arc::new(Mutex::new(HashMap::new())),
             server_handle: None,
-        }));
+            started: false,
+        }))
+    }
+
+    /// 确保服务器已启动
+    pub async fn ensure_started(server: Arc<Mutex<Self>>) {
+        let mut guard = server.lock().await;
+        if guard.started {
+            return;
+        }
+        guard.started = true;
+        drop(guard);
 
         let server_clone = server.clone();
         tokio::spawn(async move {
@@ -34,8 +46,6 @@ impl OAuthCallbackServer {
                 error!("Failed to start OAuth callback server: {}", e);
             }
         });
-
-        server
     }
 
     /// 启动 HTTP 服务器
@@ -48,7 +58,7 @@ impl OAuthCallbackServer {
         info!("OAuth callback server started on port {}", OAUTH_PORT);
 
         let server_ref = server.clone();
-        
+
         for request in http_server.incoming_requests() {
             let url_str = request.url();
             debug!("OAuth callback received: {}", url_str);
@@ -71,23 +81,35 @@ impl OAuthCallbackServer {
                     if let Some(state_val) = state {
                         if let Some(pending) = flows.remove(state_val) {
                             if let Some(err) = error {
-                                let _ = pending.sender.send(Err(OAuthError::Other(format!("OAuth error: {}", err))));
-                                let _ = request.respond(Response::from_string(Self::html_error(err)));
+                                let _ = pending
+                                    .sender
+                                    .send(Err(OAuthError::Other(format!("OAuth error: {}", err))));
+                                let _ =
+                                    request.respond(Response::from_string(Self::html_error(err)));
                             } else if let Some(code_val) = code {
-                                let _ = pending.sender.send(Ok((code_val.to_string(), pending.pkce)));
-                                let _ = request.respond(Response::from_string(Self::html_success()));
+                                let _ = pending
+                                    .sender
+                                    .send(Ok((code_val.to_string(), pending.pkce)));
+                                let _ =
+                                    request.respond(Response::from_string(Self::html_success()));
                             } else {
-                                let _ = pending.sender.send(Err(OAuthError::Other("Missing code".to_string())));
-                                let _ = request.respond(Response::from_string(Self::html_error("Missing code")));
+                                let _ = pending
+                                    .sender
+                                    .send(Err(OAuthError::Other("Missing code".to_string())));
+                                let _ = request.respond(Response::from_string(Self::html_error(
+                                    "Missing code",
+                                )));
                             }
                             continue;
                         }
                     }
 
                     warn!("OAuth callback with invalid or missing state");
-                    let _ = request.respond(Response::from_string(Self::html_error("Invalid state")));
+                    let _ =
+                        request.respond(Response::from_string(Self::html_error("Invalid state")));
                 } else {
-                    let _ = request.respond(Response::from_string(Self::html_error("Invalid request")));
+                    let _ =
+                        request.respond(Response::from_string(Self::html_error("Invalid request")));
                 }
             } else {
                 let _ = request.respond(Response::from_string("Not found").with_status_code(404));
@@ -104,11 +126,11 @@ impl OAuthCallbackServer {
         pkce: PkceCodes,
     ) -> oneshot::Receiver<OAuthResult<(String, PkceCodes)>> {
         let (sender, receiver) = oneshot::channel();
-        
+
         let pending = PendingOAuthFlow { pkce, sender };
-        
+
         self.pending_flows.lock().await.insert(state, pending);
-        
+
         receiver
     }
 
@@ -142,7 +164,8 @@ impl OAuthCallbackServer {
 
     /// 错误页面 HTML
     fn html_error(error: &str) -> String {
-        format!(r#"<!DOCTYPE html>
+        format!(
+            r#"<!DOCTYPE html>
 <html>
 <head>
     <title>OrbitX - Authorization Failed</title>
@@ -161,7 +184,9 @@ impl OAuthCallbackServer {
         <div class="error">{}</div>
     </div>
 </body>
-</html>"#, error)
+</html>"#,
+            error
+        )
     }
 
     /// 获取回调 URL

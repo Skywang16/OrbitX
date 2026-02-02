@@ -1,12 +1,13 @@
 import oauthApi from '@/api/llm/oauth'
 import type { OAuthConfig, OAuthProvider, OAuthStatus } from '@/types/oauth'
+import createMessage from '@/ui/composables/message-api'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { computed, ref } from 'vue'
 
 export interface OAuthState {
   isAuthenticating: boolean
   flowId: string | null
-  error: string | null
+  cancelled: boolean
   config: OAuthConfig | null
 }
 
@@ -14,12 +15,11 @@ export function useOAuth() {
   const state = ref<OAuthState>({
     isAuthenticating: false,
     flowId: null,
-    error: null,
+    cancelled: false,
     config: null,
   })
 
   const isAuthenticating = computed(() => state.value.isAuthenticating)
-  const error = computed(() => state.value.error)
   const config = computed(() => state.value.config)
 
   /**
@@ -27,7 +27,7 @@ export function useOAuth() {
    */
   async function startAuthorization(provider: OAuthProvider): Promise<OAuthConfig | null> {
     state.value.isAuthenticating = true
-    state.value.error = null
+    state.value.cancelled = false
     state.value.config = null
 
     try {
@@ -43,10 +43,13 @@ export function useOAuth() {
       state.value.config = oauthConfig
 
       return oauthConfig
-    } catch (err: any) {
-      const errorMsg = err?.message || String(err)
-      state.value.error = errorMsg
-      console.error('OAuth 授权失败:', errorMsg)
+    } catch (err: unknown) {
+      // 主动取消不显示错误
+      if (!state.value.cancelled) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        createMessage.error(errorMsg || '授权失败')
+        console.error('OAuth 授权失败:', errorMsg)
+      }
       return null
     } finally {
       state.value.isAuthenticating = false
@@ -60,14 +63,16 @@ export function useOAuth() {
   async function cancelAuthorization(): Promise<void> {
     if (!state.value.flowId) return
 
+    // 标记为主动取消
+    state.value.cancelled = true
+
     try {
       await oauthApi.cancelFlow(state.value.flowId)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('取消 OAuth 流程失败:', err)
     } finally {
       state.value.isAuthenticating = false
       state.value.flowId = null
-      state.value.error = null
     }
   }
 
@@ -79,9 +84,9 @@ export function useOAuth() {
       const newConfig = await oauthApi.refreshToken(oauthConfig)
       state.value.config = newConfig
       return newConfig
-    } catch (err: any) {
-      const errorMsg = err?.message || String(err)
-      state.value.error = errorMsg
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      createMessage.error(errorMsg || '刷新 Token 失败')
       console.error('刷新 OAuth token 失败:', errorMsg)
       return null
     }
@@ -93,7 +98,7 @@ export function useOAuth() {
   async function checkStatus(oauthConfig: OAuthConfig): Promise<OAuthStatus | null> {
     try {
       return await oauthApi.checkStatus(oauthConfig)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('检查 OAuth 状态失败:', err)
       return null
     }
@@ -106,14 +111,13 @@ export function useOAuth() {
     state.value = {
       isAuthenticating: false,
       flowId: null,
-      error: null,
+      cancelled: false,
       config: null,
     }
   }
 
   return {
     isAuthenticating,
-    error,
     config,
     startAuthorization,
     cancelAuthorization,

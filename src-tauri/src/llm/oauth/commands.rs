@@ -51,7 +51,7 @@ pub async fn refresh_oauth_token(
         .refresh_token(&mut oauth_config)
         .await
         .map_err(|e| e.to_string())?;
-    
+
     Ok(oauth_config)
 }
 
@@ -65,7 +65,7 @@ pub async fn check_oauth_status(
     if oauth_config.access_token.is_none() {
         return Ok("not_authorized".to_string());
     }
-    
+
     // 检查 token 是否需要刷新
     if manager.should_refresh_token(&oauth_config) {
         Ok("token_expired".to_string())

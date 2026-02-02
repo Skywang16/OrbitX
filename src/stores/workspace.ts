@@ -1,11 +1,11 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import workspaceService, { type SessionRecord, type WorkspaceRecord } from '@/api/workspace/service'
-import type { Message } from '@/types'
-import type { TabState } from '@/types/domain/storage'
 import { useTerminalStore } from '@/stores/Terminal'
 import { useSessionStore } from '@/stores/session'
 import { getWorkspacePathForTab } from '@/tabs/context'
+import type { Message } from '@/types'
+import type { TabState } from '@/types/domain/storage'
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
 
 /** 未分组工作区的特殊路径（与后端保持一致） */
 export const UNGROUPED_WORKSPACE_PATH = '__ungrouped__'
@@ -206,6 +206,17 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
     return messagesBySession.value[sessionId] || []
   }
 
+  // 清空当前会话（开始新对话时使用）
+  const clearCurrentSession = async () => {
+    const path = currentWorkspacePath.value
+    if (path) {
+      // 通知后端清空活跃会话
+      await workspaceService.clearActiveSession(path)
+    }
+    currentSession.value = null
+    messages.value = []
+  }
+
   return {
     currentWorkspacePath,
     currentWorkspace,
@@ -217,6 +228,7 @@ export const useWorkspaceStore = defineStore('workspace-store', () => {
     loadWorkspaceData,
     switchSession,
     createSession,
+    clearCurrentSession,
     fetchMessages,
     upsertMessage,
     appendBlock,

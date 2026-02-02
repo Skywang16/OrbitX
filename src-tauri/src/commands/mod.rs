@@ -51,6 +51,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::workspace::commands::workspace_get_active_session,
         crate::workspace::commands::workspace_create_session,
         crate::workspace::commands::workspace_set_active_session,
+        crate::workspace::commands::workspace_clear_active_session,
         crate::workspace::commands::workspace_get_project_rules,
         crate::workspace::commands::workspace_set_project_rules,
         crate::workspace::commands::workspace_list_rules_files,

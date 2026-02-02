@@ -28,20 +28,20 @@
 
   const selectOptions = computed<SelectOption[]>(() => {
     return props.sessions.map(session => ({
-      label: session.title || t('session.unnamed_session'),
+      label: session.title,
       value: session.id,
       description: `${session.messageCount} ${t('session.messages')} · ${formatSessionTime(session.updatedAt)}`,
     }))
   })
 
   const displayValue = computed(() => {
-    // 处于新建状态时显示特殊提示
-    if (props.currentSessionId === -1) {
-      return t('chat.new_session_placeholder')
+    // 没有当前会话时，显示 "New Session"
+    if (!props.currentSessionId) {
+      return t('chat.new_session')
     }
-    if (!props.currentSessionId) return t('chat.session_select')
+    // 有当前会话时，查找标题
     const session = props.sessions.find(s => s.id === props.currentSessionId)
-    return session?.title || t('session.unnamed_session')
+    return session?.title || t('chat.new_session')
   })
 
   import { formatSessionTime } from '@/utils/dateFormatter'

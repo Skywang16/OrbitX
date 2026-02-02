@@ -4,17 +4,17 @@
  * 使用 Pinia 管理快捷键配置的响应式状态和操作方法
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
 import { shortcutsApi } from '@/api'
 import type {
-  ShortcutsConfig,
-  ShortcutBinding,
-  Platform,
-  ShortcutValidationResult,
   ConflictDetectionResult,
+  Platform,
+  ShortcutBinding,
+  ShortcutsConfig,
   ShortcutStatistics,
+  ShortcutValidationResult,
 } from '@/types'
+import { defineStore } from 'pinia'
+import { computed, ref, watch } from 'vue'
 
 export const useShortcutStore = defineStore('shortcuts', () => {
   // 简化状态：扁平化结构

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref, watch } from 'vue'
-  import type { ComponentPublicInstance } from 'vue'
+  import { computed, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import dayjs from 'dayjs'
   import relativeTime from 'dayjs/plugin/relativeTime'
@@ -9,8 +8,6 @@
   import { useGitStore } from '@/stores/git'
 
   dayjs.extend(relativeTime)
-
-  const LANE_COLORS = ['#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#ef4444']
 
   interface Props {
     commits: CommitInfo[]
@@ -33,212 +30,6 @@
   const loadingCommits = ref<Set<string>>(new Set())
   const isLoadingMore = ref(false)
   const listRef = ref<HTMLElement | null>(null)
-  const commitRowRefs = new Map<string, HTMLElement>()
-  const commitRowCenterY = ref<Map<string, number>>(new Map())
-
-  interface GraphNode {
-    commit: CommitInfo
-    subject: string
-    relativeDate: string
-    x: number
-    index: number
-    color: string
-  }
-
-  interface GraphEdge {
-    key: string
-    fromHash: string
-    fromX: number
-    fromIndex: number
-    toHash: string
-    toX: number
-    toIndex: number
-    color: string
-  }
-
-  const graphData = computed(() => {
-    const commits = props.commits
-    if (commits.length === 0) return { nodes: [] as GraphNode[], edges: [] as GraphEdge[], maxX: 0 }
-
-    const hashToIndex = new Map<string, number>()
-    commits.forEach((c, i) => {
-      hashToIndex.set(c.hash, i)
-    })
-
-    const nodes: GraphNode[] = []
-    const edges: GraphEdge[] = []
-
-    // columns[x] = hash of commit this column is reserved for (null = free)
-    const columns: (string | null)[] = []
-    const columnColors: string[] = []
-    const getLaneColor = (lane: number) => LANE_COLORS[lane % LANE_COLORS.length]
-
-    for (let i = 0; i < commits.length; i++) {
-      const commit = commits[i]
-      const hash = commit.hash
-      const parents = commit.parents || []
-
-      // Find which column this commit should occupy
-      let myX = columns.indexOf(hash)
-
-      if (myX === -1) {
-        // No column reserved for us, find a free one
-        myX = columns.indexOf(null)
-        if (myX === -1) {
-          myX = columns.length
-          columns.push(null)
-          columnColors.push(getLaneColor(myX))
-        }
-      }
-
-      const myColor = columnColors[myX] || getLaneColor(myX)
-      if (!columnColors[myX]) columnColors[myX] = myColor
-
-      // Clear this column (we've arrived)
-      columns[myX] = null
-
-      nodes.push({
-        commit,
-        subject: commit.message.split('\n')[0] || '',
-        relativeDate: dayjs(commit.date).isValid() ? dayjs(commit.date).fromNow() : commit.date,
-        x: myX,
-        index: i,
-        color: myColor,
-      })
-
-      // Process parents
-      for (let p = 0; p < parents.length; p++) {
-        const parentHash = parents[p]
-        const parentIndex = hashToIndex.get(parentHash)
-        if (parentIndex === undefined) {
-          continue
-        }
-
-        // Check if parent already has a reserved column
-        let parentX = columns.indexOf(parentHash)
-
-        if (parentX === -1) {
-          // Parent doesn't have a column yet
-          if (p === 0) {
-            // First parent: stays in same column (main line continues)
-            parentX = myX
-            columns[myX] = parentHash
-          } else {
-            // Additional parent (merge): needs a new column
-            parentX = columns.indexOf(null)
-            if (parentX === -1) {
-              parentX = columns.length
-              columns.push(null)
-              columnColors.push(getLaneColor(parentX))
-            }
-            columns[parentX] = parentHash
-          }
-        }
-
-        edges.push({
-          key: `${hash}->${parentHash}`,
-          fromHash: hash,
-          fromX: myX,
-          fromIndex: i,
-          toHash: parentHash,
-          toX: parentX,
-          toIndex: parentIndex,
-          color: columnColors[parentX],
-        })
-      }
-    }
-
-    const maxX = Math.max(
-      nodes.reduce((max, n) => Math.max(max, n.x), 0),
-      edges.reduce((max, e) => Math.max(max, e.fromX, e.toX), 0)
-    )
-    return { nodes, edges, maxX }
-  })
-
-  const graphNodes = computed(() => graphData.value.nodes)
-
-  const graphWidth = computed(() => {
-    if (graphNodes.value.length === 0) return 24
-    return Math.max((graphData.value.maxX + 1) * 16 + 8, 24)
-  })
-
-  const LANE_WIDTH = 16
-  const ROW_HEIGHT = 28
-
-  const svgHeight = computed(() => {
-    let maxY = graphNodes.value.length * ROW_HEIGHT
-    for (const node of graphNodes.value) {
-      const y = getNodeY(node.commit.hash, node.index)
-      maxY = Math.max(maxY, y + ROW_HEIGHT / 2)
-    }
-    return maxY
-  })
-
-  // Get Y position for a node - always use fixed calculation
-  const getNodeY = (hash: string, index: number): number => {
-    return commitRowCenterY.value.get(hash) ?? index * ROW_HEIGHT + ROW_HEIGHT / 2
-  }
-
-  // Generate SVG path for an edge
-  const getEdgePath = (edge: GraphEdge) => {
-    const x1 = edge.fromX * LANE_WIDTH + LANE_WIDTH / 2
-    const y1 = getNodeY(edge.fromHash, edge.fromIndex)
-    const x2 = edge.toX * LANE_WIDTH + LANE_WIDTH / 2
-    const y2 = getNodeY(edge.toHash, edge.toIndex)
-
-    if (edge.fromX === edge.toX) {
-      return `M ${x1} ${y1} L ${x2} ${y2}`
-    } else {
-      const controlY = y1 + Math.abs(y2 - y1) * 0.3
-      return `M ${x1} ${y1} C ${x1} ${controlY}, ${x2} ${controlY}, ${x2} ${y2}`
-    }
-  }
-
-  const setCommitRowRef = (hash: string, el: HTMLElement | null) => {
-    if (!el) {
-      commitRowRefs.delete(hash)
-      return
-    }
-
-    commitRowRefs.set(hash, el)
-  }
-
-  const updateCommitRowCenters = () => {
-    const next = new Map<string, number>()
-    for (const [hash, rowEl] of commitRowRefs) {
-      const infoEl = rowEl.querySelector<HTMLElement>('.commit-info')
-      const infoHeight = infoEl?.offsetHeight ?? ROW_HEIGHT
-      next.set(hash, rowEl.offsetTop + infoHeight / 2)
-    }
-    commitRowCenterY.value = next
-  }
-
-  onMounted(() => {
-    void nextTick(() => {
-      updateCommitRowCenters()
-    })
-  })
-
-  watch(
-    () => props.commits.length,
-    async () => {
-      await nextTick()
-      updateCommitRowCenters()
-    }
-  )
-
-  watch(
-    () => expandedCommits.value,
-    async () => {
-      await nextTick()
-      updateCommitRowCenters()
-    }
-  )
-
-  watch(commitFiles, async () => {
-    await nextTick()
-    updateCommitRowCenters()
-  })
 
   const hasMoreVisible = computed(() => props.hasMore ?? true)
   const canLoadMore = computed(() => hasMoreVisible.value && !isLoadingMore.value)
@@ -246,501 +37,516 @@
   const shouldAutoLoad = () => {
     const el = listRef.value
     if (!el) return false
-    const threshold = 100
-    return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100
   }
 
-  const isUnpushed = (index: number) => {
-    const ahead = props.aheadCount ?? 0
-    return index < ahead
-  }
+  const isUnpushed = (index: number) => index < (props.aheadCount ?? 0)
 
-  const getRefClass = (ref: CommitRef) => {
-    switch (ref.refType) {
-      case 'head':
-        return 'ref--head'
-      case 'localBranch':
-        return 'ref--local'
-      case 'remoteBranch':
-        return 'ref--remote'
-      case 'tag':
-        return 'ref--tag'
-      default:
-        return ''
-    }
+  const getSubject = (message: string) => message.split('\n')[0] || ''
+  const getRelativeDate = (date: string) => (dayjs(date).isValid() ? dayjs(date).fromNow() : date)
+  const getShortHash = (hash: string) => hash.slice(0, 7)
+
+  const getRefType = (ref: CommitRef) => {
+    const map: Record<string, string> = { head: 'head', localBranch: 'branch', remoteBranch: 'remote', tag: 'tag' }
+    return map[ref.refType] || 'branch'
   }
 
   const toggleCommit = async (hash: string) => {
     if (expandedCommits.value.has(hash)) {
       expandedCommits.value.delete(hash)
       expandedCommits.value = new Set(expandedCommits.value)
-    } else {
-      expandedCommits.value.add(hash)
-      expandedCommits.value = new Set(expandedCommits.value)
+      return
+    }
 
-      if (!commitFiles.value.has(hash) && !loadingCommits.value.has(hash)) {
-        loadingCommits.value.add(hash)
-        loadingCommits.value = new Set(loadingCommits.value)
+    expandedCommits.value.add(hash)
+    expandedCommits.value = new Set(expandedCommits.value)
 
-        const rootPath = gitStore.repositoryRoot || gitStore.currentPath
-        if (rootPath) {
-          await gitApi
-            .getCommitFiles(rootPath, hash)
-            .then(files => {
-              commitFiles.value.set(hash, files)
-              commitFiles.value = new Map(commitFiles.value)
-            })
-            .finally(() => {
-              loadingCommits.value.delete(hash)
-              loadingCommits.value = new Set(loadingCommits.value)
-            })
-          return
-        }
+    if (!commitFiles.value.has(hash) && !loadingCommits.value.has(hash)) {
+      loadingCommits.value.add(hash)
+      loadingCommits.value = new Set(loadingCommits.value)
 
+      const rootPath = gitStore.repositoryRoot || gitStore.currentPath
+      if (rootPath) {
+        await gitApi
+          .getCommitFiles(rootPath, hash)
+          .then(files => {
+            commitFiles.value.set(hash, files)
+            commitFiles.value = new Map(commitFiles.value)
+          })
+          .finally(() => {
+            loadingCommits.value.delete(hash)
+            loadingCommits.value = new Set(loadingCommits.value)
+          })
+      } else {
         loadingCommits.value.delete(hash)
         loadingCommits.value = new Set(loadingCommits.value)
       }
     }
   }
 
-  const getStatusClass = (status: string) => {
-    switch (status) {
-      case 'added':
-        return 'file--added'
-      case 'modified':
-        return 'file--modified'
-      case 'typeChanged':
-        return 'file--type-changed'
-      case 'deleted':
-        return 'file--deleted'
-      case 'renamed':
-        return 'file--renamed'
-      case 'unknown':
-        return 'file--unknown'
-      default:
-        return ''
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { label: string; type: string }> = {
+      added: { label: 'A', type: 'added' },
+      modified: { label: 'M', type: 'modified' },
+      deleted: { label: 'D', type: 'deleted' },
+      renamed: { label: 'R', type: 'renamed' },
+      copied: { label: 'C', type: 'copied' },
     }
+    return map[status] || { label: '?', type: 'unknown' }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'added':
-        return 'A'
-      case 'modified':
-        return 'M'
-      case 'typeChanged':
-        return 'T'
-      case 'deleted':
-        return 'D'
-      case 'renamed':
-        return 'R'
-      case 'copied':
-        return 'C'
-      case 'unknown':
-        return '?'
-      default:
-        return '?'
-    }
-  }
-
-  const getFileName = (path: string) => {
-    const parts = path.split('/')
-    return parts[parts.length - 1]
-  }
-
+  const getFileName = (path: string) => path.split('/').pop() || path
   const getFilePath = (path: string) => {
     const parts = path.split('/')
-    if (parts.length > 1) {
-      return parts.slice(0, -1).join('/') + '/'
-    }
-    return ''
+    return parts.length > 1 ? parts.slice(0, -1).join('/') + '/' : ''
   }
 
   const loadMore = async () => {
     if (!canLoadMore.value || !shouldAutoLoad()) return
-
-    // Avoid runaway: at most N pages per scroll burst.
-    const maxPages = 3
-    for (let i = 0; i < maxPages; i++) {
+    for (let i = 0; i < 3; i++) {
       if (!canLoadMore.value || !shouldAutoLoad()) break
       isLoadingMore.value = true
       await emit('loadMore')
       isLoadingMore.value = false
-      await nextTick()
-      updateCommitRowCenters()
     }
   }
 
-  const handleScroll = () => {
-    void loadMore()
-  }
+  const handleScroll = () => void loadMore()
 </script>
 
 <template>
-  <div class="history">
-    <div class="section__header">
-      <span class="section__title">{{ t('git.commits') }}</span>
-      <span v-if="graphNodes.length > 0" class="section__count">{{ graphNodes.length }}</span>
+  <div class="commit-history">
+    <div class="history-header">
+      <span class="history-header__title">{{ t('git.commits') }}</span>
+      <span v-if="commits.length > 0" class="history-header__count">{{ commits.length }}</span>
     </div>
 
-    <div v-if="graphNodes.length === 0" class="history__empty">
-      {{ t('git.no_commits') }}
-    </div>
-
-    <div v-else ref="listRef" class="history__list" @scroll="handleScroll">
-      <!-- SVG Graph Layer -->
-      <svg class="graph-svg" :width="graphWidth" :height="svgHeight">
-        <!-- Draw all edges first -->
-        <path
-          v-for="edge in graphData.edges"
-          :key="edge.key"
-          :d="getEdgePath(edge)"
-          :stroke="edge.color"
-          stroke-width="2"
-          fill="none"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <!-- Draw all nodes on top -->
-        <g v-for="node in graphNodes" :key="`node-${node.commit.hash}`">
-          <circle
-            :cx="node.x * LANE_WIDTH + LANE_WIDTH / 2"
-            :cy="getNodeY(node.commit.hash, node.index)"
-            r="5"
-            fill="var(--bg-50)"
-          />
-          <circle
-            :cx="node.x * LANE_WIDTH + LANE_WIDTH / 2"
-            :cy="getNodeY(node.commit.hash, node.index)"
-            r="4"
-            :fill="node.color"
-          />
-        </g>
+    <div v-if="commits.length === 0" class="history-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 3v6m0 6v6" />
       </svg>
+      <span>{{ t('git.no_commits') }}</span>
+    </div>
 
-      <!-- Commit rows -->
+    <div v-else ref="listRef" class="history-list" @scroll="handleScroll">
       <div
-        v-for="node in graphNodes"
-        :key="node.commit.hash"
-        :ref="
-          (el: Element | ComponentPublicInstance | null) => setCommitRowRef(node.commit.hash, el as HTMLElement | null)
-        "
-        class="commit-row"
-        :class="{ unpushed: isUnpushed(node.index) }"
-        :style="{ paddingLeft: `${graphWidth}px` }"
+        v-for="(commit, index) in commits"
+        :key="commit.hash"
+        class="commit-card"
+        :class="{
+          'commit-card--unpushed': isUnpushed(index),
+          'commit-card--expanded': expandedCommits.has(commit.hash),
+        }"
       >
-        <div class="commit-info" @click="toggleCommit(node.commit.hash)">
-          <svg
-            class="commit__chevron"
-            :class="{ expanded: expandedCommits.has(node.commit.hash) }"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-          <span class="commit__msg">{{ node.subject }}</span>
-          <span v-for="ref in node.commit.refs" :key="ref.name" class="ref" :class="getRefClass(ref)">
-            {{ ref.name }}
-          </span>
-          <span class="commit__author">{{ node.commit.authorName }}</span>
-          <span class="commit__date">{{ node.relativeDate }}</span>
+        <div class="commit-card__main" @click="toggleCommit(commit.hash)">
+          <div class="commit-card__indicator">
+            <div class="commit-dot" :class="{ 'commit-dot--unpushed': isUnpushed(index) }" />
+          </div>
+
+          <div class="commit-card__content">
+            <div class="commit-card__message">{{ getSubject(commit.message) }}</div>
+            <div v-if="commit.refs && commit.refs.length > 0" class="commit-card__refs">
+              <span
+                v-for="ref in commit.refs"
+                :key="ref.name"
+                class="commit-ref"
+                :class="`commit-ref--${getRefType(ref)}`"
+              >
+                {{ ref.name }}
+              </span>
+            </div>
+            <div class="commit-card__meta">
+              <span class="commit-card__hash">{{ getShortHash(commit.hash) }}</span>
+              <span class="commit-card__sep">•</span>
+              <span class="commit-card__author">{{ commit.authorName }}</span>
+              <span class="commit-card__sep">•</span>
+              <span class="commit-card__time">{{ getRelativeDate(commit.date) }}</span>
+            </div>
+          </div>
+
+          <div class="commit-card__expand">
+            <svg
+              class="expand-icon"
+              :class="{ 'expand-icon--expanded': expandedCommits.has(commit.hash) }"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </div>
         </div>
 
-        <!-- Expanded files -->
-        <div v-if="expandedCommits.has(node.commit.hash)" class="commit__files">
-          <div v-if="loadingCommits.has(node.commit.hash)" class="commit__files-loading">{{ t('git.loading') }}...</div>
-          <template v-else-if="commitFiles.get(node.commit.hash)?.length">
+        <div v-if="expandedCommits.has(commit.hash)" class="commit-card__files">
+          <div v-if="loadingCommits.has(commit.hash)" class="files-loading">
+            <div class="loading-spinner" />
+            <span>{{ t('git.loading') }}</span>
+          </div>
+          <template v-else-if="commitFiles.get(commit.hash)?.length">
             <div
-              v-for="file in commitFiles.get(node.commit.hash)"
+              v-for="file in commitFiles.get(commit.hash)"
               :key="file.path"
-              class="file-item"
-              @click.stop="emit('showDiff', node.commit.hash, file.path)"
+              class="file-row"
+              @click.stop="emit('showDiff', commit.hash, file.path)"
             >
-              <span class="file-status" :class="getStatusClass(file.status)">
-                {{ getStatusIcon(file.status) }}
+              <span class="file-badge" :class="`file-badge--${getStatusBadge(file.status).type}`">
+                {{ getStatusBadge(file.status).label }}
               </span>
-              <span class="file-path">{{ getFilePath(file.path) }}</span>
-              <span class="file-name">{{ getFileName(file.path) }}</span>
-              <span v-if="file.isBinary" class="file-stats">
-                <span class="file-binary">binary</span>
-              </span>
-              <span v-else-if="(file.additions ?? 0) > 0 || (file.deletions ?? 0) > 0" class="file-stats">
-                <span v-if="(file.additions ?? 0) > 0" class="additions">+{{ file.additions }}</span>
-                <span v-if="(file.deletions ?? 0) > 0" class="deletions">-{{ file.deletions }}</span>
+              <span class="file-row__path">{{ getFilePath(file.path) }}</span>
+              <span class="file-row__name">{{ getFileName(file.path) }}</span>
+              <span v-if="file.isBinary" class="file-row__binary">binary</span>
+              <span v-else-if="(file.additions ?? 0) > 0 || (file.deletions ?? 0) > 0" class="file-row__stats">
+                <span v-if="(file.additions ?? 0) > 0" class="stat-add">+{{ file.additions }}</span>
+                <span v-if="(file.deletions ?? 0) > 0" class="stat-del">-{{ file.deletions }}</span>
               </span>
             </div>
           </template>
-          <div v-else class="commit__files-empty">
-            {{ t('git.no_files') }}
-          </div>
+          <div v-else class="files-empty">{{ t('git.no_files') }}</div>
         </div>
       </div>
 
-      <div v-if="isLoadingMore" class="history__loading">{{ t('git.loading') }}...</div>
+      <div v-if="isLoadingMore" class="history-loading">
+        <div class="loading-spinner" />
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-  .history {
+  .commit-history {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
   }
 
-  .section__header {
+  .history-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-200);
-    flex-shrink: 0;
+    justify-content: space-between;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-100);
   }
 
-  .section__title {
-    flex: 1;
+  .history-header__title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-300);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
-  .section__count {
-    font-size: 10px;
+  .history-header__count {
+    font-size: 11px;
     font-weight: 500;
-    padding: 1px 6px;
+    color: var(--text-400);
+    background: var(--bg-200);
+    padding: 2px 8px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--color-primary) 25%, transparent);
-    color: var(--color-primary);
   }
 
-  .history__empty {
-    padding: 16px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-300);
-  }
-
-  .history__list {
+  .history-empty {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: auto;
-    position: relative;
-    user-select: none;
-  }
-
-  .graph-svg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-  }
-
-  .history__loading {
-    padding: 12px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-300);
-  }
-
-  .commit-row {
-    min-height: 28px;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: var(--text-500);
+    font-size: 13px;
   }
 
-  .commit-row.unpushed {
+  .history-empty svg {
+    width: 40px;
+    height: 40px;
+    opacity: 0.4;
+  }
+
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px;
+  }
+
+  .history-list::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .history-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .history-list::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 3px;
+  }
+
+  .commit-card {
+    margin-bottom: 2px;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .commit-card:hover {
+    background: var(--bg-300);
+  }
+
+  .commit-card--expanded {
+    background: var(--bg-300);
+    margin-bottom: 8px;
+  }
+
+  .commit-card--unpushed {
     background: color-mix(in srgb, var(--color-success) 8%, transparent);
   }
 
-  .commit-info {
-    min-height: 28px;
+  .commit-card--unpushed:hover {
+    background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  }
+
+  .commit-card__main {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 8px;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
     cursor: pointer;
-    border-radius: 4px;
-    font-size: 12px;
   }
 
-  .commit-info:hover {
-    background: var(--color-hover);
-  }
-
-  .commit__chevron {
-    width: 12px;
-    height: 12px;
+  .commit-card__indicator {
     flex-shrink: 0;
-    color: var(--text-400);
-    transition: transform 0.15s ease;
+    padding-top: 4px;
   }
 
-  .commit__chevron.expanded {
-    transform: rotate(90deg);
+  .commit-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-500);
   }
 
-  .commit__msg {
-    color: var(--text-100);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .commit-dot--unpushed {
+    background: var(--color-success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 20%, transparent);
+  }
+
+  .commit-card__content {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
-  .ref {
-    display: inline-flex;
-    align-items: center;
-    font-size: 9px;
+  .commit-card__message {
+    font-size: 13px;
     font-weight: 500;
-    padding: 1px 5px;
-    border-radius: 3px;
-    white-space: nowrap;
-    flex-shrink: 0;
-    max-width: 100px;
+    color: var(--text-100);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  .ref--head {
-    background: color-mix(in srgb, var(--color-error) 25%, transparent);
+  .commit-card__refs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .commit-ref {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .commit-ref--head {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
     color: var(--color-error);
   }
 
-  .ref--local {
-    background: color-mix(in srgb, var(--color-success) 25%, transparent);
+  .commit-ref--branch {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
     color: var(--color-success);
   }
 
-  .ref--remote {
-    background: color-mix(in srgb, var(--color-info) 25%, transparent);
+  .commit-ref--remote {
+    background: color-mix(in srgb, var(--color-info) 15%, transparent);
     color: var(--color-info);
   }
 
-  .ref--tag {
-    background: color-mix(in srgb, var(--color-primary) 25%, transparent);
-    color: var(--color-primary);
+  .commit-ref--tag {
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
   }
 
-  .commit__author {
-    font-size: 11px;
-    color: var(--text-300);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 80px;
-    flex-shrink: 0;
-  }
-
-  .commit__date {
-    font-size: 11px;
-    color: var(--text-400);
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  .commit__files {
-    width: 100%;
-    margin-top: 2px;
-    margin-bottom: 4px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--bg-100) 30%, transparent);
-  }
-
-  .commit__files-loading,
-  .commit__files-empty {
-    font-size: 11px;
-    color: var(--text-400);
-    padding: 4px 0;
-  }
-
-  .file-item {
+  .commit-card__meta {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 6px;
-    border-radius: 4px;
-    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-500);
   }
 
-  .file-item:hover {
-    background: var(--color-hover);
-  }
-
-  .file-status {
-    font-size: 10px;
-    font-weight: 600;
-    width: 14px;
-    text-align: center;
-    flex-shrink: 0;
-  }
-
-  .file--added {
-    color: var(--color-success);
-  }
-
-  .file--modified {
-    color: var(--color-warning);
-  }
-
-  .file--type-changed {
-    color: var(--color-warning);
-  }
-
-  .file--deleted {
-    color: var(--color-error);
-  }
-
-  .file--renamed {
-    color: var(--color-info);
-  }
-
-  .file--unknown {
+  .commit-card__hash {
+    font-family: var(--font-family-mono);
     color: var(--text-400);
   }
 
-  .file-path {
-    font-size: 11px;
-    color: var(--text-400);
-    font-family: var(--font-mono);
+  .commit-card__sep {
+    opacity: 0.5;
   }
 
-  .file-name {
-    font-size: 11px;
-    color: var(--text-200);
-    font-family: var(--font-mono);
-    flex: 1;
+  .commit-card__author {
+    max-width: 100px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .file-stats {
-    display: flex;
-    gap: 4px;
-    font-size: 10px;
-    font-family: var(--font-mono);
+  .commit-card__expand {
     flex-shrink: 0;
+    padding-top: 2px;
   }
 
-  .additions {
+  .expand-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-500);
+    transition: transform 0.2s ease;
+  }
+
+  .expand-icon--expanded {
+    transform: rotate(180deg);
+  }
+
+  .commit-card__files {
+    padding: 0 12px 12px 32px;
+  }
+
+  .files-loading,
+  .files-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    font-size: 12px;
+    color: var(--text-500);
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .file-row:hover {
+    background: var(--bg-400);
+  }
+
+  .file-badge {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-family-mono);
+  }
+
+  .file-badge--added {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
     color: var(--color-success);
   }
 
-  .deletions {
+  .file-badge--modified {
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+  }
+
+  .file-badge--deleted {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
     color: var(--color-error);
   }
 
-  .file-binary {
-    color: var(--text-300);
+  .file-badge--renamed,
+  .file-badge--copied {
+    background: color-mix(in srgb, var(--color-info) 15%, transparent);
+    color: var(--color-info);
+  }
+
+  .file-badge--unknown {
+    background: var(--bg-300);
+    color: var(--text-400);
+  }
+
+  .file-row__path {
     font-size: 11px;
+    color: var(--text-500);
+    font-family: var(--font-family-mono);
+  }
+
+  .file-row__name {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-200);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-row__binary {
+    font-size: 10px;
+    color: var(--text-500);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+  }
+
+  .file-row__stats {
+    display: flex;
+    gap: 6px;
+    font-size: 11px;
+    font-family: var(--font-family-mono);
+  }
+
+  .stat-add {
+    color: var(--color-success);
+  }
+
+  .stat-del {
+    color: var(--color-error);
+  }
+
+  .history-loading {
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-200);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

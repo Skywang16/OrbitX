@@ -58,6 +58,9 @@ impl OAuthManager {
             .get(provider_type)
             .ok_or_else(|| OAuthError::InvalidProvider(provider_type.to_string()))?;
 
+        // 确保回调服务器已启动
+        OAuthCallbackServer::ensure_started(self.callback_server.clone()).await;
+
         // 生成 PKCE 和 state
         let pkce = generate_pkce()?;
         let state = generate_state()?;

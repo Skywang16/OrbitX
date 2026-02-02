@@ -1,12 +1,12 @@
 import { agentApi } from '@/api/agent'
 import type { TaskProgressPayload, TaskProgressStream } from '@/api/agent/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
+import { restoreAiSidebarState } from '@/persistence/session'
+import type { ImageAttachment } from '@/stores/imageLightbox'
+import { useSessionStore } from '@/stores/session'
 import { useToolConfirmationDialogStore } from '@/stores/toolConfirmationDialog'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { useSessionStore } from '@/stores/session'
-import type { ImageAttachment } from '@/stores/imageLightbox'
 import type { ChatMode, Conversation } from '@/types'
-import { restoreAiSidebarState } from '@/persistence/session'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
@@ -46,7 +46,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const sessions = computed<Conversation[]>(() =>
     workspaceStore.sessions.map(session => ({
       id: session.id,
-      title: session.title ?? '',
+      title: session.title!,
       workspacePath: session.workspacePath,
       messageCount: session.messageCount,
       createdAt: new Date(session.createdAt * 1000),
@@ -122,9 +122,12 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     extractContextUsage()
   }
 
-  const createSession = async (title?: string) => {
-    await workspaceStore.createSession(title)
-    extractContextUsage()
+  // 开始新对话：清空当前会话状态
+  // 发送消息时后端会自动创建新会话
+  const startNewChat = async () => {
+    // 清空当前会话和消息（包括通知后端）
+    await workspaceStore.clearCurrentSession()
+    contextUsage.value = null
   }
 
   const handleAgentEvent = (event: TaskProgressPayload) => {
@@ -386,7 +389,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     setChatMode,
     refreshSessions,
     switchSession,
-    createSession,
+    startNewChat,
     sendMessage,
     stopCurrentTask,
     clearError,

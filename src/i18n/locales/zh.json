@@ -68,9 +68,11 @@
     "close": "关闭"
   },
   "git": {
-    "title": "Git",
+    "title": "源代码管理",
     "no_repository": "当前目录不是 Git 仓库",
     "init_repository": "初始化仓库",
+    "init_hint": "初始化 Git 仓库以开始追踪变更",
+    "commit_message_placeholder": "输入提交信息...",
     "unknown_branch": "未知",
     "refresh": "刷新",
     "branches": "分支",
@@ -176,6 +178,7 @@
     "authorization": "账号授权",
     "authorized": "已授权",
     "not_authorized": "未授权",
+    "authorizing": "授权中...",
     "reauthorize": "重新授权",
     "start_authorization": "开始授权",
     "config_type": "配置类型",
@@ -405,11 +408,14 @@
     "no_workspace_skills": "未找到工作区技能"
   },
   "workspace": {
-    "title": "工作区",
+    "title": "文件浏览",
     "new_terminal": "新建终端",
+    "new_terminal_here": "在此打开终端",
     "empty": "暂无工作区",
+    "empty_folder": "此文件夹为空",
     "parent_directory": "上级目录",
-    "no_folders": "当前目录无子文件夹",
+    "no_folders": "未打开文件夹",
+    "open_folder_hint": "打开终端以浏览文件",
     "read_dir_error": "读取目录失败",
     "current_directory": "当前目录",
     "trim_session_failed": "裁剪会话历史失败"

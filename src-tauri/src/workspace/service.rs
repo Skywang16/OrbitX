@@ -122,7 +122,7 @@ impl WorkspaceService {
             "SELECT s.id, s.workspace_path, s.title, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'user') as message_count
              FROM sessions s
-             WHERE s.workspace_path = ?
+             WHERE s.workspace_path = ? AND s.title IS NOT NULL AND s.title != ''
              ORDER BY s.updated_at DESC, s.id DESC",
         )
         .bind(&normalized)
@@ -165,14 +165,59 @@ impl WorkspaceService {
     }
 
     pub async fn ensure_active_session(&self, workspace_path: &str) -> Result<SessionRecord> {
+        self.ensure_active_session_with_title(workspace_path, "")
+            .await
+    }
+
+    /// 确保有活跃会话，如果没有则创建一个带 title 的新会话
+    pub async fn ensure_active_session_with_title(
+        &self,
+        workspace_path: &str,
+        title: &str,
+    ) -> Result<SessionRecord> {
         if let Some(session) = self.get_active_session(workspace_path).await? {
+            // 如果已有活跃会话且有 title，直接返回
+            if session
+                .title
+                .as_ref()
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false)
+            {
+                return Ok(session);
+            }
+            // 如果活跃会话没有 title，更新它
+            if !title.trim().is_empty() {
+                self.update_session_title(session.id, title).await?;
+                return self
+                    .get_session(session.id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Session not found"));
+            }
             return Ok(session);
         }
 
-        let created = self.create_session(workspace_path, None).await?;
+        // 创建新会话
+        let title_opt = if title.trim().is_empty() {
+            None
+        } else {
+            Some(title)
+        };
+        let created = self.create_session(workspace_path, title_opt).await?;
         self.set_active_session(workspace_path, Some(created.id))
             .await?;
         Ok(created)
+    }
+
+    /// 更新会话标题
+    async fn update_session_title(&self, session_id: i64, title: &str) -> Result<()> {
+        let ts = Self::now_timestamp();
+        sqlx::query("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?")
+            .bind(title)
+            .bind(ts)
+            .bind(session_id)
+            .execute(self.pool())
+            .await?;
+        Ok(())
     }
 
     pub async fn trim_session_messages(
@@ -233,7 +278,7 @@ impl WorkspaceService {
         .execute(self.pool())
         .await?;
 
-        self.refresh_session_metadata(session_id).await?;
+        self.refresh_session_title(session_id).await?;
         Ok(())
     }
 
@@ -364,7 +409,8 @@ fn build_session(row: sqlx::sqlite::SqliteRow) -> SessionRecord {
 }
 
 impl WorkspaceService {
-    async fn refresh_session_metadata(&self, session_id: i64) -> Result<()> {
+    /// 刷新 session 的 title（使用最新用户消息的内容）
+    pub async fn refresh_session_title(&self, session_id: i64) -> Result<()> {
         let latest_user_blocks_json: Option<String> = sqlx::query_scalar(
             "SELECT blocks FROM messages
              WHERE session_id = ? AND role = 'user'

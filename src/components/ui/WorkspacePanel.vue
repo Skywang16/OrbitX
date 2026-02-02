@@ -28,6 +28,11 @@
   const sidebarPath = ref<string>('')
   const terminalCwd = computed(() => terminalStore.activeTerminal?.cwd || '~')
   const currentPath = computed(() => sidebarPath.value || terminalCwd.value)
+  const currentFolderName = computed(() => {
+    const path = currentPath.value
+    if (!path || path === '~') return ''
+    return path.split(getPathSeparator(path)).filter(Boolean).pop() || path
+  })
 
   const loading = ref(false)
   const errorMessage = ref('')
@@ -153,37 +158,15 @@
     }
   }
 
-  const buildTreeItems = (rootPath: string): TreeItem[] => {
-    const rootLabel = isRootPath(rootPath)
-      ? rootPath
-      : rootPath.split(getPathSeparator(rootPath)).filter(Boolean).pop() || rootPath
-    const items: TreeItem[] = [{ name: rootLabel, path: rootPath, kind: 'dir', depth: 0, isIgnored: false }]
-
-    const visit = (dirPath: string, depth: number, parentIgnored: boolean) => {
-      const children = childrenCache.value.get(dirPath) || []
-      for (const entry of children) {
-        const childPath = joinPath(dirPath, entry.name)
-        const kind: TreeItemKind = entry.isDirectory ? 'dir' : entry.isSymlink ? 'symlink' : 'file'
-        const isIgnored = parentIgnored || entry.isIgnored || false
-        items.push({ name: entry.name, path: childPath, kind, depth, isIgnored })
-        if (entry.isDirectory && expandedDirs.value.has(childPath)) {
-          visit(childPath, depth + 1, isIgnored)
-        }
-      }
-    }
-
-    if (expandedDirs.value.has(rootPath)) {
-      visit(rootPath, 1, false)
-    }
-
-    return items
-  }
-
-  const treeItems = computed(() => {
+  const rootChildren = computed(() => {
     const path = currentPath.value
     if (!path || path === '~') return []
-    return buildTreeItems(path)
+    return childrenCache.value.get(path) || []
   })
+
+  const getChildren = (path: string) => {
+    return childrenCache.value.get(path) || []
+  }
 
   const toggleDirectory = async (path: string) => {
     if (expandedDirs.value.has(path)) {
@@ -222,17 +205,9 @@
     await navigateToPath(path)
   }
 
-  const isTreeEmpty = computed(() => {
-    const path = currentPath.value
-    if (!path || path === '~') return true
-    if (!expandedDirs.value.has(path)) return false
-    const children = childrenCache.value.get(path)
-    return Array.isArray(children) && children.length === 0
-  })
-
-  const handleDragStart = (event: DragEvent, item: TreeItem) => {
+  const handleDragStart = (event: DragEvent, path: string) => {
     void event
-    layoutStore.setDragPath(item.path)
+    layoutStore.setDragPath(path)
   }
 
   const handleDragEnd = () => {
@@ -292,122 +267,155 @@
 
 <template>
   <div class="workspace-panel">
-    <div v-if="loading" class="workspace-panel__loading">
-      <div class="workspace-panel__spinner"></div>
+    <!-- Header -->
+    <div class="panel-header">
+      <!-- Current Folder Button -->
+      <button class="folder-btn" type="button" :title="currentPath">
+        <svg class="folder-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        <span class="folder-name">{{ currentFolderName || 'Explorer' }}</span>
+      </button>
+
+      <!-- Breadcrumb -->
+      <div v-if="breadcrumbs.length > 0" class="breadcrumb">
+        <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
+          <button class="breadcrumb-item" type="button" :title="crumb.path" @click="navigateToPath(crumb.path)">
+            {{ crumb.name }}
+          </button>
+          <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-sep">›</span>
+        </template>
+      </div>
     </div>
 
-    <div v-else-if="errorMessage" class="workspace-panel__error">
+    <!-- Loading State -->
+    <div v-if="loading" class="panel-loading">
+      <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="errorMessage" class="panel-error">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
       <span>{{ errorMessage }}</span>
     </div>
 
-    <div v-else-if="currentPath === '~'" class="workspace-panel__empty">
-      <svg class="workspace-panel__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <!-- Empty State -->
+    <div v-else-if="currentPath === '~'" class="panel-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
       </svg>
-      <span class="workspace-panel__empty-text">{{ t('workspace.no_folders') }}</span>
+      <span>{{ t('workspace.no_folders') }}</span>
     </div>
 
-    <template v-else>
-      <div class="workspace-panel__header">
-        <div class="workspace-panel__path">
-          <button
-            v-for="(crumb, index) in breadcrumbs"
-            :key="crumb.path"
-            class="workspace-panel__path-item"
-            type="button"
-            :title="crumb.path"
-            @click="navigateToPath(crumb.path)"
-          >
-            <span>{{ crumb.name }}</span>
-            <svg
-              v-if="index < breadcrumbs.length - 1"
-              class="workspace-panel__path-sep"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        </div>
+    <!-- File Tree -->
+    <div v-else class="file-tree">
+      <!-- Empty folder -->
+      <div v-if="rootChildren.length === 0" class="tree-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        <span>{{ t('workspace.empty_folder') }}</span>
       </div>
 
-      <div class="workspace-panel__tree">
-        <div
-          v-for="item in treeItems"
-          :key="item.path"
-          class="workspace-panel__item"
-          :class="{ 'workspace-panel__item--ignored': item.isIgnored }"
-          :draggable="true"
-          @dragstart="(e: DragEvent) => handleDragStart(e, item)"
-          @dragend="handleDragEnd"
-          @click="item.kind === 'dir' ? toggleDirectory(item.path) : undefined"
-          @dblclick="item.kind === 'dir' ? handleDirectoryDoubleClick(item.path) : undefined"
-        >
-          <span class="workspace-panel__item-indent" :style="{ width: `${item.depth * 14}px` }"></span>
-
-          <button
-            v-if="item.kind === 'dir'"
-            class="workspace-panel__item-caret"
-            type="button"
-            @click.stop="toggleDirectory(item.path)"
+      <!-- File list -->
+      <template v-else>
+        <template v-for="entry in rootChildren" :key="joinPath(currentPath, entry.name)">
+          <!-- Directory -->
+          <div
+            v-if="entry.isDirectory"
+            class="tree-item tree-item--dir"
+            :class="{ 'tree-item--dim': entry.isIgnored }"
+            :draggable="true"
+            @dragstart="e => handleDragStart(e, joinPath(currentPath, entry.name))"
+            @dragend="handleDragEnd"
+            @click="toggleDirectory(joinPath(currentPath, entry.name))"
+            @dblclick="handleDirectoryDoubleClick(joinPath(currentPath, entry.name))"
           >
             <svg
-              :class="{ 'workspace-panel__item-caret--open': expandedDirs.has(item.path) }"
+              class="tree-chevron"
+              :class="{ 'tree-chevron--open': expandedDirs.has(joinPath(currentPath, entry.name)) }"
               viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
+              fill="currentColor"
             >
-              <path d="M9 18l6-6-6-6" />
+              <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
             </svg>
-          </button>
-          <span v-else class="workspace-panel__item-caret-placeholder"></span>
+            <div class="tree-icon tree-icon--folder">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+            </div>
+            <span class="tree-name">{{ entry.name }}</span>
+            <button
+              class="tree-action"
+              type="button"
+              :title="t('workspace.new_terminal_here')"
+              @click.stop="handleDirectoryNewTerminal(joinPath(currentPath, entry.name))"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 17l6-6-6-6M12 19h8" />
+              </svg>
+            </button>
+          </div>
 
-          <svg
-            v-if="item.kind === 'dir'"
-            class="workspace-panel__item-icon workspace-panel__item-icon--folder"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+          <!-- Nested children -->
+          <template v-if="entry.isDirectory && expandedDirs.has(joinPath(currentPath, entry.name))">
+            <div
+              v-for="child in getChildren(joinPath(currentPath, entry.name))"
+              :key="joinPath(joinPath(currentPath, entry.name), child.name)"
+              class="tree-item"
+              :class="{
+                'tree-item--dir': child.isDirectory,
+                'tree-item--nested': true,
+                'tree-item--dim': child.isIgnored || entry.isIgnored,
+              }"
+              :draggable="true"
+              @dragstart="e => handleDragStart(e, joinPath(joinPath(currentPath, entry.name), child.name))"
+              @dragend="handleDragEnd"
+              @click="
+                child.isDirectory ? toggleDirectory(joinPath(joinPath(currentPath, entry.name), child.name)) : undefined
+              "
+            >
+              <svg v-if="child.isDirectory" class="tree-chevron" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+              </svg>
+              <span v-else class="tree-chevron-space"></span>
+              <div class="tree-icon" :class="child.isDirectory ? 'tree-icon--folder' : 'tree-icon--file'">
+                <svg v-if="child.isDirectory" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <path d="M14 2v6h6" />
+                </svg>
+              </div>
+              <span class="tree-name">{{ child.name }}</span>
+            </div>
+          </template>
+
+          <!-- File -->
+          <div
+            v-if="entry.isFile || entry.isSymlink"
+            class="tree-item"
+            :class="{ 'tree-item--dim': entry.isIgnored }"
+            :draggable="true"
+            @dragstart="e => handleDragStart(e, joinPath(currentPath, entry.name))"
+            @dragend="handleDragEnd"
           >
-            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          <svg
-            v-else
-            class="workspace-panel__item-icon workspace-panel__item-icon--file"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-            <path d="M14 2v6h6" />
-          </svg>
-
-          <span class="workspace-panel__item-name" :title="item.path">{{ item.name }}</span>
-
-          <button
-            v-if="item.kind === 'dir'"
-            class="workspace-panel__item-action"
-            type="button"
-            title="New terminal here"
-            @click.stop="handleDirectoryNewTerminal(item.path)"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-          </button>
-        </div>
-
-        <div v-if="isTreeEmpty" class="workspace-panel__empty workspace-panel__empty--inline">
-          <span class="workspace-panel__empty-text">{{ t('workspace.no_folders') }}</span>
-        </div>
-      </div>
-    </template>
+            <span class="tree-chevron-space"></span>
+            <div class="tree-icon tree-icon--file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+            </div>
+            <span class="tree-name">{{ entry.name }}</span>
+          </div>
+        </template>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -416,250 +424,276 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-50);
+    background: var(--bg-200);
     overflow: hidden;
   }
 
   /* Header */
-  .workspace-panel__header {
+  .panel-header {
     flex-shrink: 0;
-    padding: 12px;
-    border-bottom: 1px solid var(--border-200);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--bg-50);
+    border-bottom: 1px solid var(--border-100);
+  }
+
+  /* Folder Button - matches Git's branch-btn */
+  .folder-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
     background: var(--bg-100);
+    border: 1px solid var(--border-100);
+    border-radius: 10px;
+    color: var(--text-100);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: default;
+    transition: all 0.15s ease;
   }
 
-  .workspace-panel__path {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 2px;
+  .folder-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--color-warning);
+    flex-shrink: 0;
   }
 
-  .workspace-panel__path-item {
+  .folder-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 2px 4px;
+    overflow-x: auto;
+  }
+
+  .breadcrumb::-webkit-scrollbar {
+    height: 0;
+  }
+
+  .breadcrumb-item {
+    flex-shrink: 0;
+    padding: 4px 8px;
     border: none;
     background: transparent;
     color: var(--text-400);
     font-size: 11px;
-    font-family: var(--font-mono, monospace);
+    font-weight: 500;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 6px;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
 
-  .workspace-panel__path-item:hover {
-    background: var(--bg-200);
+  .breadcrumb-item:hover {
+    background: var(--bg-100);
     color: var(--text-200);
   }
 
-  .workspace-panel__path-sep {
-    width: 12px;
-    height: 12px;
+  .breadcrumb-sep {
     color: var(--text-500);
+    font-size: 11px;
   }
 
-  /* Tree */
-  .workspace-panel__tree {
+  /* File Tree */
+  .file-tree {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 8px 0;
+    padding: 8px;
   }
 
-  .workspace-panel__tree::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .workspace-panel__tree::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .workspace-panel__tree::-webkit-scrollbar-thumb {
-    background: var(--border-300);
-    border-radius: 3px;
-  }
-
-  .workspace-panel__tree::-webkit-scrollbar-thumb:hover {
-    background: var(--border-400);
-  }
-
-  /* Tree Item */
-  .workspace-panel__item {
+  .tree-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 12px;
+    padding: 8px 10px;
+    border-radius: var(--border-radius-lg);
     cursor: pointer;
-    transition: background 0.15s ease;
-    color: var(--text-100);
-    min-width: 0;
+    transition: background 0.12s ease;
   }
 
-  .workspace-panel__item:hover {
+  .tree-item:hover {
     background: var(--color-hover);
   }
 
-  .workspace-panel__item--ignored {
+  .tree-item:hover .tree-action {
+    opacity: 1;
+  }
+
+  .tree-item--nested {
+    padding-left: 32px;
+  }
+
+  .tree-item--dim {
     opacity: 0.5;
   }
 
-  .workspace-panel__item-indent {
-    flex-shrink: 0;
-  }
-
-  .workspace-panel__item-caret {
-    flex-shrink: 0;
+  .tree-chevron {
     width: 16px;
     height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text-400);
-    cursor: pointer;
-    border-radius: 4px;
-  }
-
-  .workspace-panel__item-caret:hover {
-    background: var(--bg-200);
-    color: var(--text-200);
-  }
-
-  .workspace-panel__item-caret svg {
-    width: 14px;
-    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-500);
     transition: transform 0.15s ease;
   }
 
-  .workspace-panel__item-caret--open {
+  .tree-chevron--open {
     transform: rotate(90deg);
   }
 
-  .workspace-panel__item-caret-placeholder {
-    flex-shrink: 0;
+  .tree-chevron-space {
     width: 16px;
     height: 16px;
-  }
-
-  .workspace-panel__item-icon {
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
   }
 
-  .workspace-panel__item-icon--folder {
-    color: var(--accent-500);
-  }
-
-  .workspace-panel__item-icon--file {
-    color: var(--text-300);
-  }
-
-  .workspace-panel__item-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    font-family: var(--font-mono, monospace);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .workspace-panel__item-action {
+  .tree-icon {
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
-    width: 20px;
-    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .tree-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .tree-icon--folder {
+    color: var(--color-warning);
+  }
+
+  .tree-icon--file {
+    color: var(--text-400);
+  }
+
+  .tree-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-200);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tree-action {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     padding: 0;
     border: none;
-    background: transparent;
+    background: var(--bg-200);
     color: var(--text-400);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 6px;
     opacity: 0;
     transition: all 0.15s ease;
   }
 
-  .workspace-panel__item:hover .workspace-panel__item-action {
-    opacity: 1;
+  .tree-action:hover {
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    color: var(--color-primary);
   }
 
-  .workspace-panel__item-action:hover {
-    background: var(--bg-200);
-    color: var(--text-200);
-  }
-
-  .workspace-panel__item-action svg {
+  .tree-action svg {
     width: 14px;
     height: 14px;
   }
 
-  /* States */
-  .workspace-panel__loading {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-
-  .workspace-panel__spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--border-300);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: workspace-spin 0.8s linear infinite;
-  }
-
-  @keyframes workspace-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  .workspace-panel__error {
-    flex: 1;
+  .tree-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 24px;
-    font-size: 12px;
-    color: #ef4444;
+    padding: 40px 20px;
+    color: var(--text-500);
+    font-size: 13px;
   }
 
-  .workspace-panel__empty {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 24px;
-    color: var(--text-400);
-  }
-
-  .workspace-panel__empty--inline {
-    padding: 16px;
-  }
-
-  .workspace-panel__empty-icon {
-    width: 48px;
-    height: 48px;
+  .tree-empty svg {
+    width: 40px;
+    height: 40px;
     opacity: 0.4;
   }
 
-  .workspace-panel__empty-text {
+  /* States */
+  .panel-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+
+  .panel-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+    border-radius: var(--border-radius-lg);
+  }
+
+  .panel-error svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .panel-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: var(--text-500);
     font-size: 13px;
+  }
+
+  .panel-empty svg {
+    width: 40px;
+    height: 40px;
+    opacity: 0.4;
+  }
+
+  .loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-200);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

@@ -68,9 +68,11 @@
     "close": "Close"
   },
   "git": {
-    "title": "Git",
+    "title": "Source Control",
     "no_repository": "Not a Git repository",
     "init_repository": "Initialize Repository",
+    "init_hint": "Initialize a Git repository to start tracking changes",
+    "commit_message_placeholder": "Enter commit message...",
     "unknown_branch": "Unknown",
     "refresh": "Refresh",
     "branches": "Branches",
@@ -176,6 +178,7 @@
     "authorization": "Authorization",
     "authorized": "Authorized",
     "not_authorized": "Not authorized",
+    "authorizing": "Authorizing...",
     "reauthorize": "Reauthorize",
     "start_authorization": "Authorize",
     "config_type": "Configuration Type",
@@ -405,11 +408,14 @@
     "no_workspace_skills": "No workspace skills found"
   },
   "workspace": {
-    "title": "Workspace",
+    "title": "Explorer",
     "new_terminal": "New Terminal",
+    "new_terminal_here": "Open terminal here",
     "empty": "No workspace",
+    "empty_folder": "This folder is empty",
     "parent_directory": "Parent Directory",
-    "no_folders": "No folders in current directory",
+    "no_folders": "No folder open",
+    "open_folder_hint": "Open a terminal to browse files",
     "read_dir_error": "Failed to read directory",
     "current_directory": "Current Directory",
     "trim_session_failed": "Failed to trim session history"

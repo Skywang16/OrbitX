@@ -13,7 +13,7 @@
 
   const isDragging = ref(false)
   const isHovering = ref(false)
-  const changesHeight = ref(200)
+  const changesHeight = ref(240)
   const isDraggingDivider = ref(false)
 
   const panelStyle = computed(() => ({
@@ -58,7 +58,7 @@
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault()
       const deltaY = e.clientY - startY
-      const newHeight = Math.max(100, Math.min(startHeight + deltaY, 500))
+      const newHeight = Math.max(120, Math.min(startHeight + deltaY, 500))
       changesHeight.value = newHeight
     }
 
@@ -82,7 +82,7 @@
   }
 
   const onDoubleClick = () => {
-    gitStore.setPanelWidth(320)
+    gitStore.setPanelWidth(360)
   }
 
   const loadMoreCommits = async () => {
@@ -117,6 +117,7 @@
     />
 
     <div class="git-panel__content">
+      <!-- Git Header -->
       <GitHeader
         :branch="gitStore.currentBranch"
         :ahead="gitStore.status?.ahead"
@@ -131,10 +132,15 @@
         @checkout="gitStore.checkoutBranch"
       />
 
-      <div v-if="gitStore.error" class="git-panel__error">
-        {{ gitStore.error }}
+      <!-- Error -->
+      <div v-if="gitStore.error" class="git-error">
+        <svg class="git-error__icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        </svg>
+        <span>{{ gitStore.error }}</span>
       </div>
 
+      <!-- Repository Content -->
       <template v-if="gitStore.isRepository">
         <div class="git-panel__changes" :style="{ height: `${changesHeight}px` }">
           <FileChanges
@@ -154,9 +160,11 @@
 
         <div
           class="git-panel__divider"
-          :class="{ 'git-panel__divider--dragging': isDraggingDivider }"
+          :class="{ 'git-panel__divider--active': isDraggingDivider }"
           @mousedown.stop.prevent="startDividerDrag"
-        />
+        >
+          <div class="divider-handle" />
+        </div>
 
         <div class="git-panel__history">
           <CommitHistory
@@ -169,18 +177,24 @@
         </div>
       </template>
 
-      <div v-else class="git-panel__empty">
-        <svg class="git-panel__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M6 3v12" />
-          <path d="M6 7h7a3 3 0 0 1 3 3v11" />
-          <circle cx="6" cy="5" r="2" />
-          <circle cx="6" cy="15" r="2" />
-          <circle cx="16" cy="21" r="2" />
-        </svg>
-        <span class="git-panel__empty-text">{{ t('git.no_repository') }}</span>
-        <button class="git-panel__init-btn" @click="gitStore.initRepository">
+      <!-- Empty State -->
+      <div v-else class="git-empty">
+        <div class="git-empty__visual">
+          <svg class="git-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M6 3v12M6 7h7a3 3 0 0 1 3 3v11" />
+            <circle cx="6" cy="5" r="2" />
+            <circle cx="6" cy="15" r="2" />
+            <circle cx="16" cy="21" r="2" />
+          </svg>
+        </div>
+        <div class="git-empty__text">
+          <h3>{{ t('git.no_repository') }}</h3>
+          <p>Initialize a Git repository to start tracking changes</p>
+        </div>
+        <button class="git-empty__btn" @click="gitStore.initRepository">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" />
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           {{ t('git.init_repository') }}
         </button>
@@ -193,11 +207,11 @@
   .git-panel {
     width: var(--panel-width);
     height: 100%;
-    background: var(--bg-50);
+    background: var(--bg-200);
     border-right: 1px solid var(--border-200);
     display: flex;
     flex-direction: column;
-    min-width: 260px;
+    min-width: 300px;
     max-width: 50vw;
     position: relative;
   }
@@ -210,26 +224,60 @@
     overflow: hidden;
   }
 
+  /* Changes */
   .git-panel__changes {
     flex-shrink: 0;
-    min-height: 100px;
+    min-height: 120px;
     max-height: 500px;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
+  .git-panel__changes::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .git-panel__changes::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .git-panel__changes::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 3px;
+  }
+
+  /* Divider */
   .git-panel__divider {
     flex-shrink: 0;
-    height: 4px;
-    background: var(--border-200);
+    height: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: ns-resize;
+    background: transparent;
+    transition: background 0.15s ease;
   }
 
   .git-panel__divider:hover,
-  .git-panel__divider--dragging {
+  .git-panel__divider--active {
+    background: var(--bg-300);
+  }
+
+  .divider-handle {
+    width: 32px;
+    height: 3px;
+    background: var(--border-300);
+    border-radius: 2px;
+    transition: all 0.15s ease;
+  }
+
+  .git-panel__divider:hover .divider-handle,
+  .git-panel__divider--active .divider-handle {
+    width: 48px;
     background: var(--color-primary);
   }
 
+  /* History */
   .git-panel__history {
     flex: 1;
     min-height: 0;
@@ -238,58 +286,96 @@
     flex-direction: column;
   }
 
-  .git-panel__error {
-    padding: 8px 12px;
+  /* Error */
+  .git-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin: 8px;
     font-size: 12px;
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
-    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+    border-radius: 10px;
   }
 
-  .git-panel__empty {
+  .git-error__icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Empty */
+  .git-empty {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    padding: 24px;
-    color: var(--text-300);
-  }
-
-  .git-panel__empty-icon {
-    width: 48px;
-    height: 48px;
-    opacity: 0.4;
-  }
-
-  .git-panel__empty-text {
-    font-size: 13px;
+    gap: 20px;
+    padding: 40px 24px;
     text-align: center;
-    color: var(--text-400);
   }
 
-  .git-panel__init-btn {
+  .git-empty__visual {
+    width: 80px;
+    height: 80px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    background: var(--bg-100);
+    border-radius: 20px;
+  }
+
+  .git-empty__icon {
+    width: 40px;
+    height: 40px;
+    color: var(--text-500);
+  }
+
+  .git-empty__text {
+    display: flex;
+    flex-direction: column;
     gap: 6px;
-    padding: 8px 16px;
+  }
+
+  .git-empty__text h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-200);
+    margin: 0;
+  }
+
+  .git-empty__text p {
+    font-size: 13px;
+    color: var(--text-500);
+    margin: 0;
+    max-width: 200px;
+  }
+
+  .git-empty__btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
     font-size: 13px;
     font-weight: 500;
-    color: var(--text-100);
+    color: white;
     background: var(--color-primary);
     border: none;
-    border-radius: var(--border-radius-md);
+    border-radius: 10px;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
-  .git-panel__init-btn:hover {
+  .git-empty__btn:hover {
     background: var(--color-primary-hover);
+    transform: translateY(-1px);
   }
 
-  .git-panel__init-btn svg {
-    width: 14px;
-    height: 14px;
+  .git-empty__btn svg {
+    width: 16px;
+    height: 16px;
   }
 </style>

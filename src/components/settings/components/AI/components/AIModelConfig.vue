@@ -8,8 +8,8 @@
   import { useI18n } from 'vue-i18n'
   import { useAISettingsStore } from '../store'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
+  import { useOAuth } from '@/composables/useOAuth'
   import SettingsCard from '../../../SettingsCard.vue'
-  import OAuthAuthorizationDialog from '../../../OAuthAuthorizationDialog.vue'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
@@ -22,8 +22,9 @@
   const isTesting = ref(false)
   const isSaving = ref(false)
   const showAdvancedOptions = ref(false)
-  const showOAuthDialog = ref(false)
   const showAddForm = ref(false)
+
+  const { isAuthenticating, startAuthorization: startOAuth, cancelAuthorization: cancelOAuth } = useOAuth()
 
   const formData = reactive({
     authType: 'apikey' as 'apikey' | 'oauth',
@@ -36,7 +37,6 @@
     oauthConfig: undefined as OAuthConfig | undefined,
     options: { maxContextTokens: 128000, temperature: 0.5, timeout: 300000, maxTokens: -1 },
   })
-
 
   const availableModels = computed(() => {
     if (formData.authType === 'oauth') {
@@ -62,6 +62,10 @@
   })
 
   const resetForm = () => {
+    // 如果正在授权，取消授权流程
+    if (isAuthenticating.value) {
+      cancelOAuth()
+    }
     formData.authType = 'apikey'
     formData.provider = ''
     formData.apiUrl = ''
@@ -137,9 +141,12 @@
     formData.apiUrl = formData.useCustomBaseUrl ? '' : providerInfo.value?.defaultApiUrl || ''
   }
 
-  const handleOAuthSuccess = (config: OAuthConfig) => {
-    formData.oauthConfig = config
-    showOAuthDialog.value = false
+  const handleStartAuth = async () => {
+    const provider = (formData.oauthProvider as OAuthProvider) || OAuthProvider.OpenAiCodex
+    const config = await startOAuth(provider)
+    if (config) {
+      formData.oauthConfig = config
+    }
   }
 
   const testConnection = async () => {
@@ -421,7 +428,10 @@
               </div>
 
               <div class="oauth-status-row">
-                <div class="oauth-status" :class="{ authorized: formData.oauthConfig }">
+                <div
+                  class="oauth-status"
+                  :class="{ authorized: formData.oauthConfig, authenticating: isAuthenticating }"
+                >
                   <svg
                     v-if="formData.oauthConfig"
                     viewBox="0 0 24 24"
@@ -433,6 +443,7 @@
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                     <polyline points="22 4 12 14.01 9 11.01" />
                   </svg>
+                  <div v-else-if="isAuthenticating" class="status-spinner"></div>
                   <svg
                     v-else
                     viewBox="0 0 24 24"
@@ -445,13 +456,20 @@
                   </svg>
                   <span>
                     {{
-                      formData.oauthConfig
-                        ? t('ai_model.authorized') || 'Authorized'
-                        : t('ai_model.not_authorized') || 'Not authorized'
+                      isAuthenticating
+                        ? t('ai_model.authorizing') || 'Authorizing...'
+                        : formData.oauthConfig
+                          ? t('ai_model.authorized') || 'Authorized'
+                          : t('ai_model.not_authorized') || 'Not authorized'
                     }}
                   </span>
                 </div>
-                <button class="auth-btn" :class="{ secondary: formData.oauthConfig }" @click="showOAuthDialog = true">
+                <button
+                  class="auth-btn"
+                  :class="{ secondary: formData.oauthConfig }"
+                  :disabled="isAuthenticating"
+                  @click="handleStartAuth"
+                >
                   {{
                     formData.oauthConfig
                       ? t('ai_model.reauthorize') || 'Re-authorize'
@@ -485,14 +503,6 @@
         </SettingsCard>
       </div>
     </template>
-
-    <OAuthAuthorizationDialog
-      :visible="showOAuthDialog"
-      :initial-provider="(formData.oauthProvider as OAuthProvider) || OAuthProvider.OpenAiCodex"
-      @update:visible="showOAuthDialog = $event"
-      @success="handleOAuthSuccess"
-      @cancel="showOAuthDialog = false"
-    />
   </div>
 </template>
 
@@ -957,6 +967,25 @@
 
   .status-icon.success {
     color: var(--color-success, #22c55e);
+  }
+
+  .oauth-status.authenticating {
+    color: var(--text-300);
+  }
+
+  .status-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-300);
+    border-top-color: var(--text-200);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .auth-btn {

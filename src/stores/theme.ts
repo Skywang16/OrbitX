@@ -3,11 +3,11 @@
  * 使用 Pinia 实现集中化的主题状态管理
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed, readonly } from 'vue'
 import { themeAPI } from '@/api/config'
-import type { ThemeConfigStatus, Theme } from '@/types/domain/theme'
+import type { Theme, ThemeConfigStatus } from '@/types/domain/theme'
 import { applyThemeToUI } from '@/utils/themeApplier'
+import { defineStore } from 'pinia'
+import { computed, readonly, ref } from 'vue'
 
 enum ThemeOperationState {
   IDLE = 'idle',
@@ -194,10 +194,7 @@ export const useThemeStore = defineStore('theme', () => {
   const loadThemeConfigStatus = async (): Promise<void> => {
     try {
       operationState.value = ThemeOperationState.UPDATING_CONFIG
-      const [status, themes] = await Promise.all([
-        themeAPI.getThemeConfigStatus(),
-        themeAPI.getAvailableThemes(),
-      ])
+      const [status, themes] = await Promise.all([themeAPI.getThemeConfigStatus(), themeAPI.getAvailableThemes()])
       configStatus.value = status
       availableThemes.value = themes
     } catch (err) {

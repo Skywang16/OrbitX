@@ -25,21 +25,17 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  // 多选状态
   const selectedItems = ref<Set<string>>(new Set())
   const lastClickedKey = ref<string | null>(null)
 
   const hasStaged = computed(() => props.staged.length > 0)
   const hasUnstaged = computed(() => props.modified.length > 0 || props.untracked.length > 0)
   const hasConflicted = computed(() => props.conflicted.length > 0)
+  const totalChanges = computed(() => props.staged.length + props.modified.length + props.untracked.length)
 
-  // 生成唯一 key
   const getItemKey = (file: FileChange, staged: boolean) => `${staged ? 'staged' : 'unstaged'}:${file.path}`
-
-  // 获取所有 unstaged 文件列表（按渲染顺序）
   const unstagedFiles = computed(() => [...props.modified, ...props.untracked])
 
-  // 获取选中的文件
   const getSelectedFiles = (staged: boolean): FileChange[] => {
     const prefix = staged ? 'staged:' : 'unstaged:'
     const files: FileChange[] = []
@@ -56,13 +52,11 @@
   const hasSelectedStaged = computed(() => getSelectedFiles(true).length > 0)
   const hasSelectedUnstaged = computed(() => getSelectedFiles(false).length > 0)
 
-  // 点击选择逻辑
   const handleClick = (event: MouseEvent, file: FileChange, staged: boolean) => {
     const key = getItemKey(file, staged)
     const sourceFiles = staged ? props.staged : unstagedFiles.value
 
     if (event.metaKey || event.ctrlKey) {
-      // Ctrl/Cmd 点击：切换单个选择
       if (selectedItems.value.has(key)) {
         selectedItems.value.delete(key)
       } else {
@@ -70,11 +64,9 @@
       }
       lastClickedKey.value = key
     } else if (event.shiftKey && lastClickedKey.value) {
-      // Shift 点击：范围选择
       const lastPrefix = lastClickedKey.value.split(':')[0]
       const currentPrefix = staged ? 'staged' : 'unstaged'
 
-      // 只在同一区域内进行范围选择
       if (lastPrefix === currentPrefix) {
         const lastPath = lastClickedKey.value.substring(lastPrefix.length + 1)
         const lastIndex = sourceFiles.findIndex(f => f.path === lastPath)
@@ -90,7 +82,6 @@
         }
       }
     } else {
-      // 普通点击：清除选择，选中当前项，打开 diff
       selectedItems.value.clear()
       selectedItems.value.add(key)
       lastClickedKey.value = key
@@ -113,61 +104,22 @@
     return parts.slice(0, -1).join('/')
   }
 
-  const getBadgeLabel = (file: FileChange) => {
-    switch (file.status) {
-      case 'added':
-        return 'A'
-      case 'modified':
-        return 'M'
-      case 'typeChanged':
-        return 'T'
-      case 'deleted':
-        return 'D'
-      case 'renamed':
-        return 'R'
-      case 'copied':
-        return 'C'
-      case 'untracked':
-        return 'U'
-      case 'conflicted':
-        return '!'
-      case 'unknown':
-        return '?'
-      default:
-        return '?'
+  const getStatusBadge = (file: FileChange) => {
+    const map: Record<string, { label: string; type: string }> = {
+      added: { label: 'A', type: 'added' },
+      modified: { label: 'M', type: 'modified' },
+      typeChanged: { label: 'T', type: 'modified' },
+      deleted: { label: 'D', type: 'deleted' },
+      renamed: { label: 'R', type: 'renamed' },
+      copied: { label: 'C', type: 'copied' },
+      untracked: { label: 'U', type: 'untracked' },
+      conflicted: { label: '!', type: 'conflicted' },
     }
+    return map[file.status] || { label: '?', type: 'unknown' }
   }
 
-  const getBadgeClass = (file: FileChange) => {
-    switch (file.status) {
-      case 'added':
-        return 'badge--added'
-      case 'modified':
-        return 'badge--modified'
-      case 'typeChanged':
-        return 'badge--type-changed'
-      case 'deleted':
-        return 'badge--deleted'
-      case 'renamed':
-        return 'badge--renamed'
-      case 'copied':
-        return 'badge--copied'
-      case 'untracked':
-        return 'badge--untracked'
-      case 'conflicted':
-        return 'badge--conflicted'
-      case 'unknown':
-        return 'badge--unknown'
-      default:
-        return ''
-    }
-  }
+  const stopPropagation = (e: Event) => e.stopPropagation()
 
-  const stopPropagation = (e: Event) => {
-    e.stopPropagation()
-  }
-
-  // 批量操作
   const stageSelected = () => {
     const files = getSelectedFiles(false)
     if (files.length > 0) {
@@ -200,76 +152,81 @@
     }
   }
 
-  // 单文件操作
-  const stageFile = (file: FileChange) => {
-    emit('stage', [file])
-  }
-
-  const unstageFile = (file: FileChange) => {
-    emit('unstage', [file])
-  }
+  const stageFile = (file: FileChange) => emit('stage', [file])
+  const unstageFile = (file: FileChange) => emit('unstage', [file])
 
   const confirmDiscard = async (file: FileChange) => {
     const message = t('git.discard_confirm', { file: getFileName(file.path) })
     const confirmed = await confirm(message, { title: t('git.discard'), kind: 'warning' })
-    if (confirmed) {
-      emit('discard', [file])
-    }
+    if (confirmed) emit('discard', [file])
   }
 
   const confirmDiscardAll = async () => {
     const message = t('git.discard_all_confirm')
     const confirmed = await confirm(message, { title: t('git.discard_all'), kind: 'warning' })
-    if (confirmed) {
-      emit('discardAll')
-    }
+    if (confirmed) emit('discardAll')
   }
 </script>
 
 <template>
-  <div class="changes">
-    <!-- Conflicted Files -->
-    <details v-if="hasConflicted" class="section" open>
-      <summary class="section__header section__header--conflicted">
-        <span class="section__caret">▸</span>
-        <span class="section__title">{{ t('git.merge_conflicts') }}</span>
-        <span class="section__count">{{ conflicted.length }}</span>
-      </summary>
-      <div class="section__content">
+  <div class="file-changes">
+    <!-- Conflicted Section -->
+    <div v-if="hasConflicted" class="change-section change-section--conflict">
+      <div class="section-header">
+        <div class="section-header__left">
+          <svg class="section-icon section-icon--conflict" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 22h20L12 2zm0 4l7.53 14H4.47L12 6zm-1 6v4h2v-4h-2zm0 6v2h2v-2h-2z" />
+          </svg>
+          <span class="section-title">{{ t('git.merge_conflicts') }}</span>
+        </div>
+        <span class="section-badge section-badge--conflict">{{ conflicted.length }}</span>
+      </div>
+      <div class="file-list">
         <div
           v-for="file in conflicted"
-          :key="`conflicted:${file.path}`"
-          class="file-item file-item--conflicted"
+          :key="`conflict:${file.path}`"
+          class="file-item file-item--conflict"
           :class="{ 'file-item--selected': isSelected(file, false) }"
           @click="handleClick($event, file, false)"
         >
-          <span class="file-badge badge--conflicted">!</span>
-          <span class="file-name">{{ getFileName(file.path) }}</span>
-          <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          <span class="file-badge file-badge--conflicted">!</span>
+          <div class="file-info">
+            <span class="file-name">{{ getFileName(file.path) }}</span>
+            <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          </div>
         </div>
       </div>
-    </details>
+    </div>
 
-    <!-- Staged Changes -->
-    <details v-if="hasStaged" class="section" open>
-      <summary class="section__header">
-        <span class="section__caret">▸</span>
-        <span class="section__title">{{ t('git.staged_changes') }}</span>
-        <span class="section__count">{{ staged.length }}</span>
-        <div class="section__actions" @click="stopPropagation">
-          <button v-if="hasSelectedStaged" class="icon-btn" :title="t('git.unstage_selected')" @click="unstageSelected">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-          <button v-else class="icon-btn" :title="t('git.unstage_all')" @click="emit('unstageAll')">
+    <!-- Staged Section -->
+    <div v-if="hasStaged" class="change-section">
+      <div class="section-header">
+        <div class="section-header__left">
+          <svg
+            class="section-icon section-icon--staged"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span class="section-title">{{ t('git.staged_changes') }}</span>
+        </div>
+        <span class="section-badge section-badge--staged">{{ staged.length }}</span>
+        <div class="section-actions" @click="stopPropagation">
+          <button
+            class="action-btn action-btn--unstage"
+            :title="hasSelectedStaged ? t('git.unstage_selected') : t('git.unstage_all')"
+            @click="hasSelectedStaged ? unstageSelected() : emit('unstageAll')"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
         </div>
-      </summary>
-      <div class="section__content">
+      </div>
+      <div class="file-list">
         <div
           v-for="file in staged"
           :key="`staged:${file.path}`"
@@ -277,11 +234,15 @@
           :class="{ 'file-item--selected': isSelected(file, true) }"
           @click="handleClick($event, file, true)"
         >
-          <span class="file-badge" :class="getBadgeClass(file)">{{ getBadgeLabel(file) }}</span>
-          <span class="file-name">{{ getFileName(file.path) }}</span>
-          <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          <span class="file-badge" :class="`file-badge--${getStatusBadge(file).type}`">
+            {{ getStatusBadge(file).label }}
+          </span>
+          <div class="file-info">
+            <span class="file-name">{{ getFileName(file.path) }}</span>
+            <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          </div>
           <div class="file-actions">
-            <button class="icon-btn" :title="t('git.unstage')" @click.stop="unstageFile(file)">
+            <button class="file-btn" :title="t('git.unstage')" @click.stop="unstageFile(file)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
@@ -289,46 +250,42 @@
           </div>
         </div>
       </div>
-    </details>
+    </div>
 
-    <!-- Unstaged Changes -->
-    <details v-if="hasUnstaged" class="section" open>
-      <summary class="section__header">
-        <span class="section__caret">▸</span>
-        <span class="section__title">{{ t('git.changes') }}</span>
-        <span class="section__count">{{ modified.length + untracked.length }}</span>
-        <div class="section__actions" @click="stopPropagation">
-          <template v-if="hasSelectedUnstaged">
-            <button class="icon-btn" :title="t('git.discard_selected')" @click="discardSelected">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 7v6h6" />
-                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-              </svg>
-            </button>
-            <button class="icon-btn" :title="t('git.stage_selected')" @click="stageSelected">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-          </template>
-          <template v-else>
-            <button class="icon-btn" :title="t('git.discard_all')" @click="confirmDiscardAll">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 7v6h6" />
-                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-              </svg>
-            </button>
-            <button class="icon-btn" :title="t('git.stage_all')" @click="emit('stageAll')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-          </template>
+    <!-- Unstaged Section -->
+    <div v-if="hasUnstaged" class="change-section">
+      <div class="section-header">
+        <div class="section-header__left">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v8m-4-4h8" />
+          </svg>
+          <span class="section-title">{{ t('git.changes') }}</span>
         </div>
-      </summary>
-      <div class="section__content">
+        <span class="section-badge">{{ modified.length + untracked.length }}</span>
+        <div class="section-actions" @click="stopPropagation">
+          <button
+            class="action-btn action-btn--discard"
+            :title="hasSelectedUnstaged ? t('git.discard_selected') : t('git.discard_all')"
+            @click="hasSelectedUnstaged ? discardSelected() : confirmDiscardAll()"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+          </button>
+          <button
+            class="action-btn action-btn--stage"
+            :title="hasSelectedUnstaged ? t('git.stage_selected') : t('git.stage_all')"
+            @click="hasSelectedUnstaged ? stageSelected() : emit('stageAll')"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="file-list">
         <div
           v-for="file in modified"
           :key="`modified:${file.path}`"
@@ -336,17 +293,20 @@
           :class="{ 'file-item--selected': isSelected(file, false) }"
           @click="handleClick($event, file, false)"
         >
-          <span class="file-badge" :class="getBadgeClass(file)">{{ getBadgeLabel(file) }}</span>
-          <span class="file-name">{{ getFileName(file.path) }}</span>
-          <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          <span class="file-badge" :class="`file-badge--${getStatusBadge(file).type}`">
+            {{ getStatusBadge(file).label }}
+          </span>
+          <div class="file-info">
+            <span class="file-name">{{ getFileName(file.path) }}</span>
+            <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          </div>
           <div class="file-actions">
-            <button class="icon-btn" :title="t('git.discard')" @click.stop="confirmDiscard(file)">
+            <button class="file-btn file-btn--danger" :title="t('git.discard')" @click.stop="confirmDiscard(file)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 7v6h6" />
-                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
             </button>
-            <button class="icon-btn" :title="t('git.stage')" @click.stop="stageFile(file)">
+            <button class="file-btn" :title="t('git.stage')" @click.stop="stageFile(file)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -362,17 +322,18 @@
           :class="{ 'file-item--selected': isSelected(file, false) }"
           @click="handleClick($event, file, false)"
         >
-          <span class="file-badge badge--untracked">U</span>
-          <span class="file-name">{{ getFileName(file.path) }}</span>
-          <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          <span class="file-badge file-badge--untracked">U</span>
+          <div class="file-info">
+            <span class="file-name">{{ getFileName(file.path) }}</span>
+            <span v-if="getDirectory(file.path)" class="file-dir">{{ getDirectory(file.path) }}</span>
+          </div>
           <div class="file-actions">
-            <button class="icon-btn" :title="t('git.discard')" @click.stop="confirmDiscard(file)">
+            <button class="file-btn file-btn--danger" :title="t('git.discard')" @click.stop="confirmDiscard(file)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 7v6h6" />
-                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
             </button>
-            <button class="icon-btn" :title="t('git.stage')" @click.stop="stageFile(file)">
+            <button class="file-btn" :title="t('git.stage')" @click.stop="stageFile(file)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -381,95 +342,178 @@
           </div>
         </div>
       </div>
-    </details>
+    </div>
+
+    <!-- Empty State -->
+    <div v-if="!hasStaged && !hasUnstaged && !hasConflicted" class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>{{ t('git.no_changes') }}</span>
+    </div>
   </div>
 </template>
 
 <style scoped>
-  .changes {
-    padding: 8px 0;
+  .file-changes {
+    padding: 8px;
   }
 
-  .section {
-    margin-bottom: 4px;
+  /* Section */
+  .change-section {
+    margin-bottom: 12px;
   }
 
-  .section__header {
+  .change-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .section-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-100);
+    border-radius: 8px 8px 0 0;
+    border: 1px solid var(--border-100);
+    border-bottom: none;
+  }
+
+  .section-header__left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .section-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--text-400);
+    flex-shrink: 0;
+  }
+
+  .section-icon--staged {
+    color: var(--color-success);
+  }
+
+  .section-icon--conflict {
+    color: var(--color-error);
+  }
+
+  .section-title {
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-200);
-    border-radius: 6px;
-  }
-
-  .section__header::-webkit-details-marker {
-    display: none;
-  }
-
-  .section__header:hover {
-    background: var(--color-hover);
-  }
-
-  .section__header--conflicted {
-    color: #ef4444;
-  }
-
-  details[open] > .section__header .section__caret {
-    transform: rotate(90deg);
-  }
-
-  .section__caret {
-    width: 10px;
-    font-size: 10px;
     color: var(--text-300);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
-  .section__title {
-    flex: 1;
-  }
-
-  .section__count {
-    font-size: 10px;
+  .section-badge {
+    font-size: 11px;
     font-weight: 500;
-    padding: 1px 6px;
+    padding: 2px 8px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--color-primary) 25%, transparent);
-    color: var(--color-primary);
+    background: var(--bg-200);
+    color: var(--text-400);
   }
 
-  .section__actions {
+  .section-badge--staged {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+  }
+
+  .section-badge--conflict {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    color: var(--color-error);
+  }
+
+  .section-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .action-btn {
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
-    gap: 2px;
-    margin-left: 4px;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: var(--bg-200);
+    color: var(--text-400);
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .section__content {
-    display: flex;
-    flex-direction: column;
+  .action-btn:hover {
+    background: var(--bg-300);
+    color: var(--text-100);
+  }
+
+  .action-btn--stage:hover {
+    background: color-mix(in srgb, var(--color-success) 20%, transparent);
+    color: var(--color-success);
+  }
+
+  .action-btn--unstage:hover {
+    background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+    color: var(--color-warning);
+  }
+
+  .action-btn--discard:hover {
+    background: color-mix(in srgb, var(--color-error) 20%, transparent);
+    color: var(--color-error);
+  }
+
+  .action-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* File List */
+  .file-list {
+    background: var(--bg-50);
+    border: 1px solid var(--border-100);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .file-list::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .file-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .file-list::-webkit-scrollbar-thumb {
+    background: var(--border-300);
+    border-radius: 3px;
   }
 
   .file-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 12px 4px 28px;
+    gap: 10px;
+    padding: 8px 10px;
     cursor: pointer;
-    font-size: 12px;
-    color: var(--text-100);
-    border-radius: 8px;
+    transition: background 0.12s ease;
+    border-bottom: 1px solid var(--border-100);
+  }
+
+  .file-item:last-child {
+    border-bottom: none;
   }
 
   .file-item:hover {
-    background: var(--color-hover);
+    background: var(--bg-200);
   }
 
   .file-item:hover .file-actions {
@@ -477,128 +521,150 @@
   }
 
   .file-item--selected {
-    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   }
 
   .file-item--selected:hover {
-    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   .file-item--selected .file-actions {
     opacity: 1;
   }
 
-  .file-item--conflicted {
-    color: #ef4444;
+  .file-item--conflict {
+    background: color-mix(in srgb, var(--color-error) 5%, transparent);
   }
 
+  /* File Badge */
   .file-badge {
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 3px;
+    border-radius: 4px;
     font-size: 10px;
-    font-weight: 700;
-    font-family: var(--font-mono);
+    font-weight: 600;
+    font-family: var(--font-family-mono);
   }
 
-  .badge--added {
-    background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  .file-badge--added {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
     color: var(--color-success);
   }
 
-  .badge--modified {
-    background: color-mix(in srgb, var(--color-warning) 25%, transparent);
+  .file-badge--modified {
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
     color: var(--color-warning);
   }
 
-  .badge--type-changed {
-    background: color-mix(in srgb, var(--color-warning) 25%, transparent);
-    color: var(--color-warning);
-  }
-
-  .badge--deleted {
-    background: color-mix(in srgb, var(--color-error) 25%, transparent);
+  .file-badge--deleted {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
     color: var(--color-error);
   }
 
-  .badge--renamed {
-    background: color-mix(in srgb, var(--color-info) 25%, transparent);
+  .file-badge--renamed {
+    background: color-mix(in srgb, var(--color-info) 15%, transparent);
     color: var(--color-info);
   }
 
-  .badge--copied {
-    background: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  .file-badge--copied {
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
     color: var(--color-primary);
   }
 
-  .badge--untracked {
-    background: color-mix(in srgb, var(--text-300) 20%, transparent);
-    color: var(--text-300);
+  .file-badge--untracked {
+    background: var(--bg-200);
+    color: var(--text-400);
   }
 
-  .badge--conflicted {
-    background: color-mix(in srgb, var(--color-error) 35%, transparent);
+  .file-badge--conflicted {
+    background: color-mix(in srgb, var(--color-error) 20%, transparent);
     color: var(--color-error);
   }
 
-  .badge--unknown {
-    background: color-mix(in srgb, var(--text-300) 18%, transparent);
-    color: var(--text-300);
+  /* File Info */
+  .file-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .file-name {
-    flex-shrink: 0;
-    font-family: var(--font-mono);
-  }
-
-  .file-dir {
-    flex: 1;
-    min-width: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-100);
+    font-family: var(--font-family-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
-    color: var(--text-300);
-    font-family: var(--font-mono);
   }
 
+  .file-dir {
+    font-size: 11px;
+    color: var(--text-500);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* File Actions */
   .file-actions {
     display: flex;
-    align-items: center;
-    gap: 2px;
-    margin-left: auto;
+    gap: 4px;
     opacity: 0;
+    transition: opacity 0.15s ease;
   }
 
-  .icon-btn {
-    width: 22px;
-    height: 22px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-200);
+  .file-btn {
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-400);
     cursor: pointer;
+    transition: all 0.12s ease;
   }
 
-  .icon-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .icon-btn:hover {
+  .file-btn:hover {
     background: var(--bg-300);
-    color: var(--text-100);
+    color: var(--color-success);
   }
 
-  .icon-btn svg {
+  .file-btn--danger:hover {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    color: var(--color-error);
+  }
+
+  .file-btn svg {
     width: 14px;
     height: 14px;
+  }
+
+  /* Empty State */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px 20px;
+    color: var(--text-500);
+    font-size: 13px;
+  }
+
+  .empty-icon {
+    width: 36px;
+    height: 36px;
+    opacity: 0.4;
   }
 </style>

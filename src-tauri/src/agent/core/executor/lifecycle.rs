@@ -22,9 +22,7 @@ use crate::agent::types::{
     SubtaskStatus, TaskEvent, ToolBlock, ToolOutput, ToolStatus,
 };
 use crate::workspace::{WorkspaceService, UNGROUPED_WORKSPACE_PATH};
-use crate::{
-    agent::common::llm_text::extract_text_from_llm_message, llm::service::LLMService,
-};
+use crate::{agent::common::llm_text::extract_text_from_llm_message, llm::service::LLMService};
 
 struct RunTaskLoopDropGuard {
     executor: TaskExecutor,
@@ -226,7 +224,9 @@ impl TaskExecutor {
                         details: None,
                     };
 
-                    let _ = ctx_for_spawn.fail_assistant_message(error_block.clone()).await;
+                    let _ = ctx_for_spawn
+                        .fail_assistant_message(error_block.clone())
+                        .await;
                     if ctx_for_spawn.emits_task_events() {
                         let _ = ctx_for_spawn
                             .emit_event(TaskEvent::TaskError {
@@ -236,7 +236,9 @@ impl TaskExecutor {
                             .await;
                     }
 
-                    executor.active_tasks().remove(ctx_for_spawn.task_id.as_ref());
+                    executor
+                        .active_tasks()
+                        .remove(ctx_for_spawn.task_id.as_ref());
                     return;
                 }
             };
@@ -304,6 +306,13 @@ impl TaskExecutor {
                             })
                             .await?;
                         }
+
+                        // 刷新 session metadata（包括 title）
+                        let ws_service = WorkspaceService::new(self.database());
+                        if let Err(e) = ws_service.refresh_session_title(ctx.session_id).await {
+                            warn!("Failed to refresh session title: {}", e);
+                        }
+
                         break;
                     }
 
@@ -578,8 +587,11 @@ impl TaskExecutor {
             };
 
             let service = WorkspaceService::new(self.database());
+
+            // 用 user_prompt 的前 100 个字符作为会话 title
+            let title = truncate_chars(&params.user_prompt, 100);
             let session = service
-                .ensure_active_session(&workspace_path)
+                .ensure_active_session_with_title(&workspace_path, &title)
                 .await
                 .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
 

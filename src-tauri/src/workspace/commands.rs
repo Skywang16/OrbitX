@@ -171,6 +171,21 @@ pub async fn workspace_set_active_session(
     }
 }
 
+#[tauri::command]
+pub async fn workspace_clear_active_session(
+    path: String,
+    database: State<'_, Arc<DatabaseManager>>,
+) -> TauriApiResult<EmptyData> {
+    let service = WorkspaceService::new(Arc::clone(&database));
+    match service.set_active_session(&path, None).await {
+        Ok(()) => Ok(api_success!()),
+        Err(err) => {
+            tracing::error!("workspace_clear_active_session failed: {}", err);
+            Ok(api_error!("workspace.clear_active_session_failed"))
+        }
+    }
+}
+
 // ===== 项目规则管理命令 =====
 
 /// 获取当前项目规则
