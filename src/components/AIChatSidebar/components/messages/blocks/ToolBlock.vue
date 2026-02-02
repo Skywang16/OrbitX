@@ -62,8 +62,9 @@
     <div
       class="tool-line"
       :class="{ clickable: isExpandable, running: isRunning, error: isError, cancelled: isCancelled }"
+      @click="toggleExpanded"
     >
-      <span class="text" :class="{ clickable: isExpandable }" @click="toggleExpanded">
+      <span class="text" :class="{ running: isRunning }">
         <span v-if="toolPrefix" class="tool-prefix">{{ toolPrefix }}</span>
         <span class="tool-content">{{ getDisplayText() }}</span>
       </span>
@@ -78,7 +79,6 @@
         width="10"
         height="10"
         viewBox="0 0 10 10"
-        @click="toggleExpanded"
       >
         <path
           d="M3.5 2.5L6 5L3.5 7.5"
@@ -638,7 +638,20 @@
     font-size: 14px;
   }
 
-  .tool-line.running .text {
+  .tool-line.clickable {
+    cursor: pointer;
+  }
+
+  .tool-line.clickable:hover {
+    color: var(--text-300);
+  }
+
+  .tool-line.clickable:hover .chevron {
+    opacity: 1;
+  }
+
+  .tool-line.running .text,
+  .text.running {
     background: linear-gradient(
       90deg,
       var(--text-500) 0%,
@@ -683,14 +696,6 @@
     gap: 4px;
   }
 
-  .text.clickable {
-    cursor: pointer;
-  }
-
-  .text.clickable:hover {
-    color: var(--text-300);
-  }
-
   .tool-prefix {
     color: var(--text-400);
     font-weight: 400;
@@ -722,12 +727,6 @@
     color: var(--text-500);
     transition: transform 0.2s ease;
     opacity: 0.5;
-    cursor: pointer;
-  }
-
-  .chevron:hover,
-  .text.clickable:hover ~ .chevron {
-    opacity: 1;
   }
 
   .chevron.expanded {

@@ -61,6 +61,12 @@ pub async fn check_oauth_status(
     oauth_config: OAuthConfig,
     manager: State<'_, Arc<OAuthManager>>,
 ) -> Result<String, String> {
+    // 检查是否有 access_token
+    if oauth_config.access_token.is_none() {
+        return Ok("not_authorized".to_string());
+    }
+    
+    // 检查 token 是否需要刷新
     if manager.should_refresh_token(&oauth_config) {
         Ok("token_expired".to_string())
     } else {

@@ -194,12 +194,25 @@ impl OAuthManager {
 
     /// 检查 token 是否需要刷新
     pub fn should_refresh_token(&self, oauth_config: &StorageOAuthConfig) -> bool {
+        // 如果没有 access_token，需要刷新
+        if oauth_config.access_token.is_none() {
+            return true;
+        }
+
+        // 如果有过期时间，检查是否即将过期
         if let Some(expires_at) = oauth_config.expires_at {
             let provider_id = oauth_config.provider.to_string();
             if let Some(provider) = self.providers.get(&provider_id) {
                 return provider.should_refresh_token(expires_at);
             }
         }
+
+        // 如果没有过期时间信息，保守起见不刷新（有 access_token 就用）
         false
+    }
+
+    /// 检查 OAuth 配置是否有效（有 access_token）
+    pub fn is_authorized(&self, oauth_config: &StorageOAuthConfig) -> bool {
+        oauth_config.access_token.is_some()
     }
 }
