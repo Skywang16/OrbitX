@@ -1,60 +1,71 @@
 <template>
-  <div class="settings-group">
-    <h2 class="settings-section-title">{{ t('settings.shortcuts.title') }}</h2>
-
+  <div class="shortcut-settings">
+    <!-- Loading State -->
     <div v-if="loading" class="settings-loading">
       <div class="settings-loading-spinner"></div>
       <span>{{ t('shortcuts.loading') }}</span>
     </div>
 
-    <div v-else class="settings-group">
-      <h3 class="settings-group-title">{{ t('shortcuts.title') }}</h3>
+    <template v-else>
+      <!-- Shortcuts List -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">{{ t('shortcuts.keyboard_shortcuts') || 'Keyboard Shortcuts' }}</h3>
 
-      <SettingsCard>
-        <div
-          v-for="action in allActions"
-          :key="action.key"
-          class="settings-item shortcut-item"
-          :class="{
-            'shortcut-item--editing': isEditing(action.key),
-            'shortcut-item--configured': action.shortcut,
-          }"
-          @click="startEdit(action.key)"
-          @keydown="handleKeyDown($event, action.key)"
-          @blur="stopEdit(action.key)"
-          tabindex="0"
-        >
-          <div class="settings-item-header">
-            <div class="settings-label">{{ action.displayName }}</div>
-          </div>
-          <div class="settings-item-control">
-            <span v-if="!isEditing(action.key)" class="shortcut-display">
-              <template v-if="action.shortcut">
-                <span v-for="modifier in action.shortcut.modifiers" :key="modifier" class="shortcut-modifier">
-                  {{ modifier }}
-                </span>
-                <span class="shortcut-key">{{ action.shortcut.key }}</span>
+        <SettingsCard>
+          <div
+            v-for="action in allActions"
+            :key="action.key"
+            class="settings-item shortcut-item"
+            :class="{
+              'is-editing': isEditing(action.key),
+              'is-configured': action.shortcut,
+            }"
+            @click="startEdit(action.key)"
+            @keydown="handleKeyDown($event, action.key)"
+            @blur="stopEdit(action.key)"
+            tabindex="0"
+          >
+            <div class="settings-item-header">
+              <div class="settings-label">{{ action.displayName }}</div>
+            </div>
+            <div class="settings-item-control">
+              <template v-if="!isEditing(action.key)">
+                <div v-if="action.shortcut" class="shortcut-keys">
+                  <kbd v-for="modifier in action.shortcut.modifiers" :key="modifier" class="key-cap modifier">
+                    {{ formatModifier(modifier) }}
+                  </kbd>
+                  <kbd class="key-cap">{{ formatKey(action.shortcut.key) }}</kbd>
+                </div>
+                <span v-else class="shortcut-empty">{{ t('shortcuts.click_to_set') || 'Click to set' }}</span>
               </template>
-              <span v-else class="shortcut-not-configured">{{ t('shortcuts.not_configured') }}</span>
-            </span>
-            <span v-else class="shortcut-editing-hint">{{ t('shortcuts.editing_hint') }}</span>
+              <span v-else class="shortcut-recording">
+                <span class="recording-dot"></span>
+                {{ t('shortcuts.press_keys') || 'Press keys...' }}
+              </span>
+            </div>
           </div>
-        </div>
+        </SettingsCard>
+      </div>
 
-        <!-- 重置快捷键功能直接放在同一个卡片中 -->
-        <div class="settings-item">
-          <div class="settings-item-header">
-            <div class="settings-label">{{ t('shortcuts.reset_shortcuts') }}</div>
-            <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
+      <!-- Reset Section -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">{{ t('shortcuts.reset_title') || 'Reset' }}</h3>
+
+        <SettingsCard>
+          <div class="settings-item">
+            <div class="settings-item-header">
+              <div class="settings-label">{{ t('shortcuts.reset_shortcuts') }}</div>
+              <div class="settings-description">{{ t('shortcuts.reset_description') }}</div>
+            </div>
+            <div class="settings-item-control">
+              <x-button variant="secondary" size="small" :disabled="loading" @click="confirmReset">
+                {{ t('shortcuts.reset_to_default') }}
+              </x-button>
+            </div>
           </div>
-          <div class="settings-item-control">
-            <x-button variant="outline" :disabled="loading" @click="confirmReset">
-              {{ t('shortcuts.reset_to_default') }}
-            </x-button>
-          </div>
-        </div>
-      </SettingsCard>
-    </div>
+        </SettingsCard>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -202,6 +213,34 @@
     }
   }
 
+  // Format modifier for display
+  const formatModifier = (modifier: string) => {
+    const modifierMap: Record<string, string> = {
+      cmd: '⌘',
+      ctrl: '⌃',
+      alt: '⌥',
+      shift: '⇧',
+    }
+    return modifierMap[modifier] || modifier
+  }
+
+  // Format key for display
+  const formatKey = (key: string) => {
+    const keyMap: Record<string, string> = {
+      ArrowUp: '↑',
+      ArrowDown: '↓',
+      ArrowLeft: '←',
+      ArrowRight: '→',
+      Enter: '↵',
+      Escape: 'Esc',
+      Backspace: '⌫',
+      Delete: '⌦',
+      Tab: '⇥',
+      Space: '␣',
+    }
+    return keyMap[key] || key.toUpperCase()
+  }
+
   // 初始化方法，供外部调用
   const init = async () => {
     // 强制重新初始化，确保数据正确加载
@@ -215,124 +254,104 @@
 </script>
 
 <style scoped>
+  .shortcut-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Shortcut Item */
   .shortcut-item {
     cursor: pointer;
-    transition: all 0.2s ease;
-    border-radius: var(--border-radius);
-    min-height: 60px;
+    transition: background-color 0.15s ease;
+    min-height: 56px;
   }
 
   .shortcut-item:hover {
-    background: transparent;
+    background: var(--bg-250, color-mix(in srgb, var(--bg-300) 50%, var(--bg-200)));
   }
 
   .shortcut-item:focus {
     outline: none;
-    background: transparent;
+    background: var(--bg-300);
   }
 
-  .shortcut-item--editing {
-    background: var(--color-primary-alpha);
-    animation: pulse 1.5s infinite;
+  .shortcut-item.is-editing {
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
   }
 
-  .shortcut-display {
+  /* Shortcut Keys Display */
+  .shortcut-keys {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    min-height: 28px;
   }
 
-  .shortcut-modifier {
-    background: var(--bg-600);
-    border: none;
-    padding: 6px 10px;
-    border-radius: var(--border-radius);
-    font-size: 12px;
-    color: var(--text-200);
-    font-weight: 500;
-    min-width: 28px;
-    height: 28px;
+  .key-cap {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-  }
-
-  .shortcut-key {
-    background: var(--bg-600);
-    border: none;
-    color: var(--text-200);
-    padding: 6px 10px;
-    border-radius: var(--border-radius);
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--bg-400);
+    border-radius: 5px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 12px;
     font-weight: 500;
-    min-width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
+    color: var(--text-200);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      0 1px 0 1px var(--bg-500),
+      inset 0 1px 0 0 color-mix(in srgb, white 8%, transparent);
+    text-transform: uppercase;
   }
 
-  .shortcut-not-configured {
-    color: var(--text-400);
+  .key-cap.modifier {
+    font-size: 14px;
+    min-width: 22px;
+    padding: 0 6px;
+  }
+
+  /* Empty State */
+  .shortcut-empty {
+    font-size: 12px;
+    color: var(--text-500);
     font-style: italic;
-    min-height: 28px;
+  }
+
+  /* Recording State */
+  .shortcut-recording {
     display: flex;
     align-items: center;
-  }
-
-  .shortcut-editing-hint {
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--color-primary);
-    font-style: italic;
-    min-height: 28px;
-    display: flex;
-    align-items: center;
   }
 
-  .settings-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 40px;
-    color: var(--text-300);
-  }
-
-  .settings-loading-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--border-300);
-    border-top: 2px solid var(--color-primary);
+  .recording-dot {
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    background: var(--color-primary);
+    animation: recording-pulse 1s ease-in-out infinite;
   }
 
-  @keyframes pulse {
+  @keyframes recording-pulse {
     0%,
     100% {
       opacity: 1;
+      transform: scale(1);
     }
     50% {
-      opacity: 0.7;
-    }
-  }
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
+      opacity: 0.5;
+      transform: scale(0.8);
     }
   }
 </style>

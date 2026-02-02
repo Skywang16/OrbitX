@@ -50,16 +50,18 @@
 </script>
 
 <template>
-  <div class="settings-group">
-    <h2 class="settings-section-title">{{ t('settings.general.title') }}</h2>
+  <div class="general-settings">
+    <!-- Startup Section -->
+    <div class="settings-section">
+      <h3 class="settings-section-title">{{ t('settings.general.startup_title') }}</h3>
 
-    <div class="settings-group">
-      <h3 class="settings-group-title">{{ t('settings.general.startup_title') }}</h3>
       <SettingsCard>
         <div class="settings-item">
           <div class="settings-item-header">
             <div class="settings-label">{{ t('settings.general.autostart_title') }}</div>
-            <div class="settings-description">{{ t('settings.general.description') }}</div>
+            <div class="settings-description">
+              {{ t('settings.general.autostart_description') || t('settings.general.description') }}
+            </div>
           </div>
           <div class="settings-item-control">
             <XSwitch :model-value="autoStartEnabled" @update:model-value="handleAutoStartToggle" />
@@ -67,7 +69,48 @@
         </div>
       </SettingsCard>
     </div>
+
+    <!-- About Section -->
+    <div class="settings-section">
+      <h3 class="settings-section-title">{{ t('settings.general.about') || 'About' }}</h3>
+
+      <SettingsCard>
+        <div class="settings-item">
+          <div class="settings-item-header">
+            <div class="settings-label">{{ t('settings.general.version') || 'Version' }}</div>
+            <div class="settings-description">
+              {{ t('settings.general.version_description') || 'Current application version' }}
+            </div>
+          </div>
+          <div class="settings-item-control">
+            <span class="version-badge">v0.1.0</span>
+          </div>
+        </div>
+      </SettingsCard>
+    </div>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+  .general-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .version-badge {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-300);
+    background: var(--bg-300);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: var(--font-family-mono);
+  }
+</style>

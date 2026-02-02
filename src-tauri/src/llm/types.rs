@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// OAuth 配置（轻量级，用于运行时）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthRuntimeConfig {
+    pub provider: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_at: Option<i64>,
+}
+
 /// Provider 连接配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMProviderConfig {
@@ -8,6 +17,9 @@ pub struct LLMProviderConfig {
     pub api_key: String,
     pub api_url: Option<String>,
     pub options: Option<HashMap<String, serde_json::Value>>,
+    /// OAuth 配置（如果使用 OAuth 认证）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_config: Option<OAuthRuntimeConfig>,
 }
 
 /// Embedding 请求参数

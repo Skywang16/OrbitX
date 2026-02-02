@@ -39,6 +39,8 @@ pub enum AIServiceError {
         #[source]
         source: InvalidHeaderValue,
     },
+    #[error("Configuration error: {message}")]
+    Configuration { message: String },
     #[error(transparent)]
     FileSystemTool(#[from] FileSystemToolError),
 }

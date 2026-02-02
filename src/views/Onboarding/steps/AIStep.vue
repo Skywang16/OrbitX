@@ -175,6 +175,7 @@
   import { XSelect } from '@/ui'
 
   import type { AIModelConfig } from '@/types'
+  import { AuthType } from '@/types/oauth'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
   import { useLLMRegistry } from '@/composables/useLLMRegistry'
 
@@ -297,6 +298,7 @@
     const newModel: AIModelConfig = {
       id: uuidv4(),
       provider: formData.provider,
+      authType: AuthType.ApiKey,
       apiUrl: getDefaultApiUrl(),
       apiKey: formData.apiKey,
       model: formData.model,

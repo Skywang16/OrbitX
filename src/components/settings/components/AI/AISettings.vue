@@ -21,13 +21,24 @@
 </script>
 
 <template>
-  <div class="settings-group">
-    <h2 class="settings-section-title">{{ t('settings.ai.title') }}</h2>
-
-    <div class="settings-group">
+  <div class="ai-settings">
+    <!-- Model Configuration Section -->
+    <div class="settings-section">
       <AIModelConfig />
     </div>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+  .ai-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+</style>

@@ -1,6 +1,6 @@
 use crate::ai::error::{AIServiceError, AIServiceResult};
 use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
-use crate::storage::repositories::AIModels;
+use crate::storage::repositories::{AIModels, AuthType};
 use crate::storage::DatabaseManager;
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -101,10 +101,10 @@ impl AIService {
             existing.provider = provider;
         }
         if let Some(url) = update_payload.api_url.and_then(trimmed) {
-            existing.api_url = url;
+            existing.api_url = Some(url);
         }
         if let Some(api_key) = update_payload.api_key {
-            existing.api_key = api_key;
+            existing.api_key = Some(api_key);
         }
         if let Some(model) = update_payload.model.and_then(trimmed) {
             existing.model = model;
@@ -158,11 +158,47 @@ impl AIService {
     fn build_probe(&self, model: &AIModelConfig) -> AIServiceResult<ConnectionProbe> {
         let timeout = self.resolve_timeout(model);
 
+        // 获取认证凭证（API Key 或 OAuth access_token）
+        let get_auth_token = |model: &AIModelConfig| -> AIServiceResult<String> {
+            match model.auth_type {
+                AuthType::OAuth => {
+                    let oauth = model.oauth_config.as_ref().ok_or_else(|| {
+                        AIServiceError::Configuration {
+                            message: "OAuth configuration is required for OAuth models".to_string(),
+                        }
+                    })?;
+                    oauth
+                        .access_token
+                        .clone()
+                        .ok_or_else(|| AIServiceError::Configuration {
+                            message: "OAuth access token is missing. Please re-authorize."
+                                .to_string(),
+                        })
+                }
+                AuthType::ApiKey => {
+                    model
+                        .api_key
+                        .clone()
+                        .ok_or_else(|| AIServiceError::Configuration {
+                            message: "API key is required".to_string(),
+                        })
+                }
+            }
+        };
+
         match model.provider {
             AIProvider::Anthropic => {
-                let url = join_url(model.api_url.trim(), "messages");
+                let api_url =
+                    model
+                        .api_url
+                        .as_deref()
+                        .ok_or_else(|| AIServiceError::Configuration {
+                            message: "API URL is required".to_string(),
+                        })?;
+                let api_key = get_auth_token(model)?;
+                let url = join_url(api_url.trim(), "messages");
                 let headers = header_map(&[
-                    ("x-api-key", model.api_key.clone()),
+                    ("x-api-key", api_key),
                     ("anthropic-version", "2023-06-01".to_string()),
                 ])?;
                 let payload = json!({
@@ -180,9 +216,55 @@ impl AIService {
                 }))
             }
             AIProvider::OpenAiCompatible => {
-                let url = join_url(model.api_url.trim(), "chat/completions");
-                let headers =
-                    header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
+                // OAuth 模式使用不同的端点
+                let (url, headers) = if model.auth_type == AuthType::OAuth {
+                    let oauth = model.oauth_config.as_ref().ok_or_else(|| {
+                        AIServiceError::Configuration {
+                            message: "OAuth configuration is required".to_string(),
+                        }
+                    })?;
+                    let access_token = get_auth_token(model)?;
+
+                    // OpenAI Codex 使用 ChatGPT 后端 API
+                    let mut headers =
+                        header_map(&[("authorization", format!("Bearer {}", access_token))])?;
+
+                    // 添加 ChatGPT-Account-Id（如果有）
+                    if let Some(metadata) = &oauth.metadata {
+                        if let Some(account_id) =
+                            metadata.get("account_id").and_then(|v| v.as_str())
+                        {
+                            headers.insert(
+                                HeaderName::from_static("chatgpt-account-id"),
+                                HeaderValue::from_str(account_id).map_err(|err| {
+                                    AIServiceError::InvalidHeaderValue {
+                                        name: "chatgpt-account-id",
+                                        source: err,
+                                    }
+                                })?,
+                            );
+                        }
+                    }
+
+                    // ChatGPT 后端 API 测试端点
+                    (
+                        "https://chatgpt.com/backend-api/conversation".to_string(),
+                        headers,
+                    )
+                } else {
+                    let api_url =
+                        model
+                            .api_url
+                            .as_deref()
+                            .ok_or_else(|| AIServiceError::Configuration {
+                                message: "API URL is required".to_string(),
+                            })?;
+                    let api_key = get_auth_token(model)?;
+                    let url = join_url(api_url.trim(), "chat/completions");
+                    let headers = header_map(&[("authorization", format!("Bearer {}", api_key))])?;
+                    (url, headers)
+                };
+
                 let payload = basic_chat_payload(&model.model);
                 Ok(ConnectionProbe::Http(ProviderHttpRequest {
                     provider_label: "OpenAI Compatible",

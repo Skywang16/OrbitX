@@ -14,31 +14,38 @@
   "settings": {
     "title": "Settings",
     "search_placeholder": "Search settings",
+    "no_results": "No results found",
     "general": {
-      "title": "General Settings",
+      "title": "General",
       "description": "General application configuration",
       "config_open_folder": "Open Config Folder",
-      "startup_title": "Startup Settings",
-      "autostart_title": "Auto Start",
+      "startup_title": "Startup",
+      "autostart_title": "Launch at Login",
+      "autostart_description": "Automatically start OrbitX when you log in",
       "autostart_enabled": "Auto start enabled",
-      "autostart_disabled": "Auto start disabled"
+      "autostart_disabled": "Auto start disabled",
+      "about": "About",
+      "version": "Version",
+      "version_description": "Current application version"
     },
     "theme": {
-      "title": "Theme Settings",
-      "description": "Appearance and theme configuration"
+      "title": "Appearance",
+      "description": "Customize theme and visual settings"
     },
     "ai": {
-      "title": "AI Settings",
-      "description": "Configure AI models and features",
+      "title": "AI Models",
+      "description": "Configure AI models and providers",
       "model_config": "Model Configuration"
     },
     "shortcuts": {
-      "title": "Shortcut Settings",
-      "description": "Configure and manage shortcuts"
+      "title": "Shortcuts",
+      "description": "Customize keyboard shortcuts"
     },
     "language": {
-      "title": "Language Settings",
-      "description": "Select interface display language"
+      "title": "Language",
+      "description": "Select interface display language",
+      "interface_language": "Interface Language",
+      "change_note": "Language changes will take effect immediately."
     }
   },
   "chat": {
@@ -157,6 +164,18 @@
   "ai_model": {
     "add_title": "Add AI Model",
     "edit_title": "Edit AI Model",
+    "add_model": "Add Model",
+    "edit_model": "Edit Model",
+    "configured_models": "Configured Models",
+    "connection_type": "Connection Type",
+    "subscription": "Subscription Account",
+    "subscription_service": "Subscription Service",
+    "select_subscription": "Select subscription service",
+    "authorization": "Authorization",
+    "authorized": "Authorized",
+    "not_authorized": "Not authorized",
+    "reauthorize": "Reauthorize",
+    "start_authorization": "Authorize",
     "config_type": "Configuration Type",
     "preset_provider": "Preset Provider",
     "custom_config": "OpenAI Compatible",
@@ -226,9 +245,13 @@
   },
   "shortcuts": {
     "title": "Shortcut Settings",
+    "keyboard_shortcuts": "Keyboard Shortcuts",
     "loading": "Loading...",
     "not_configured": "Click to configure",
+    "click_to_set": "Click to set",
+    "press_keys": "Press keys...",
     "editing_hint": "Press new key combination...",
+    "reset_title": "Reset",
     "reset_to_default": "Reset to Default",
     "reset_confirm_title": "Reset Shortcut Configuration",
     "reset_confirm_message": "This will reset all shortcuts to default configuration, current custom settings will be lost.",
@@ -309,6 +332,7 @@
     "follow_system": "Follow System",
     "follow_system_description": "Automatically switch theme based on system settings",
     "select_theme": "Select Theme",
+    "system_themes": "System Theme Mapping",
     "light_theme": "Light Theme",
     "dark_theme": "Dark Theme",
     "light_theme_description": "Theme to use when system is in light mode",

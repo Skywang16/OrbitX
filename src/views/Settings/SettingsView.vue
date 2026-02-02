@@ -8,7 +8,7 @@
   import SettingsNav from '@/components/settings/SettingsNav.vue'
 
   import { configApi } from '@/api/config'
-  import { onMounted, ref, nextTick } from 'vue'
+  import { onMounted, ref, nextTick, computed } from 'vue'
   import { debounce } from 'lodash-es'
   import { useEditorStore } from '@/stores/Editor'
 
@@ -23,6 +23,33 @@
   const themeSettingsRef = ref()
   const shortcutSettingsRef = ref()
   const generalSettingsRef = ref()
+
+  // Get section info for header
+  const sectionInfo = computed(() => {
+    const sections: Record<string, { title: string; description: string }> = {
+      general: {
+        title: t('settings.general.title'),
+        description: t('settings.general.description'),
+      },
+      ai: {
+        title: t('settings.ai.title'),
+        description: t('settings.ai.description'),
+      },
+      theme: {
+        title: t('settings.theme.title'),
+        description: t('settings.theme.description'),
+      },
+      shortcuts: {
+        title: t('settings.shortcuts.title'),
+        description: t('settings.shortcuts.description'),
+      },
+      language: {
+        title: t('settings.language.title'),
+        description: t('settings.language.description'),
+      },
+    }
+    return sections[activeSection.value] || sections.general
+  })
 
   onMounted(async () => {
     await initializeCurrentSection()
@@ -89,7 +116,10 @@
         <SettingsNav :activeSection="activeSection" @change="handleNavigationChange" />
 
         <div class="settings-sidebar-footer">
-          <x-button variant="primary" size="medium" @click="handleOpenConfigFolder">
+          <x-button variant="ghost" size="small" @click="handleOpenConfigFolder" class="config-folder-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
             {{ t('settings.general.config_open_folder') }}
           </x-button>
         </div>
@@ -97,11 +127,20 @@
 
       <div class="settings-main">
         <div class="settings-panel">
-          <GeneralSettings v-if="activeSection === 'general'" ref="generalSettingsRef" />
-          <AISettings v-else-if="activeSection === 'ai'" ref="aiSettingsRef" />
-          <ThemeSettings v-else-if="activeSection === 'theme'" ref="themeSettingsRef" />
-          <ShortcutSettings v-else-if="activeSection === 'shortcuts'" ref="shortcutSettingsRef" />
-          <LanguageSettings v-else-if="activeSection === 'language'" />
+          <!-- Page Header -->
+          <div class="settings-page-header">
+            <h1 class="settings-page-title">{{ sectionInfo.title }}</h1>
+            <p class="settings-page-description">{{ sectionInfo.description }}</p>
+          </div>
+
+          <!-- Content -->
+          <Transition name="settings-fade" mode="out-in">
+            <GeneralSettings v-if="activeSection === 'general'" ref="generalSettingsRef" :key="'general'" />
+            <AISettings v-else-if="activeSection === 'ai'" ref="aiSettingsRef" :key="'ai'" />
+            <ThemeSettings v-else-if="activeSection === 'theme'" ref="themeSettingsRef" :key="'theme'" />
+            <ShortcutSettings v-else-if="activeSection === 'shortcuts'" ref="shortcutSettingsRef" :key="'shortcuts'" />
+            <LanguageSettings v-else-if="activeSection === 'language'" :key="'language'" />
+          </Transition>
         </div>
       </div>
     </div>
@@ -116,10 +155,37 @@
   }
 
   .settings-sidebar-footer {
-    display: flex;
-    justify-content: center;
-    padding: var(--spacing-md);
+    padding: 12px 12px 16px;
+    border-top: 1px solid var(--border-100);
     background: var(--bg-200);
-    border-top: 1px solid var(--border-200);
+  }
+
+  .config-folder-btn {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+    color: var(--text-300);
+    font-size: 12px;
+  }
+
+  .config-folder-btn:hover {
+    color: var(--text-100);
+  }
+
+  .config-folder-btn .btn-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Page transitions */
+  .settings-fade-enter-active,
+  .settings-fade-leave-active {
+    transition: opacity 0.15s ease;
+  }
+
+  .settings-fade-enter-from,
+  .settings-fade-leave-to {
+    opacity: 0;
   }
 </style>

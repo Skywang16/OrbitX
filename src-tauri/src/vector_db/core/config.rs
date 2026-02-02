@@ -28,6 +28,7 @@ impl Default for RemoteEmbeddingConfig {
                 api_key: String::new(),
                 api_url: None,
                 options: None,
+                oauth_config: None,
             },
             model_name: String::new(),
             dimension: 0,

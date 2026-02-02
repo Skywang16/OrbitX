@@ -1,16 +1,16 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio_stream::StreamExt;
 use tokio::time::{interval, MissedTickBehavior};
+use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::llm::{
     anthropic_types::{CreateMessageRequest, Message, MessageContent, MessageParam, StreamEvent},
     error::{LlmError, LlmProviderResult, LlmResult},
     provider_registry::ProviderRegistry,
-    types::{EmbeddingRequest, EmbeddingResponse, LLMProviderConfig},
+    types::{EmbeddingRequest, EmbeddingResponse, LLMProviderConfig, OAuthRuntimeConfig},
 };
-use crate::storage::repositories::AIModels;
+use crate::storage::repositories::{AIModels, AuthType};
 use crate::storage::DatabaseManager;
 
 pub struct LLMService {
@@ -52,11 +52,54 @@ impl LLMService {
             None => None,
         };
 
+        // 根据认证类型构建配置
+        let (api_key, oauth_config) = match model.auth_type {
+            AuthType::OAuth => {
+                // OAuth 认证：使用 access_token 作为 Bearer token
+                let oauth = model.oauth_config.ok_or_else(|| LlmError::Configuration {
+                    message: "OAuth configuration is required for OAuth models".to_string(),
+                })?;
+
+                let access_token = oauth.access_token.ok_or_else(|| LlmError::Configuration {
+                    message: "OAuth access token is missing. Please re-authorize.".to_string(),
+                })?;
+
+                // 检查 token 是否已过期
+                if let Some(expires_at) = oauth.expires_at {
+                    let now = chrono::Utc::now().timestamp();
+                    if now >= expires_at {
+                        return Err(LlmError::Configuration {
+                            message:
+                                "OAuth access token has expired. Please refresh or re-authorize."
+                                    .to_string(),
+                        });
+                    }
+                }
+
+                let runtime_config = OAuthRuntimeConfig {
+                    provider: oauth.provider.to_string(),
+                    access_token: access_token.clone(),
+                    refresh_token: oauth.refresh_token,
+                    expires_at: oauth.expires_at,
+                };
+
+                (access_token, Some(runtime_config))
+            }
+            AuthType::ApiKey => {
+                // API Key 认证
+                let api_key = model.api_key.ok_or_else(|| LlmError::Configuration {
+                    message: "API key is required".to_string(),
+                })?;
+                (api_key, None)
+            }
+        };
+
         let config = LLMProviderConfig {
             provider_type,
-            api_key: model.api_key,
-            api_url: (!model.api_url.is_empty()).then_some(model.api_url),
+            api_key,
+            api_url: model.api_url.filter(|url| !url.is_empty()),
             options,
+            oauth_config,
         };
 
         Ok((config, model.model))
@@ -114,13 +157,10 @@ impl LLMService {
             actual_request = crate::llm::providers::anthropic::apply_prompt_caching(actual_request);
         }
 
-        let stream = provider
-            .call_stream(actual_request)
-            .await
-            .map_err(|e| {
-                tracing::error!("❌ LLM stream call failed: {}", e);
-                LlmError::from(e)
-            })?;
+        let stream = provider.call_stream(actual_request).await.map_err(|e| {
+            tracing::error!("❌ LLM stream call failed: {}", e);
+            LlmError::from(e)
+        })?;
 
         let stream_with_cancel = tokio_stream::wrappers::ReceiverStream::new({
             let (tx, rx) = tokio::sync::mpsc::channel(10);

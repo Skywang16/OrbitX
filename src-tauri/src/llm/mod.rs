@@ -1,6 +1,7 @@
 pub mod anthropic_types;
 pub mod commands;
 pub mod error;
+pub mod oauth;
 pub mod preset_models;
 pub mod provider_registry;
 pub mod providers;

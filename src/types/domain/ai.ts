@@ -1,5 +1,6 @@
 import type { BaseConfig } from '../core'
 import type { Message } from './aiMessage'
+import type { AuthType, OAuthConfig } from '../oauth'
 
 export type AIProvider = 'anthropic' | 'openai_compatible'
 
@@ -8,8 +9,9 @@ export type ModelType = 'chat' | 'embedding'
 export interface AIModelConfig {
   id: string
   provider: AIProvider
-  apiUrl: string
-  apiKey: string
+  authType: AuthType
+  apiUrl?: string
+  apiKey?: string
   model: string
   modelType: ModelType
   options?: {
@@ -20,6 +22,7 @@ export interface AIModelConfig {
     contextWindow?: number
     maxTokens?: number
   }
+  oauthConfig?: OAuthConfig
   useCustomBaseUrl?: boolean
   createdAt?: Date
   updatedAt?: Date

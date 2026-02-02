@@ -167,6 +167,12 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_available_models,
         crate::llm::commands::llm_test_model_connection,
         crate::llm::commands::llm_get_providers,
+        // OAuth 认证命令
+        crate::llm::oauth::commands::start_oauth_flow,
+        crate::llm::oauth::commands::wait_oauth_callback,
+        crate::llm::oauth::commands::cancel_oauth_flow,
+        crate::llm::oauth::commands::refresh_oauth_token,
+        crate::llm::oauth::commands::check_oauth_status,
         // Agent 执行器命令（注册以供前端调用）
         crate::agent::core::commands::agent_execute_task,
         crate::agent::core::commands::agent_cancel_task,

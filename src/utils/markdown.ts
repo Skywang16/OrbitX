@@ -2,9 +2,9 @@
  * Markdown 渲染器单例
  */
 
+import hljs from 'highlight.js'
 import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
-import hljs from 'highlight.js'
 
 // 配置 marked（只执行一次）
 marked.use(
@@ -21,7 +21,7 @@ marked.use(
 const renderer = new marked.Renderer()
 
 // 自定义代码块渲染，增加 Header 结构
-renderer.code = ({ text, lang, escaped }: { text: string; lang?: string; escaped?: boolean }) => {
+renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
   const language = lang || 'text'
   // 此时 text 已经是经过 marked-highlight 高亮过的 HTML（如果配置了的话）
   // 但我们需要注意的是，如果我们覆盖了 renderer.code，我们需要确保 highlight 依然生效
@@ -44,7 +44,10 @@ renderer.code = ({ text, lang, escaped }: { text: string; lang?: string; escaped
 }
 
 // 自定义表格渲染，增加包裹容器以支持滚动和样式
-renderer.table = ({ header, body }: { header: string; body: string }) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+renderer.table = (token: any) => {
+  const header = token.header || ''
+  const body = token.body || ''
   return `
     <div class="table-wrapper">
       <table>

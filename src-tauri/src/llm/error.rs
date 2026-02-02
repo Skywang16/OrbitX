@@ -21,6 +21,8 @@ pub enum LlmError {
     },
     #[error("Invalid request: {reason}")]
     InvalidRequest { reason: String },
+    #[error("Configuration error: {message}")]
+    Configuration { message: String },
     #[error(transparent)]
     Provider(#[from] LlmProviderError),
 }

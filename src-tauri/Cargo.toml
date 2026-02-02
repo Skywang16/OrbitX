@@ -85,6 +85,11 @@ rmp-serde = "1.1"
 sha2 = "0.10"
 hex = "0.4"
 
+# OAuth 支持
+tiny_http = "0.12"
+getrandom = "0.2"
+serde_urlencoded = "0.7"
+
 # 主机名获取
 hostname = "0.4"
 # 跨平台机器 UID 获取

@@ -24,7 +24,8 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug,ignore=warn,globset=warn,hyper_util=info,hyper=info,reqwest=info";
+        let default_level =
+            "debug,ignore=warn,globset=warn,hyper_util=info,hyper=info,reqwest=info";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -287,7 +288,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
                     .unwrap_or(1024);
 
                 tracing::info!(
-                    "使用配置的 embedding 模型: {} @ {}, 维度: {}",
+                    "使用配置的 embedding 模型: {} @ {:?}, 维度: {}",
                     model.model,
                     model.api_url,
                     dimension
@@ -296,11 +297,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
                     embedding: RemoteEmbeddingConfig {
                         provider_config: LLMProviderConfig {
                             provider_type: model.provider.as_str().to_string(),
-                            api_key: model.api_key,
-                            api_url: Some(model.api_url),
+                            api_key: model.api_key.unwrap_or_default(),
+                            api_url: model.api_url,
                             options: model.options.as_ref().and_then(|v| v.as_object()).map(
                                 |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                             ),
+                            oauth_config: None,
                         },
                         model_name: model.model,
                         dimension,

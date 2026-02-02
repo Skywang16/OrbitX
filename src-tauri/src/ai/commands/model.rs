@@ -29,7 +29,7 @@ pub async fn ai_models_add(
     match state.ai_service.add_model(config.clone()).await {
         Ok(_) => {
             let mut sanitized = config.clone();
-            sanitized.api_key.clear();
+            sanitized.api_key = None;
             Ok(api_success!(sanitized, "ai.add_model_success"))
         }
         Err(error) => {
@@ -80,10 +80,10 @@ pub async fn ai_models_test_connection(
     config: AIModelConfig,
     state: State<'_, AIManagerState>,
 ) -> TauriApiResult<EmptyData> {
-    if config.api_url.trim().is_empty() {
+    if config.api_url.as_ref().map_or(true, |url| url.trim().is_empty()) {
         return Ok(api_error!("ai.api_url_empty"));
     }
-    if config.api_key.trim().is_empty() {
+    if config.api_key.as_ref().map_or(true, |key| key.trim().is_empty()) {
         return Ok(api_error!("ai.api_key_empty"));
     }
     if config.model.trim().is_empty() {

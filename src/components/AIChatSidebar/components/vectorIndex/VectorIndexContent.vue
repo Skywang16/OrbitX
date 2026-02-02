@@ -8,6 +8,7 @@
   import { getPathBasename } from '@/utils/path'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
   import type { AIModelTestConnectionInput } from '@/api/ai/types'
+  import { AuthType } from '@/types/oauth'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
@@ -183,6 +184,7 @@
     try {
       const modelData = {
         provider: 'openai_compatible' as const,
+        authType: AuthType.ApiKey,
         apiUrl: formData.apiUrl,
         apiKey: formData.apiKey,
         model: formData.modelName,
@@ -206,6 +208,7 @@
     try {
       const testConfig: AIModelTestConnectionInput = {
         provider: 'openai_compatible',
+        authType: AuthType.ApiKey,
         apiUrl: formData.apiUrl,
         apiKey: formData.apiKey,
         model: formData.modelName,

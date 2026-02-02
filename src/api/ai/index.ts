@@ -1,6 +1,6 @@
 import type { AIModelConfig } from '@/types'
 import { invoke } from '@/utils/request'
-import type { AIModelCreateInput, AIModelUpdateInput, AIModelTestConnectionInput } from './types'
+import type { AIModelCreateInput, AIModelTestConnectionInput, AIModelUpdateInput } from './types'
 
 export class AiApi {
   getModels = async (): Promise<AIModelConfig[]> => {
@@ -12,11 +12,13 @@ export class AiApi {
     const config: AIModelConfig = {
       id: crypto.randomUUID(),
       provider: model.provider,
+      authType: model.authType,
       apiUrl: model.apiUrl,
       apiKey: model.apiKey,
       model: model.model,
       modelType: model.modelType,
       options: model.options,
+      oauthConfig: model.oauthConfig,
       useCustomBaseUrl: model.useCustomBaseUrl,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -40,6 +42,7 @@ export class AiApi {
     const payload: AIModelConfig = {
       id: crypto.randomUUID(),
       provider: config.provider,
+      authType: config.authType,
       apiUrl: config.apiUrl,
       apiKey: config.apiKey,
       model: config.model,

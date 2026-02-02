@@ -11,6 +11,15 @@ CREATE TABLE IF NOT EXISTS ai_models (
     model_type TEXT DEFAULT 'chat' CHECK (model_type IN ('chat', 'embedding')),
     config_json TEXT,
     use_custom_base_url INTEGER DEFAULT 0,
+    
+    -- OAuth 支持
+    auth_type TEXT NOT NULL DEFAULT 'api_key' CHECK (auth_type IN ('api_key', 'oauth')),
+    oauth_provider TEXT CHECK (oauth_provider IN ('openai_codex', 'claude_pro', 'gemini_advanced') OR oauth_provider IS NULL),
+    oauth_refresh_token_encrypted TEXT,
+    oauth_access_token_encrypted TEXT,
+    oauth_token_expires_at INTEGER,
+    oauth_metadata TEXT,  -- JSON: {"account_id": "...", "subscription_tier": "..."}
+    
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(provider, model_name)
