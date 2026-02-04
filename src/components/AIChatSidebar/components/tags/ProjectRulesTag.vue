@@ -78,8 +78,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background-color: var(--bg-500);
-    border: 1px solid var(--border-400);
+    background-color: var(--bg-400);
+    border: 1px solid var(--border-300);
     border-radius: var(--border-radius-sm);
     padding: 4px 8px;
     font-size: 12px;
@@ -90,8 +90,8 @@
   }
 
   .tag-content:hover {
-    background-color: var(--bg-400);
-    border-color: var(--border-300);
+    background-color: var(--bg-500);
+    border-color: var(--border-200);
     color: var(--text-200);
   }
 

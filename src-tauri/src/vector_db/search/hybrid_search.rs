@@ -56,7 +56,7 @@ impl HybridSearchEngine {
             })
             .collect();
 
-        final_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        final_results.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         Ok(final_results)
     }
@@ -113,7 +113,7 @@ impl HybridSearchEngine {
         }
 
         // 按分数排序
-        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        scored_results.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         Ok(scored_results)
     }

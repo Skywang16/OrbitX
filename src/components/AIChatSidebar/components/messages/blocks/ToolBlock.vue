@@ -804,12 +804,12 @@
 
   .tool-result::before {
     top: 0;
-    background: linear-gradient(to bottom, var(--bg-200) 0%, transparent 100%);
+    background: linear-gradient(to bottom, var(--bg-50) 0%, transparent 100%);
   }
 
   .tool-result::after {
     bottom: 0;
-    background: linear-gradient(to top, var(--bg-200) 0%, transparent 100%);
+    background: linear-gradient(to top, var(--bg-50) 0%, transparent 100%);
   }
 
   .result-wrapper {
@@ -826,7 +826,7 @@
   }
 
   .result-wrapper::-webkit-scrollbar-track {
-    background: var(--bg-200);
+    background: var(--bg-100);
     border-radius: 4px;
   }
 
@@ -899,7 +899,7 @@
 
   /* Shell 工具样式 */
   .tool-block-shell {
-    background: var(--bg-200);
+    background: var(--bg-100);
     border: 1px solid var(--border-200);
     border-radius: 8px;
     overflow: hidden;

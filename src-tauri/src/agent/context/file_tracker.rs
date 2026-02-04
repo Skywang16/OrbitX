@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 
 use crate::agent::error::AgentResult;
@@ -65,6 +66,9 @@ pub struct FileContextTracker {
     stale: RwLock<HashSet<String>>,
     recently_modified: RwLock<HashSet<String>>,
     recently_agent_edits: RwLock<HashSet<String>>,
+    
+    /// Track file modification times when files are read
+    file_mtimes: RwLock<HashMap<String, SystemTime>>,
 }
 
 impl FileContextTracker {
@@ -79,6 +83,7 @@ impl FileContextTracker {
             stale: RwLock::new(HashSet::new()),
             recently_modified: RwLock::new(HashSet::new()),
             recently_agent_edits: RwLock::new(HashSet::new()),
+            file_mtimes: RwLock::new(HashMap::new()),
         }
     }
 
@@ -186,6 +191,53 @@ impl FileContextTracker {
     pub async fn take_recent_agent_edits(&self) -> Vec<String> {
         let mut guard = self.recently_agent_edits.write().await;
         guard.drain().collect()
+    }
+    
+    /// Record the modification time of a file when it's read
+    pub async fn record_file_mtime(&self, path: impl AsRef<Path>) -> AgentResult<()> {
+        let normalized = self.normalized_path(path.as_ref());
+        let absolute_path = self.workspace_root
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(&self.workspace_path))
+            .join(&normalized);
+        
+        if let Ok(metadata) = tokio::fs::metadata(&absolute_path).await {
+            if let Ok(mtime) = metadata.modified() {
+                self.file_mtimes.write().await.insert(normalized, mtime);
+            }
+        }
+        Ok(())
+    }
+    
+    /// Check if a file has been modified since it was last read
+    /// Returns an error if the file has not been read yet or has been modified
+    pub async fn assert_file_not_modified(&self, path: impl AsRef<Path>) -> AgentResult<()> {
+        let normalized = self.normalized_path(path.as_ref());
+        let absolute_path = self.workspace_root
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(&self.workspace_path))
+            .join(&normalized);
+        
+        let mtimes = self.file_mtimes.read().await;
+        let recorded_mtime = mtimes.get(&normalized).ok_or_else(|| {
+            crate::agent::error::AgentError::Internal(format!(
+                "File '{}' has not been read in this session. Please use read_file first.",
+                normalized
+            ))
+        })?;
+        
+        if let Ok(metadata) = tokio::fs::metadata(&absolute_path).await {
+            if let Ok(current_mtime) = metadata.modified() {
+                if current_mtime > *recorded_mtime {
+                    return Err(crate::agent::error::AgentError::Internal(format!(
+                        "File '{}' has been modified since it was last read. Please read the file again before editing.",
+                        normalized
+                    )));
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     fn normalized_path(&self, path: &Path) -> String {

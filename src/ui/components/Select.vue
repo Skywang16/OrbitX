@@ -371,7 +371,6 @@
 
   .x-select--open .x-select__input {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-alpha);
   }
 
   .x-select--disabled .x-select__input {

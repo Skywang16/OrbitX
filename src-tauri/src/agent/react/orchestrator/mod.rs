@@ -459,33 +459,14 @@ impl ReactOrchestrator {
                         fabricated_tool_output_count =
                             fabricated_tool_output_count.saturating_add(1);
 
-                        if let Some(id) = &text_stream_id {
-                            let note = if fabricated_tool_output_count == 1 {
-                                "⚠️ Invalid tool output text. Retrying once."
-                            } else {
-                                "⚠️ Invalid tool output text. Aborting."
-                            };
-                            let _ = context
-                                .assistant_update_block(
-                                    id,
-                                    Block::Text(TextBlock {
-                                        id: id.clone(),
-                                        content: note.to_string(),
-                                        is_streaming: false,
-                                    }),
-                                )
-                                .await;
-                        }
+                        let note = if fabricated_tool_output_count == 1 {
+                            "⚠️ Invalid tool output detected. Retrying..."
+                        } else {
+                            "⚠️ Invalid tool output detected again. Aborting."
+                        };
+                        tracing::warn!("{}", note);
 
                         if fabricated_tool_output_count == 1 {
-                            let reminder = "You must NEVER claim tool results in plain text. \
-If a tool is needed, emit a tool call; otherwise reply without tool-result language.";
-                            let _ = context
-                                .set_system_prompt_overlay(Some(SystemPrompt::Text(format!(
-                                    "<system-reminder type=\"invalid-tool-output\">\n{}\n</system-reminder>",
-                                    reminder
-                                ))))
-                                .await;
                             continue;
                         }
 

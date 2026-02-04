@@ -552,6 +552,11 @@ Edit Modes:
             Err(err) => return Ok(error_result(err.to_string())),
         };
 
+        // 在编辑前检查文件是否已被修改（需要先 read_file）
+        if let Err(e) = context.file_tracker().assert_file_not_modified(path.as_path()).await {
+            return Ok(error_result(e.to_string()));
+        }
+        
         let result = match args.mode {
             EditMode::Replace { old_text, new_text } => {
                 let original = match Self::load_existing_text(&path).await {
@@ -849,6 +854,9 @@ Edit Modes:
                 FileRecordSource::AgentEdited,
             ))
             .await?;
+        
+        // 更新文件 mtime，以便下次编辑前重新检查
+        context.file_tracker().record_file_mtime(path.as_path()).await?;
 
         Ok(result)
     }

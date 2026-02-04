@@ -51,11 +51,16 @@ impl FileStore {
     }
 
     /// 获取文件对应的向量文件路径
-    fn get_vector_file_path(&self, source_file: &Path) -> PathBuf {
+    fn get_vector_file_path(&self, source_file: &Path) -> Result<PathBuf> {
         // 将源文件路径转换为相对于项目根目录的路径
         let relative_path = source_file
             .strip_prefix(&self.project_root)
-            .unwrap_or(source_file);
+            .map_err(|_| {
+                VectorDbError::Index(format!(
+                    "Source file is outside project root: {}",
+                    source_file.display()
+                ))
+            })?;
 
         // 在 vectors 目录下创建对应的目录结构
         let vector_dir = self
@@ -71,7 +76,7 @@ impl FileStore {
                 .unwrap_or("unknown")
         );
 
-        vector_dir.join(file_name)
+        Ok(vector_dir.join(file_name))
     }
 
     /// 保存单个文件的所有向量数据
@@ -80,7 +85,7 @@ impl FileStore {
         source_file: &Path,
         chunks: &[(ChunkId, Vec<f32>)],
     ) -> Result<()> {
-        let vector_file = self.get_vector_file_path(source_file);
+        let vector_file = self.get_vector_file_path(source_file)?;
 
         // 确保目录存在
         if let Some(parent) = vector_file.parent() {
@@ -101,7 +106,7 @@ impl FileStore {
 
     /// 加载单个文件的所有向量数据
     pub fn load_file_vectors(&self, source_file: &Path) -> Result<FileVectors> {
-        let vector_file = self.get_vector_file_path(source_file);
+        let vector_file = self.get_vector_file_path(source_file)?;
 
         if !vector_file.exists() {
             return Err(VectorDbError::FileNotFound(format!(
@@ -117,7 +122,7 @@ impl FileStore {
 
     /// 删除文件的向量数据
     pub fn delete_file_vectors(&self, source_file: &Path) -> Result<()> {
-        let vector_file = self.get_vector_file_path(source_file);
+        let vector_file = self.get_vector_file_path(source_file)?;
         if vector_file.exists() {
             fs::remove_file(&vector_file)?;
         }
@@ -126,7 +131,7 @@ impl FileStore {
 
     /// 保存文件元数据
     pub fn save_file_metadata(&self, metadata: &FileMetadata) -> Result<()> {
-        let mut all_metadata = self.load_all_file_metadata().unwrap_or_default();
+        let mut all_metadata = self.load_all_file_metadata()?;
         all_metadata.insert(metadata.path.clone(), metadata.clone());
 
         let file_path = self.metadata_path.join("files.json");
@@ -152,7 +157,7 @@ impl FileStore {
         self.delete_file_vectors(file_path)?;
 
         // 删除元数据
-        let mut all_metadata = self.load_all_file_metadata().unwrap_or_default();
+        let mut all_metadata = self.load_all_file_metadata()?;
         all_metadata.remove(file_path);
 
         let metadata_file = self.metadata_path.join("files.json");

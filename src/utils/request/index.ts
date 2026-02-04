@@ -73,11 +73,14 @@ export class APIClient {
     const timeout = options?.timeout || 300000
 
     return new Promise((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout | null = null
       const abortHandler = () => {
+        this.cleanup(options?.signal, abortHandler, timeoutId || undefined)
         reject(new APIError('Request was aborted', 'ABORTED'))
       }
 
-      const timeoutId: NodeJS.Timeout = setTimeout(() => {
+      timeoutId = setTimeout(() => {
+        this.cleanup(options?.signal, abortHandler, timeoutId || undefined)
         reject(new APIError(`Request timeout after ${timeout}ms`, 'TIMEOUT'))
       }, timeout)
 
@@ -90,12 +93,12 @@ export class APIClient {
       tauriInvoke<T>(command, args)
         .then(result => {
           // 清理资源
-          this.cleanup(options?.signal, abortHandler, timeoutId)
+          this.cleanup(options?.signal, abortHandler, timeoutId || undefined)
           resolve(result)
         })
         .catch(error => {
           // 清理资源
-          this.cleanup(options?.signal, abortHandler, timeoutId)
+          this.cleanup(options?.signal, abortHandler, timeoutId || undefined)
           reject(error)
         })
     })

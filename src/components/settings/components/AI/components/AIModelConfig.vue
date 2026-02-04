@@ -885,7 +885,6 @@
 
   .form-input:focus {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 
   .form-input.mono {

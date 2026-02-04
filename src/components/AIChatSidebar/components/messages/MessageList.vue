@@ -157,7 +157,7 @@
   }
 
   .message-list::-webkit-scrollbar-track {
-    background: var(--bg-200);
+    background: var(--bg-100);
     border-radius: 4px;
   }
 

@@ -733,6 +733,9 @@ Examples:
                 FileRecordSource::ReadTool,
             ))
             .await?;
+        
+        // 记录文件的 mtime，用于后续编辑前的检查
+        context.file_tracker().record_file_mtime(path.as_path()).await?;
 
         context
             .note_agent_read_snapshot(path.as_path(), &raw_content)
