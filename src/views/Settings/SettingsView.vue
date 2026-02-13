@@ -10,10 +10,10 @@
   import { configApi } from '@/api/config'
   import { onMounted, ref, nextTick } from 'vue'
   import { debounce } from 'lodash-es'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useEditorStore } from '@/stores/Editor'
 
   const { t } = useI18n()
-  const tabManagerStore = useTabManagerStore()
+  const tabManagerStore = useEditorStore()
 
   const currentTabId = tabManagerStore.activeTabId
   const savedSection = currentTabId ? tabManagerStore.getSettingsTabSection(currentTabId) : undefined

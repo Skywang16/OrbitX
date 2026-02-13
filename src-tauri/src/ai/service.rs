@@ -1,7 +1,7 @@
 use crate::ai::error::{AIServiceError, AIServiceResult};
 use crate::ai::types::{AIModelConfig, AIProvider, ModelType};
-use crate::storage::DatabaseManager;
 use crate::storage::repositories::AIModels;
+use crate::storage::DatabaseManager;
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use reqwest::{Client, StatusCode};
@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct AIService {
@@ -160,7 +160,7 @@ impl AIService {
 
         match model.provider {
             AIProvider::Anthropic => {
-                let url = join_url(model.api_url.trim(), "v1/messages");
+                let url = join_url(model.api_url.trim(), "messages");
                 let headers = header_map(&[
                     ("x-api-key", model.api_key.clone()),
                     ("anthropic-version", "2023-06-01".to_string()),
@@ -180,7 +180,7 @@ impl AIService {
                 }))
             }
             AIProvider::OpenAiCompatible => {
-                let url = join_url(model.api_url.trim(), "v1/chat/completions");
+                let url = join_url(model.api_url.trim(), "chat/completions");
                 let headers =
                     header_map(&[("authorization", format!("Bearer {}", model.api_key))])?;
                 let payload = basic_chat_payload(&model.model);
@@ -207,8 +207,6 @@ impl AIService {
             .entry(CONTENT_TYPE)
             .or_insert(HeaderValue::from_static("application/json"));
 
-        debug!("开始{}连接测试: {}", request.provider_label, request.url);
-
         let response = client
             .post(&request.url)
             .headers(headers)
@@ -224,10 +222,6 @@ impl AIService {
 
         // 成功状态码：2xx
         if status.is_success() {
-            info!(
-                "{} connection test successful, status code {}",
-                request.provider_label, status
-            );
             return Ok("Connection successful".to_string());
         }
 
@@ -252,10 +246,6 @@ impl AIService {
         // 400: 请求格式错误，但说明服务器可达
         // 429: 请求过多，但说明认证成功
         if request.tolerated.iter().any(|code| *code == status) {
-            info!(
-                "{} connection test successful (tolerated status: {})",
-                request.provider_label, status
-            );
             return Ok("Connection successful".to_string());
         }
 
@@ -321,12 +311,7 @@ fn basic_chat_payload(model: &str) -> Value {
 fn join_url(base: &str, suffix: &str) -> String {
     let base = base.trim_end_matches('/');
     let suffix = suffix.trim_start_matches('/');
-
-    if base.ends_with("/v1") && suffix.starts_with("v1/") {
-        format!("{}/{}", base, &suffix[3..])
-    } else {
-        format!("{}/{}", base, suffix)
-    }
+    format!("{}/{}", base, suffix)
 }
 
 const TOLERATED_STANDARD_CODES: &[StatusCode] =

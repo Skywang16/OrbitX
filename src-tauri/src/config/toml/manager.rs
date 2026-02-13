@@ -15,7 +15,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 use tokio::sync::broadcast;
-use tracing::debug;
 
 /// TOML配置管理器
 pub struct TomlConfigManager {
@@ -43,7 +42,6 @@ impl TomlConfigManager {
             event_sender,
         };
 
-        tracing::info!("TOML配置管理器初始化完成");
         Ok(manager)
     }
 
@@ -128,8 +126,6 @@ impl TomlConfigManager {
     where
         T: Serialize,
     {
-        debug!("更新配置节: {}", section);
-
         let mut current_config = {
             let cache = self
                 .config_cache
@@ -237,8 +233,6 @@ impl TomlConfigManager {
         base_config: &AppConfig,
         partial_config: Value,
     ) -> ConfigResult<AppConfig> {
-        debug!("开始合并配置");
-
         // 将基础配置转换为JSON值
         let mut base_value = serde_json::to_value(base_config)?;
 

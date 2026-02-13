@@ -4,7 +4,7 @@ use crate::config::error::{TomlConfigError, TomlConfigResult};
 use crate::config::types::AppConfig;
 use std::{io, path::PathBuf};
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 /// TOML配置写入器
 pub struct TomlConfigWriter {
@@ -58,9 +58,6 @@ impl TomlConfigWriter {
         for attempt in 1..=max_retries {
             match self.atomic_write_config(content).await {
                 Ok(()) => {
-                    if attempt > 1 {
-                        info!("配置文件在第{}次尝试后写入成功", attempt);
-                    }
                     return Ok(());
                 }
                 Err(e) => {
@@ -89,10 +86,7 @@ impl TomlConfigWriter {
         let backup_path = if self.config_path.exists() {
             let backup = self.config_path.with_extension("backup");
             match fs::copy(&self.config_path, &backup).await {
-                Ok(_) => {
-                    debug!("已创建配置备份: {}", backup.display());
-                    Some(backup)
-                }
+                Ok(_) => Some(backup),
                 Err(e) => {
                     warn!("创建配置备份失败: {}", e);
                     None
@@ -102,13 +96,9 @@ impl TomlConfigWriter {
             None
         };
 
-        debug!("尝试直接写入配置文件");
-
         // 直接写入配置文件
         match fs::write(&self.config_path, content).await {
             Ok(()) => {
-                debug!("配置文件写入成功");
-
                 // 删除备份文件（如果存在）
                 if let Some(backup) = backup_path {
                     let _ = fs::remove_file(&backup).await;
@@ -138,8 +128,6 @@ impl TomlConfigWriter {
                 // 尝试重命名
                 match fs::rename(&temp_path, &self.config_path).await {
                     Ok(()) => {
-                        debug!("原子写入成功");
-
                         // 删除备份文件（如果存在）
                         if let Some(backup) = backup_path {
                             let _ = fs::remove_file(&backup).await;
@@ -154,8 +142,6 @@ impl TomlConfigWriter {
                         if let Some(backup) = backup_path {
                             if let Err(restore_err) = fs::copy(&backup, &self.config_path).await {
                                 warn!("恢复配置备份失败: {}", restore_err);
-                            } else {
-                                info!("已恢复配置备份");
                             }
                             let _ = fs::remove_file(&backup).await;
                         }
@@ -178,8 +164,6 @@ impl TomlConfigWriter {
             let backup_path = self.config_path.with_extension("backup");
             if let Err(e) = fs::copy(&self.config_path, &backup_path).await {
                 warn!("Failed to create config backup: {}", e);
-            } else {
-                info!("Created config backup: {:?}", backup_path);
             }
         }
 

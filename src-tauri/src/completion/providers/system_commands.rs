@@ -123,8 +123,9 @@ impl SystemCommandsProvider {
             // 使用模糊匹配器进行匹配，但排除完全相同的命令（没有补全价值）
             if command != pattern {
                 if let Some(score) = self.matcher.fuzzy_match(command, pattern) {
+                    let normalized = ((score as f64) / 100.0 * 60.0 + 40.0).min(100.0);
                     let item = CompletionItem::new(command.clone(), CompletionType::Command)
-                        .with_score(score as f64)
+                        .with_score(normalized)
                         .with_description(format!("系统命令: {command}"))
                         .with_source("system_commands".to_string());
 

@@ -16,10 +16,6 @@ pub async fn window_manage_state<R: Runtime>(
     state: State<'_, WindowState>,
 ) -> TauriApiResult<WindowStateBatchResponse> {
     let start_time = Instant::now();
-    debug!(
-        "Batch window state operations started: operations_count={}",
-        request.operations.len()
-    );
 
     let mut results = Vec::new();
     let mut overall_success = true;
@@ -31,8 +27,6 @@ pub async fn window_manage_state<R: Runtime>(
         Ok(id) => id,
         Err(_) => return Ok(api_error!("window.get_window_id_failed")),
     };
-
-    debug!("Using window id: {}", window_id);
 
     let window = match app.get_webview_window(&window_id) {
         Some(window) => window,
@@ -55,13 +49,7 @@ pub async fn window_manage_state<R: Runtime>(
 
     let processing_time = start_time.elapsed().as_millis();
 
-    if overall_success {
-        debug!(
-            "Batch window state operations succeeded: operations_count={}, elapsed_ms={}",
-            results.len(),
-            processing_time
-        );
-    } else {
+    if !overall_success {
         warn!(
             "Batch window state operations partially failed: operations_count={}, elapsed_ms={}",
             results.len(),
@@ -82,7 +70,6 @@ async fn process_single_window_operation<R: Runtime>(
     state: &State<'_, WindowState>,
 ) -> WindowStateOperationResult {
     let operation_start = Instant::now();
-    debug!("Processing window operation: {:?}", request.operation);
 
     let result = match &request.operation {
         WindowStateOperation::GetState => handle_get_state(state).await,
@@ -96,18 +83,12 @@ async fn process_single_window_operation<R: Runtime>(
     let processing_time = operation_start.elapsed().as_millis();
 
     match result {
-        Ok(data) => {
-            debug!(
-                "Window operation succeeded: {:?}, elapsed_ms: {}",
-                request.operation, processing_time
-            );
-            WindowStateOperationResult {
-                operation: request.operation.clone(),
-                success: true,
-                data: Some(data),
-                error: None,
-            }
-        }
+        Ok(data) => WindowStateOperationResult {
+            operation: request.operation.clone(),
+            success: true,
+            data: Some(data),
+            error: None,
+        },
         Err(error) => {
             error!(
                 "Window operation failed: {:?}, error: {}, elapsed_ms: {}",
@@ -125,8 +106,6 @@ async fn process_single_window_operation<R: Runtime>(
 
 // 处理获取窗口状态操作
 async fn handle_get_state(state: &State<'_, WindowState>) -> Result<serde_json::Value, String> {
-    debug!("Handling get window state operation");
-
     let always_on_top = state
         .with_state_manager(|manager| Ok(manager.get_always_on_top()))
         .await
@@ -181,8 +160,6 @@ async fn handle_set_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("Handling window always-on-top assignment");
-
     let always_on_top = match request.params.as_ref().and_then(|p| p.always_on_top) {
         Some(value) => value,
         None => return Err(t!("window.missing_always_on_top_param")),
@@ -212,8 +189,6 @@ async fn handle_toggle_always_on_top<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("Handling window always-on-top toggle");
-
     let new_state = state
         .with_state_manager_mut(|manager| Ok(manager.toggle_always_on_top()))
         .await
@@ -232,8 +207,6 @@ async fn handle_reset_state<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     state: &State<'_, WindowState>,
 ) -> Result<serde_json::Value, String> {
-    debug!("Handling window state reset");
-
     if state
         .with_state_manager_mut(|manager| {
             manager.reset();

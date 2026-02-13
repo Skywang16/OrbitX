@@ -131,26 +131,43 @@ impl ContextAwareProvider {
             .unwrap_or_default()
             .as_secs();
 
-        // 使用智能提取器提取实体
+        // 使用智能提取器提取实体（可失败，失败时不影响记录）
         use crate::completion::smart_extractor::SmartExtractor;
         let extractor = SmartExtractor::global();
-        let extraction_results = match extractor.extract_entities(&command, &output) {
-            Ok(results) => results,
+        let extracted_entities = match extractor.extract_entities(&command, &output) {
+            Ok(results) => {
+                let mut map = HashMap::new();
+                for result in results {
+                    map.entry(result.entity_type)
+                        .or_insert_with(Vec::new)
+                        .push(result.value);
+                }
+                map
+            }
             Err(error) => {
                 warn!(error = %error, "completion.smart_extractor_failed");
-                Vec::new()
+                HashMap::new()
             }
         };
 
-        // 转换为旧格式
-        let mut extracted_entities = HashMap::new();
-        for result in extraction_results {
-            extracted_entities
-                .entry(result.entity_type)
-                .or_insert_with(Vec::new)
-                .push(result.value);
-        }
+        self.record_command_output_with_entities(
+            command,
+            output,
+            working_directory,
+            extracted_entities,
+            timestamp,
+        )
+    }
 
+    /// 记录命令输出（调用方已提供提取的实体）
+    pub fn record_command_output_with_entities(
+        &self,
+        command: String,
+        output: String,
+        working_directory: String,
+        extracted_entities: HashMap<String, Vec<String>>,
+        timestamp: u64,
+    ) -> CompletionProviderResult<()> {
         let record = CommandOutputRecord {
             command: command.clone(),
             output,
@@ -194,7 +211,7 @@ impl ContextAwareProvider {
                 })?;
 
         // 根据当前命令类型提供相应的补全
-        match current_command.as_str() {
+        match &*current_command {
             "kill" | "killall" => {
                 // 为 kill 命令提供 PID 补全
                 items.extend(self.get_pid_completions(&history)?);

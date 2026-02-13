@@ -1,37 +1,39 @@
-use std::process::Stdio;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
-use tokio::process::Command;
-use tokio::time::{timeout, Duration};
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
+use crate::agent::shell::{AgentShellExecutor, CommandStatus, ShellError};
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 
-const COMMAND_TIMEOUT_MS: u64 = 120_000;
-const MAX_COMMAND_LENGTH: usize = 1_000;
-const DANGEROUS_COMMANDS: &[&str] = &[
-    "rm -rf /",
-    "sudo rm -rf",
-    "format",
-    "fdisk",
-    "mkfs",
-    "dd if=/dev/",
-    "shutdown",
-    "reboot",
-    "halt",
-    "poweroff",
-];
+/// 默认超时时间（毫秒）
+const DEFAULT_TIMEOUT_MS: u64 = 120_000;
+
+/// 全局 Shell 执行器
+static SHELL_EXECUTOR: OnceLock<AgentShellExecutor> = OnceLock::new();
+
+fn get_executor() -> &'static AgentShellExecutor {
+    SHELL_EXECUTOR.get_or_init(AgentShellExecutor::new)
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ShellArgs {
+    /// 要执行的命令
     command: String,
+    /// 工作目录（可选）
+    cwd: Option<String>,
+    /// 是否后台运行（可选）
+    background: Option<bool>,
+    /// 超时时间毫秒（可选）
+    timeout_ms: Option<u64>,
 }
 
 pub struct ShellTool;
@@ -39,59 +41,6 @@ pub struct ShellTool;
 impl ShellTool {
     pub fn new() -> Self {
         Self
-    }
-
-    fn validate_command(command: &str) -> Result<(), String> {
-        if command.trim().is_empty() {
-            return Err("Command cannot be empty".to_string());
-        }
-
-        if command.len() > MAX_COMMAND_LENGTH {
-            return Err("Command too long, please break into shorter commands".to_string());
-        }
-
-        let lower = command.to_lowercase();
-        if DANGEROUS_COMMANDS
-            .iter()
-            .any(|danger| lower.contains(&danger.to_lowercase()))
-        {
-            return Err(format!(
-                "Dangerous command detected and blocked: {}",
-                command
-            ));
-        }
-
-        Ok(())
-    }
-
-    async fn execute(command: &str, cwd: &str) -> Result<(String, String, i32), String> {
-        let mut cmd = if cfg!(target_os = "windows") {
-            let mut c = Command::new("cmd");
-            c.arg("/C").arg(command);
-            c
-        } else {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-            let mut c = Command::new(shell);
-            c.arg("-lc").arg(command);
-            c
-        };
-
-        if !cwd.trim().is_empty() {
-            cmd.current_dir(cwd);
-        }
-
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        let output = timeout(Duration::from_millis(COMMAND_TIMEOUT_MS), cmd.output())
-            .await
-            .map_err(|_| format!("Command timed out after {} ms", COMMAND_TIMEOUT_MS))
-            .and_then(|result| result.map_err(|e| e.to_string()))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let exit_code = output.status.code().unwrap_or_default();
-
-        Ok((stdout, stderr, exit_code))
     }
 }
 
@@ -102,31 +51,21 @@ impl RunnableTool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "Executes a given shell command with optional timeout, ensuring proper handling and security measures.
+        "Executes a shell command with support for background execution and custom timeout.
 
-Before executing the command, please follow these steps:
+Usage:
+- command: The shell command to execute (required)
+- cwd: Working directory (optional, defaults to current workspace)
+- background: Run in background without waiting (optional, default false)
+- timeout_ms: Custom timeout in milliseconds (optional, default 120000ms)
 
-1. Directory Verification:
-   - If the command will create new directories or files, first use the list_files tool to verify the parent directory exists and is the correct location
-   - For example, before running \"mkdir foo/bar\", first use list_files to check that \"foo\" exists and is the intended parent directory
-
-2. Command Execution:
-   - Always quote file paths that contain spaces with double quotes (e.g., cd \"path with spaces/file.txt\")
-   - Examples of proper quoting:
-     - cd \"/Users/name/My Documents\" (correct)
-     - cd /Users/name/My Documents (incorrect - will fail)
-     - python \"/path/with spaces/script.py\" (correct)
-     - python /path/with spaces/script.py (incorrect - will fail)
-   - After ensuring proper quoting, execute the command.
-   - Capture the output of the command.
-
-Usage notes:
-  - The command argument is required.
-  - Commands will timeout after 120000ms (2 minutes).
-  - VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use orbit_search to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use read_file and list_files instead.
-  - If the output exceeds a certain limit, output will be truncated before being returned to you.
-  - Dangerous commands like 'rm -rf /', 'shutdown', 'reboot' are automatically blocked for safety.
-  - You MUST ensure that commands you run do not hang or require user input."
+Notes:
+- For long-running commands (e.g., dev servers), use background=true
+- Background commands return immediately with a command ID
+- Use read_terminal to check output of background commands
+- Dangerous commands like 'rm -rf /', 'shutdown' are blocked
+- Quote paths with spaces using double quotes
+- Avoid using cat/grep/find - use read_file/orbit_search instead"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -135,7 +74,21 @@ Usage notes:
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The shell command to execute. Examples: 'git status', 'npm test', 'cargo build'. IMPORTANT: Quote paths with spaces using double quotes. Avoid using cat/grep/find - use dedicated tools instead."
+                    "description": "The shell command to execute. Examples: 'git status', 'npm test', 'cargo build'."
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": "Working directory for the command. Defaults to current workspace."
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": "Run command in background without waiting. Use for long-running commands like dev servers."
+                },
+                "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 600000,
+                    "description": "Timeout in milliseconds (default: 120000, max: 600000)."
                 }
             },
             "required": ["command"]
@@ -145,7 +98,7 @@ Usage notes:
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata::new(ToolCategory::Execution, ToolPriority::Standard)
             .with_confirmation()
-            .with_timeout(Duration::from_millis(COMMAND_TIMEOUT_MS))
+            .with_timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS))
             .with_tags(vec!["shell".into(), "command".into()])
             .with_summary_key_arg("command")
     }
@@ -160,49 +113,176 @@ Usage notes:
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ShellArgs = serde_json::from_value(args)?;
-        if let Err(message) = ShellTool::validate_command(&args.command) {
-            return Ok(ToolResult {
-                content: vec![ToolResultContent::Error(message)],
-                is_error: true,
-                execution_time_ms: None,
-                ext_info: Some(json!({
-                    "command": args.command,
-                })),
-            });
-        }
+        let executor = get_executor();
 
-        match ShellTool::execute(&args.command, &context.cwd).await {
-            Ok((stdout, stderr, exit_code)) => {
-                // 构建输出字符串：如果有 stderr，显示它；否则显示 stdout
-                let output = if !stderr.is_empty() {
-                    format!("{}\n{}", stdout, stderr)
-                } else {
-                    stdout.clone()
-                };
+        // 确定工作目录
+        let cwd = args.cwd.as_deref().unwrap_or(&context.cwd);
 
-                Ok(ToolResult {
-                    content: vec![ToolResultContent::Success(output)],
-                    is_error: false,
-                    execution_time_ms: None,
-                    ext_info: Some(json!({
-                        "command": args.command,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                        "exitCode": exit_code,
-                    })),
-                })
+        // 确定超时时间
+        let timeout_duration = args
+            .timeout_ms
+            .map(Duration::from_millis)
+            .unwrap_or(Duration::from_millis(DEFAULT_TIMEOUT_MS));
+
+        // 是否后台运行
+        let is_background = args.background.unwrap_or(false);
+
+        if is_background {
+            // 后台执行
+            match executor
+                .execute_background(&args.command, cwd, Some(timeout_duration))
+                .await
+            {
+                Ok(command_id) => {
+                    // 等待一小段时间收集初始输出（最多 2 秒）
+                    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+                    // 获取当前输出和状态
+                    let output = executor
+                        .get_command_output(command_id)
+                        .await
+                        .unwrap_or_default();
+                    let status = executor
+                        .get_command_status(command_id)
+                        .await
+                        .unwrap_or(CommandStatus::Running { pid: None });
+
+                    let is_still_running = !status.is_terminal();
+                    let status_str = if is_still_running {
+                        "running"
+                    } else {
+                        "completed"
+                    };
+
+                    let message = if is_still_running {
+                        format!(
+                            "Command running in background (ID: {}). Initial output:\n{}",
+                            command_id,
+                            if output.is_empty() {
+                                "(no output yet)".to_string()
+                            } else {
+                                output.clone()
+                            }
+                        )
+                    } else {
+                        output.clone()
+                    };
+
+                    Ok(ToolResult {
+                        content: vec![ToolResultContent::Success(message)],
+                        status: ToolResultStatus::Success,
+                        cancel_reason: None,
+                        execution_time_ms: Some(2000),
+                        ext_info: Some(json!({
+                            "command": args.command,
+                            "cwd": cwd,
+                            "commandId": command_id,
+                            "isBackground": true,
+                            "status": status_str,
+                            "output": output,
+                        })),
+                    })
+                }
+                Err(e) => Ok(error_result(&args.command, cwd, &e)),
             }
-            Err(err) => Ok(ToolResult {
-                content: vec![ToolResultContent::Error(format!(
-                    "Command execution failed: {}",
-                    err
-                ))],
-                is_error: true,
-                execution_time_ms: None,
-                ext_info: Some(json!({
-                    "command": args.command,
-                })),
-            }),
+        } else {
+            // 同步执行
+            match executor
+                .execute(&args.command, cwd, Some(timeout_duration))
+                .await
+            {
+                Ok(result) => {
+                    let is_success = matches!(
+                        result.status,
+                        CommandStatus::Completed { exit_code, .. } if exit_code == 0
+                    );
+
+                    let exit_code = match &result.status {
+                        CommandStatus::Completed { exit_code, .. } => Some(*exit_code),
+                        _ => None,
+                    };
+
+                    Ok(ToolResult {
+                        content: vec![if is_success {
+                            ToolResultContent::Success(result.output.clone())
+                        } else {
+                            ToolResultContent::Error(result.output.clone())
+                        }],
+                        status: if is_success {
+                            ToolResultStatus::Success
+                        } else {
+                            ToolResultStatus::Error
+                        },
+                        cancel_reason: None,
+                        execution_time_ms: Some(result.duration_ms),
+                        ext_info: Some(json!({
+                            "command": args.command,
+                            "cwd": cwd,
+                            "commandId": result.command_id,
+                            "exitCode": exit_code,
+                            "durationMs": result.duration_ms,
+                            "isBackground": false,
+                            "outputTruncated": result.output_truncated,
+                            "status": result.status,
+                        })),
+                    })
+                }
+                Err(e) => Ok(error_result(&args.command, cwd, &e)),
+            }
         }
+    }
+}
+
+fn error_result(command: &str, cwd: &str, error: &ShellError) -> ToolResult {
+    let (message, status, tool_status, cancel_reason) = match error {
+        ShellError::Timeout(ms) => (
+            format!("Command timed out after {}ms", ms),
+            "timeout",
+            ToolResultStatus::Error,
+            None,
+        ),
+        ShellError::Aborted => (
+            "Command was aborted".to_string(),
+            "aborted",
+            ToolResultStatus::Cancelled,
+            Some("aborted".to_string()),
+        ),
+        ShellError::DangerousCommand(cmd) => (
+            format!("Dangerous command blocked: {}", cmd),
+            "blocked",
+            ToolResultStatus::Cancelled,
+            Some("blocked".to_string()),
+        ),
+        ShellError::ValidationFailed(msg) => (
+            format!("Validation failed: {}", msg),
+            "validation_error",
+            ToolResultStatus::Error,
+            None,
+        ),
+        ShellError::TooManyBackgroundCommands(max) => (
+            format!("Too many background commands (max: {})", max),
+            "limit_exceeded",
+            ToolResultStatus::Error,
+            None,
+        ),
+        _ => (
+            format!("Command failed: {}", error),
+            "failed",
+            ToolResultStatus::Error,
+            None,
+        ),
+    };
+
+    ToolResult {
+        content: vec![ToolResultContent::Error(message)],
+        status: tool_status,
+        cancel_reason,
+        execution_time_ms: None,
+        ext_info: Some(json!({
+            "command": command,
+            "cwd": cwd,
+            "status": status,
+            "error": error.to_string(),
+        })),
     }
 }

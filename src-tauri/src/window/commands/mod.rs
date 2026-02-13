@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 // Window state management container
 pub struct WindowState {
@@ -101,7 +101,7 @@ pub struct WindowConfigManager {
 pub struct WindowStateManager {
     cached_cwd: Option<PathBuf>,
     cached_home: Option<PathBuf>,
-    always_on_top: Arc<AtomicBool>,  // 复用pane.rs的Atomic模式
+    always_on_top: AtomicBool,
     last_update: Option<Instant>,
     cache_ttl: std::time::Duration,
 }
@@ -117,19 +117,19 @@ impl WindowStateManager {
         Self {
             cached_cwd: None,
             cached_home: None,
-            always_on_top: Arc::new(AtomicBool::new(false)),  // 复用pane.rs模式
+            always_on_top: AtomicBool::new(false),
             last_update: None,
             cache_ttl: std::time::Duration::from_secs(30),
         }
     }
 
     pub fn set_always_on_top(&mut self, value: bool) {
-        self.always_on_top.store(value, Ordering::Release);  // 原子写入
+        self.always_on_top.store(value, Ordering::Release); // 原子写入
         self.last_update = Some(Instant::now());
     }
 
     pub fn get_always_on_top(&self) -> bool {
-        self.always_on_top.load(Ordering::Acquire)  // 原子读取
+        self.always_on_top.load(Ordering::Acquire) // 原子读取
     }
 
     pub fn toggle_always_on_top(&mut self) -> bool {
@@ -220,8 +220,6 @@ impl Default for WindowConfigManager {
 
 impl WindowState {
     pub fn new() -> WindowStateResult<Self> {
-        debug!("Initialising window state container");
-
         let config_manager = Arc::new(Mutex::new(WindowConfigManager::new()));
         let state_manager = Arc::new(Mutex::new(WindowStateManager::new()));
 
@@ -231,7 +229,6 @@ impl WindowState {
             state_manager,
         };
 
-        debug!("Window state initialised");
         Ok(state)
     }
 

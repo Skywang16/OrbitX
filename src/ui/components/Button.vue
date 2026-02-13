@@ -98,9 +98,13 @@
     emit('click', event)
   }
 
-  const handleFocus = (_event: FocusEvent) => {}
+  const handleFocus = (event: FocusEvent) => {
+    void event
+  }
 
-  const handleBlur = (_event: FocusEvent) => {}
+  const handleBlur = (event: FocusEvent) => {
+    void event
+  }
 </script>
 
 <style>

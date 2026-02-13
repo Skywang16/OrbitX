@@ -1,7 +1,7 @@
 {
   "name": "orbitx",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OrbitX - A modern terminal application with AI assistant built with Vue.js and Tauri",
   "type": "module",
   "author": "Your Name <your.email@example.com>",
@@ -36,6 +36,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-autostart": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.4.1",
     "@tauri-apps/plugin-http": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.0",

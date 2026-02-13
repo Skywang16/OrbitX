@@ -6,93 +6,19 @@ use crate::agent::context::SummaryResult;
 use crate::agent::core::executor::{
     ExecuteTaskParams, FileContextStatus, TaskExecutor, TaskSummary,
 };
-use crate::agent::events::TaskProgressPayload;
-use crate::agent::ui::{UiConversation, UiMessage};
+use crate::agent::tools::registry::ToolConfirmationDecision;
+use crate::agent::types::TaskEvent;
+use crate::storage::repositories::AppPreferences;
+use crate::storage::{DatabaseManager, UnifiedCache};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
+use serde::Deserialize;
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 
 /// TaskExecutor状态管理
 pub struct TaskExecutorState {
     pub executor: Arc<TaskExecutor>,
-}
-
-#[tauri::command]
-pub async fn agent_delete_conversation(
-    state: State<'_, TaskExecutorState>,
-    conversation_id: i64,
-) -> TauriApiResult<EmptyData> {
-    let persistence = state.executor.agent_persistence();
-    match persistence.conversations().delete(conversation_id).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to delete conversation: {}", e);
-            Ok(api_error!("agent.conversation.delete_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn agent_update_conversation_title(
-    state: State<'_, TaskExecutorState>,
-    conversation_id: i64,
-    title: String,
-) -> TauriApiResult<EmptyData> {
-    let persistence = state.executor.agent_persistence();
-    match persistence
-        .conversations()
-        .update_title(conversation_id, &title)
-        .await
-    {
-        Ok(_) => {
-            if let Err(err) = state
-                .executor
-                .ui_persistence()
-                .update_conversation_title(conversation_id, &title)
-                .await
-            {
-                tracing::warn!("Failed to update UI conversation title: {}", err);
-            }
-            Ok(api_success!())
-        }
-        Err(e) => {
-            tracing::error!("Failed to update conversation title: {}", e);
-            Ok(api_error!("agent.conversation.update_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn agent_ui_get_conversations(
-    state: State<'_, TaskExecutorState>,
-) -> TauriApiResult<Vec<UiConversation>> {
-    match state.executor.ui_persistence().list_conversations().await {
-        Ok(conversations) => Ok(api_success!(conversations)),
-        Err(e) => {
-            tracing::error!("Failed to list UI conversations: {}", e);
-            Ok(api_error!("agent.ui.conversations_failed"))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn agent_ui_get_messages(
-    state: State<'_, TaskExecutorState>,
-    conversation_id: i64,
-) -> TauriApiResult<Vec<UiMessage>> {
-    match state
-        .executor
-        .ui_persistence()
-        .get_messages(conversation_id)
-        .await
-    {
-        Ok(messages) => Ok(api_success!(messages)),
-        Err(e) => {
-            tracing::error!("Failed to fetch UI messages: {}", e);
-            Ok(api_error!("agent.ui.messages_failed"))
-        }
-    }
 }
 
 impl TaskExecutorState {
@@ -106,28 +32,13 @@ impl TaskExecutorState {
 pub async fn agent_execute_task(
     state: State<'_, TaskExecutorState>,
     params: ExecuteTaskParams,
-    channel: Channel<TaskProgressPayload>,
+    channel: Channel<TaskEvent>,
 ) -> TauriApiResult<EmptyData> {
     match state.executor.execute_task(params, channel).await {
-        Ok(_) => Ok(api_success!()),
+        Ok(_context) => Ok(api_success!()),
         Err(e) => {
             tracing::error!("Failed to execute Agent task: {}", e);
             Ok(api_error!("agent.execute_failed"))
-        }
-    }
-}
-
-/// 暂停任务
-#[tauri::command]
-pub async fn agent_pause_task(
-    state: State<'_, TaskExecutorState>,
-    task_id: String,
-) -> TauriApiResult<EmptyData> {
-    match state.executor.pause_task(&task_id).await {
-        Ok(_) => Ok(api_success!()),
-        Err(e) => {
-            tracing::error!("Failed to pause task: {}", e);
-            Ok(api_error!("agent.pause_failed"))
         }
     }
 }
@@ -148,18 +59,50 @@ pub async fn agent_cancel_task(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolConfirmationParams {
+    pub task_id: String,
+    pub request_id: String,
+    pub decision: ToolConfirmationDecision,
+}
+
+/// 回传工具确认结果
+#[tauri::command]
+pub async fn agent_tool_confirm(
+    state: State<'_, TaskExecutorState>,
+    params: ToolConfirmationParams,
+) -> TauriApiResult<EmptyData> {
+    let ctx = state
+        .executor
+        .active_tasks()
+        .get(&params.task_id)
+        .map(|entry| Arc::clone(entry.value()));
+
+    let ctx = match ctx {
+        Some(ctx) => ctx,
+        None => return Ok(api_error!("agent.task_not_found")),
+    };
+
+    let ok = ctx
+        .tool_registry()
+        .resolve_confirmation(&params.request_id, params.decision);
+
+    if ok {
+        Ok(api_success!())
+    } else {
+        Ok(api_error!("agent.tool_confirm_not_found"))
+    }
+}
+
 /// 列出任务
 #[tauri::command]
 pub async fn agent_list_tasks(
     state: State<'_, TaskExecutorState>,
-    conversation_id: Option<i64>,
+    session_id: Option<i64>,
     status_filter: Option<String>,
 ) -> TauriApiResult<Vec<TaskSummary>> {
-    match state
-        .executor
-        .list_tasks(conversation_id, status_filter)
-        .await
-    {
+    match state.executor.list_tasks(session_id, status_filter).await {
         Ok(tasks) => Ok(api_success!(tasks)),
         Err(e) => {
             tracing::error!("Failed to list tasks: {}", e);
@@ -172,13 +115,9 @@ pub async fn agent_list_tasks(
 #[tauri::command]
 pub async fn agent_get_file_context_status(
     state: State<'_, TaskExecutorState>,
-    conversation_id: i64,
+    session_id: i64,
 ) -> TauriApiResult<FileContextStatus> {
-    match state
-        .executor
-        .fetch_file_context_status(conversation_id)
-        .await
-    {
+    match state.executor.get_file_context_status(session_id).await {
         Ok(status) => Ok(api_success!(status)),
         Err(e) => {
             tracing::error!("Failed to fetch file context status: {}", e);
@@ -189,73 +128,58 @@ pub async fn agent_get_file_context_status(
 
 #[tauri::command]
 pub async fn agent_get_user_rules(
-    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
+    database: State<'_, Arc<DatabaseManager>>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<Option<String>> {
-    let rules = cache.get_user_rules().await;
-    Ok(api_success!(rules))
+    match AppPreferences::new(&database).get("agent.user_rules").await {
+        Ok(value) => {
+            let _ = cache.set_user_rules(value.clone()).await;
+            Ok(api_success!(value))
+        }
+        Err(e) => {
+            tracing::error!("Failed to load user rules: {}", e);
+            Ok(api_error!("agent.rules.load_failed"))
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn agent_set_user_rules(
     rules: Option<String>,
-    cache: State<'_, Arc<crate::storage::UnifiedCache>>,
+    database: State<'_, Arc<DatabaseManager>>,
+    cache: State<'_, Arc<UnifiedCache>>,
 ) -> TauriApiResult<EmptyData> {
-    cache.set_user_rules(rules).await.ok();
-    Ok(api_success!())
-}
-
-/// 手动触发会话摘要
-#[tauri::command]
-pub async fn agent_trigger_context_summary(
-    state: State<'_, TaskExecutorState>,
-    conversation_id: i64,
-    model_override: Option<String>,
-) -> TauriApiResult<Option<SummaryResult>> {
-    match state
-        .executor
-        .trigger_conversation_summary(conversation_id, model_override)
+    match AppPreferences::new(&database)
+        .set("agent.user_rules", rules.as_deref())
         .await
     {
-        Ok(result) => Ok(api_success!(result)),
+        Ok(_) => {
+            let _ = cache.set_user_rules(rules).await;
+            Ok(api_success!())
+        }
         Err(e) => {
-            tracing::error!("Failed to trigger conversation summary: {}", e);
-            Ok(api_error!("agent.context.summary_failed"))
+            tracing::error!("Failed to save user rules: {}", e);
+            Ok(api_error!("agent.rules.save_failed"))
         }
     }
 }
 
-// === 双轨架构新增命令 ===
-
+/// 手动触发会话摘要
 #[tauri::command]
-pub async fn agent_create_conversation(
+pub async fn agent_trigger_session_summary(
     state: State<'_, TaskExecutorState>,
-    title: Option<String>,
-    workspace_path: Option<String>,
-) -> TauriApiResult<i64> {
-    let title_clone = title.clone();
+    session_id: i64,
+    model_override: Option<String>,
+) -> TauriApiResult<Option<SummaryResult>> {
     match state
         .executor
-        .create_conversation(title, workspace_path)
+        .trigger_session_summary(session_id, model_override)
         .await
     {
-        Ok(conversation_id) => {
-            if let Err(err) = state
-                .executor
-                .ui_persistence()
-                .ensure_conversation(conversation_id, title_clone.as_deref())
-                .await
-            {
-                tracing::warn!(
-                    "Failed to initialize UI conversation {}: {}",
-                    conversation_id,
-                    err
-                );
-            }
-            Ok(api_success!(conversation_id))
-        }
+        Ok(result) => Ok(api_success!(result)),
         Err(e) => {
-            tracing::error!("Failed to create conversation: {}", e);
-            Ok(api_error!("agent.conversation.create_failed"))
+            tracing::error!("Failed to trigger session summary: {}", e);
+            Ok(api_error!("agent.context.summary_failed"))
         }
     }
 }

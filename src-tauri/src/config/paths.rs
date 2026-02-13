@@ -64,8 +64,8 @@ impl ConfigPaths {
         let app_data_dir = app_data_dir.as_ref().to_path_buf();
 
         // 一次性计算并缓存canonical路径
-        let canonical_app_dir = fs::canonicalize(&app_data_dir)
-            .unwrap_or_else(|_| app_data_dir.clone());
+        let canonical_app_dir =
+            fs::canonicalize(&app_data_dir).unwrap_or_else(|_| app_data_dir.clone());
 
         let config_dir = app_data_dir.join(crate::config::CONFIG_DIR_NAME);
         let themes_dir = config_dir.join(crate::config::THEMES_DIR_NAME);
@@ -134,7 +134,6 @@ impl ConfigPaths {
     /// 获取项目主题目录
     ///
     /// 返回项目根目录下的 config/themes 目录路径
-
     /// 确保所有必要的目录存在
     fn ensure_directories_exist(&self) -> ConfigPathsResult<()> {
         let directories = [

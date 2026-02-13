@@ -1,8 +1,8 @@
 use crate::config::TomlConfigManager;
 use crate::utils::{EmptyData, Language, LanguageManager, TauriApiResult};
-use std::sync::Arc;
 use crate::{api_error, api_success};
 use serde_json::Value;
+use std::sync::Arc;
 use tauri::{Emitter, State};
 
 #[tauri::command]

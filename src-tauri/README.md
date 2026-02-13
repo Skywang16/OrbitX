@@ -42,8 +42,6 @@ src-tauri/src/
 │   ├── registry.rs
 │   ├── service.rs
 │   └── providers/
-├── ck/
-│   └── commands.rs                # CK 索引管理与搜索命令
 ├── filesystem/
 │   └── commands.rs                # 文件系统与代码结构解析命令
 ├── config/

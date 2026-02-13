@@ -1,64 +1,35 @@
 <script setup lang="ts">
   import { useAIChatStore } from '@/components/AIChatSidebar'
-  import ContentRenderer from '@/components/ui/ContentRenderer.vue'
+  import EditorArea from '@/components/editor/EditorArea.vue'
   import TitleBar from '@/components/ui/TitleBar.vue'
+  import ActivityBar from '@/components/ui/ActivityBar.vue'
+  import LeftSidebar from '@/components/ui/LeftSidebar.vue'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { useTabManagerStore } from '@/stores/TabManager'
+  import { useEditorStore } from '@/stores/Editor'
+  import { useLayoutStore } from '@/stores/layout'
   import { windowApi } from '@/api'
-  import { listen, UnlistenFn } from '@tauri-apps/api/event'
-  import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { onBeforeUnmount, onMounted } from 'vue'
+  import type { UnlistenFn } from '@tauri-apps/api/event'
   import AIChatSidebar from '@/components/AIChatSidebar/index.vue'
 
   const terminalStore = useTerminalStore()
+  const editorStore = useEditorStore()
   const aiChatStore = useAIChatStore()
-  const tabManagerStore = useTabManagerStore()
+  const layoutStore = useLayoutStore()
 
   let unlistenStartupFile: UnlistenFn | null = null
   let unlistenFileDropped: UnlistenFn | null = null
-  let unlistenFileDrop: UnlistenFn | null = null
 
-  const handleFilePath = async (filePath: string, source: 'app-icon' | 'window' = 'app-icon') => {
-    if (source === 'app-icon') {
-      const directory = await windowApi.handleFileOpen(filePath)
-      await terminalStore.createTerminal(directory)
-    } else {
-      insertFilePathToCurrentTerminal(filePath)
-    }
-  }
-
-  const insertFilePathToCurrentTerminal = (filePath: string) => {
-    if (typeof terminalStore.activeTerminalId !== 'number') return
-
-    let processedPath = filePath
-    if (filePath.includes(' ')) {
-      processedPath = `"${filePath}"`
-    }
-
-    terminalStore.writeToTerminal(terminalStore.activeTerminalId, processedPath)
+  const handleFilePath = async (filePath: string) => {
+    const directory = await windowApi.handleFileOpen(filePath)
+    await editorStore.createTerminalTab({ directory, activate: true })
   }
 
   onMounted(async () => {
-    const handleAppIconFileDrop = (event: { payload: string }) => {
-      handleFilePath(event.payload, 'app-icon')
-    }
-
-    unlistenStartupFile = await listen<string>('startup-file', handleAppIconFileDrop)
-    unlistenFileDropped = await listen<string>('file-dropped', handleAppIconFileDrop)
-
-    const webview = getCurrentWebview()
-    unlistenFileDrop = await webview.onDragDropEvent(event => {
-      if (
-        event.event === 'tauri://drag-drop' &&
-        event.payload &&
-        'paths' in event.payload &&
-        event.payload.paths &&
-        event.payload.paths.length > 0
-      ) {
-        const filePath = event.payload.paths[0]
-        handleFilePath(filePath, 'window')
-      }
-    })
+    // 监听启动文件和应用图标拖放事件
+    // 注意：窗口拖放事件由 Terminal.vue 中的 setupDragDropListener 处理，避免重复
+    unlistenStartupFile = await windowApi.onStartupFile(handleFilePath)
+    unlistenFileDropped = await windowApi.onFileDropped(handleFilePath)
   })
 
   onBeforeUnmount(() => {
@@ -70,9 +41,6 @@
     if (unlistenFileDropped) {
       unlistenFileDropped()
     }
-    if (unlistenFileDrop) {
-      unlistenFileDrop()
-    }
 
     // AI Chat 状态需要在卸载前同步到 SessionStore
     aiChatStore.saveToSessionState()
@@ -81,18 +49,18 @@
 
 <template>
   <div class="app-container">
-    <TitleBar
-      :tabs="tabManagerStore.tabs"
-      :activeTabId="tabManagerStore.activeTabId"
-      @switch="tabManagerStore.setActiveTab"
-      @close="tabManagerStore.closeTab"
-    />
+    <TitleBar />
 
     <div class="main-content">
-      <ContentRenderer />
+      <template v-if="layoutStore.leftSidebarVisible">
+        <ActivityBar />
+        <LeftSidebar v-if="layoutStore.activeLeftPanel" />
+      </template>
+
+      <EditorArea />
 
       <div
-        v-if="aiChatStore.isVisible"
+        v-show="aiChatStore.isVisible"
         class="sidebar-wrapper"
         :style="{ '--sidebar-width': `${aiChatStore.sidebarWidth}px` }"
       >

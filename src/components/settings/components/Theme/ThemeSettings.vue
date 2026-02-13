@@ -2,17 +2,14 @@
   import { computed, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useThemeStore } from '@/stores/theme'
-  import { setWindowOpacity, getWindowOpacity } from '@/api/window/opacity'
-  import { configApi } from '@/api/config'
+  import { getWindowOpacity, setWindowOpacity } from '@/api/window/opacity'
   import { XSelect } from '@/ui'
   import type { SelectOption } from '@/ui'
   import type { ThemeOption } from '@/types/domain/theme'
-  import { useSessionStore } from '@/stores/session'
   import SettingsCard from '../../SettingsCard.vue'
 
   const themeStore = useThemeStore()
   const { t } = useI18n()
-  const sessionStore = useSessionStore()
 
   // 初始化方法，供外部调用
   const init = async () => {
@@ -140,31 +137,12 @@
 
     opacityTimeout = setTimeout(async () => {
       await setWindowOpacity(opacity.value)
-      await saveOpacityToConfig()
     }, 100)
-  }
-
-  const saveOpacityToConfig = async () => {
-    try {
-      const config = await configApi.getConfig()
-      config.appearance.opacity = opacity.value
-      await configApi.updateConfig(config)
-
-      sessionStore.updateUiState({ opacity: opacity.value })
-    } catch (error) {
-      console.warn('Failed to save opacity config:', error)
-    }
   }
 
   const syncOpacityFromConfig = async () => {
     try {
-      const config = await configApi.getConfig()
-      if (config.appearance.opacity !== undefined) {
-        opacity.value = config.appearance.opacity
-      } else {
-        const currentOpacity = await getWindowOpacity()
-        opacity.value = currentOpacity
-      }
+      opacity.value = await getWindowOpacity()
     } catch (error) {
       console.warn('Failed to sync opacity config:', error)
     }

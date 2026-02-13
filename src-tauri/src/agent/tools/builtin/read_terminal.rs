@@ -6,7 +6,7 @@ use crate::agent::core::context::TaskContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPermission, ToolPriority, ToolResult,
-    ToolResultContent,
+    ToolResultContent, ToolResultStatus,
 };
 use crate::completion::output_analyzer::OutputAnalyzer;
 use crate::mux::singleton::get_mux;
@@ -77,16 +77,12 @@ Usage:
         // 获取活跃终端的pane_id
         // 优先使用 mux 中的第一个可用 pane
         let mux = get_mux();
-        let pane_id = mux
-            .list_panes()
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                crate::agent::error::ToolExecutorError::ExecutionFailed {
-                    tool_name: "read_terminal".to_string(),
-                    error: "No terminal panes found. Please ensure a terminal is open.".to_string(),
-                }
-            })?;
+        let pane_id = mux.list_panes().into_iter().next().ok_or_else(|| {
+            crate::agent::error::ToolExecutorError::ExecutionFailed {
+                tool_name: "read_terminal".to_string(),
+                error: "No terminal panes found. Please ensure a terminal is open.".to_string(),
+            }
+        })?;
 
         // 从OutputAnalyzer获取终端缓冲区内容
         let buffer = match OutputAnalyzer::global().get_pane_buffer(pane_id.as_u32()) {
@@ -104,7 +100,8 @@ Usage:
                 content: vec![ToolResultContent::Success(
                     "Terminal buffer is empty.".to_string(),
                 )],
-                is_error: false,
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
                 execution_time_ms: None,
                 ext_info: Some(json!({
                     "paneId": pane_id.as_u32(),
@@ -138,7 +135,8 @@ Usage:
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(result_text)],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: None,
             ext_info: Some(json!({
                 "paneId": pane_id.as_u32(),
@@ -157,7 +155,8 @@ Usage:
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

@@ -4,7 +4,7 @@ use crate::config::error::{TomlConfigError, TomlConfigResult};
 use crate::config::{defaults::create_default_config, paths::ConfigPaths, types::AppConfig};
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 /// TOML配置读取器
 pub struct TomlConfigReader {
@@ -36,8 +36,6 @@ impl TomlConfigReader {
     /// 从文件系统加载TOML配置
     /// 如果文件不存在则尝试从资源文件复制，最后创建默认配置
     pub async fn load_config(&self) -> TomlConfigResult<AppConfig> {
-        debug!("开始加载 TOML 配置: {:?}", self.config_path);
-
         if self.config_path.exists() {
             // 读取现有配置文件
             let content = fs::read_to_string(&self.config_path)
@@ -46,27 +44,17 @@ impl TomlConfigReader {
 
             // 解析TOML内容
             match self.parse_toml_content(&content) {
-                Ok(parsed_config) => {
-                    info!("配置文件解析成功");
-                    Ok(parsed_config)
-                }
+                Ok(parsed_config) => Ok(parsed_config),
                 Err(e) => {
                     warn!("解析配置文件失败: {}", e);
                     Err(e)
                 }
             }
         } else {
-            info!("未找到配置文件，尝试复制内置配置");
             // 尝试从资源文件复制配置
             match self.copy_bundled_config().await {
-                Ok(config) => {
-                    info!("已复制内置配置");
-                    Ok(config)
-                }
-                Err(_) => {
-                    info!("未找到内置配置，将返回默认配置");
-                    Ok(create_default_config())
-                }
+                Ok(config) => Ok(config),
+                Err(_) => Ok(create_default_config()),
             }
         }
     }

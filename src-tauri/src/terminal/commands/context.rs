@@ -9,11 +9,11 @@
 
 use super::TerminalContextState;
 use crate::mux::PaneId;
-use crate::terminal::TerminalContext;
+use crate::terminal::{ContextServiceError, TerminalContext};
 use crate::utils::TauriApiResult;
 use crate::{api_error, api_success};
 use tauri::State;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 /// 获取指定终端的上下文信息
 ///
@@ -32,8 +32,6 @@ pub async fn terminal_context_get(
     pane_id: Option<u32>,
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<TerminalContext> {
-    debug!("获取终端上下文: pane_id={:?}", pane_id);
-
     if let Some(id) = pane_id {
         if id == 0 {
             warn!("面板ID不能为0");
@@ -49,13 +47,7 @@ pub async fn terminal_context_get(
         .get_context_with_fallback(pane_id)
         .await
     {
-        Ok(context) => {
-            debug!(
-                "成功获取终端上下文: pane_id={:?}, cwd={:?}",
-                context.pane_id, context.current_working_directory
-            );
-            Ok(api_success!(context))
-        }
+        Ok(context) => Ok(api_success!(context)),
         Err(e) => {
             error!("获取终端上下文失败: {}", e);
             Ok(api_error!("terminal.get_context_failed"))
@@ -76,24 +68,11 @@ pub async fn terminal_context_get(
 pub async fn terminal_context_get_active(
     state: State<'_, TerminalContextState>,
 ) -> TauriApiResult<TerminalContext> {
-    debug!("获取活跃终端上下文");
-
     match state.context_service.get_active_context().await {
-        Ok(context) => {
-            debug!(
-                "成功获取活跃终端上下文: pane_id={:?}, cwd={:?}",
-                context.pane_id, context.current_working_directory
-            );
-            Ok(api_success!(context))
-        }
-        Err(e) if e.to_string().contains("No active terminal pane") => {
-            // 没有活跃终端时，使用回退逻辑
-            debug!("没有活跃终端，使用回退逻辑");
+        Ok(context) => Ok(api_success!(context)),
+        Err(ContextServiceError::NoActivePane) => {
             match state.context_service.get_context_with_fallback(None).await {
-                Ok(context) => {
-                    debug!("使用回退逻辑成功获取终端上下文");
-                    Ok(api_success!(context))
-                }
+                Ok(context) => Ok(api_success!(context)),
                 Err(e) => {
                     error!("获取活跃终端上下文失败（回退也失败）: {}", e);
                     Ok(api_error!("terminal.get_active_context_failed"))
@@ -165,12 +144,12 @@ mod tests {
         let result = state.context_service.get_active_context().await;
         if result.is_err() {
             let error_msg = result.unwrap_err().to_string();
-            println!("实际错误消息: '{}'", error_msg);
+            let error_msg_lower = error_msg.to_lowercase();
             assert!(
-                error_msg.contains("面板不存在")
-                    || error_msg.contains("pane")
-                    || error_msg.contains("active")
-                    || error_msg.contains("查询终端上下文失败")
+                error_msg_lower.contains("面板不存在")
+                    || error_msg_lower.contains("pane")
+                    || error_msg_lower.contains("active")
+                    || error_msg_lower.contains("查询终端上下文失败")
             );
         } else {
             panic!("Expected error for non-existent pane");

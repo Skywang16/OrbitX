@@ -7,7 +7,6 @@ use tokio::sync::RwLock;
 use crate::agent::config::TaskExecutionConfig;
 use crate::agent::context::FileContextTracker;
 use crate::agent::persistence::AgentPersistence;
-use crate::agent::ui::AgentUiPersistence;
 use crate::storage::DatabaseManager;
 
 #[derive(Debug, Clone)]
@@ -30,42 +29,47 @@ pub struct SessionStats {
     pub files_modified: u32,
 }
 
+/// 最大压缩历史记录数
+const MAX_COMPRESSED_HISTORY: usize = 32;
+
 pub struct SessionContext {
-    pub session_id: String,
-    pub conversation_id: i64,
+    pub task_id: String,
+    pub session_id: i64,
     pub workspace: PathBuf,
     pub initial_request: String,
     pub created_at: DateTime<Utc>,
     pub config: TaskExecutionConfig,
 
+    /// 简化：用 Vec 替代 MessageRingBuffer，保持最近 32 条记录
     compressed_history: Arc<RwLock<Vec<CompressedMemory>>>,
     file_tracker: Arc<FileContextTracker>,
     repositories: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
-    ui_persistence: Arc<AgentUiPersistence>,
     stats: Arc<RwLock<SessionStats>>,
 }
 
 impl SessionContext {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        session_id: String,
-        conversation_id: i64,
+        task_id: String,
+        session_id: i64,
         workspace: PathBuf,
         initial_request: String,
         config: TaskExecutionConfig,
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
-        ui_persistence: Arc<AgentUiPersistence>,
     ) -> Self {
         let tracker = Arc::new(
-            FileContextTracker::new(Arc::clone(&agent_persistence), conversation_id)
-                .with_workspace_root(workspace.clone()),
+            FileContextTracker::new(
+                Arc::clone(&agent_persistence),
+                workspace.to_string_lossy().to_string(),
+            )
+            .with_workspace_root(workspace.clone()),
         );
 
         Self {
+            task_id,
             session_id,
-            conversation_id,
             workspace,
             initial_request,
             created_at: Utc::now(),
@@ -74,7 +78,6 @@ impl SessionContext {
             file_tracker: tracker,
             repositories,
             agent_persistence,
-            ui_persistence,
             stats: Arc::new(RwLock::new(SessionStats::default())),
         }
     }
@@ -85,10 +88,6 @@ impl SessionContext {
 
     pub fn agent_persistence(&self) -> Arc<AgentPersistence> {
         Arc::clone(&self.agent_persistence)
-    }
-
-    pub fn ui_persistence(&self) -> Arc<AgentUiPersistence> {
-        Arc::clone(&self.ui_persistence)
     }
 
     pub fn file_tracker(&self) -> Arc<FileContextTracker> {
@@ -102,9 +101,9 @@ impl SessionContext {
     pub async fn add_compressed_memory(&self, memory: CompressedMemory) {
         let mut history = self.compressed_history.write().await;
         history.push(memory);
-        if history.len() > 32 {
-            let excess = history.len() - 32;
-            history.drain(0..excess);
+        // 保持最多 MAX_COMPRESSED_HISTORY 条记录
+        if history.len() > MAX_COMPRESSED_HISTORY {
+            history.remove(0);
         }
     }
 

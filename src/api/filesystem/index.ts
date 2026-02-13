@@ -57,7 +57,7 @@ export class FilesystemApi {
   }
 
   /**
-   * 读取目录内容
+   * 读取目录内容（包含 gitignore 状态）
    */
   readDir = async (
     path: string
@@ -67,16 +67,26 @@ export class FilesystemApi {
       isDirectory: boolean
       isFile: boolean
       isSymlink: boolean
+      isIgnored: boolean
     }>
   > => {
-    return await invoke<
+    return await appInvoke<
       Array<{
         name: string
-        isDirectory: boolean
-        isFile: boolean
-        isSymlink: boolean
+        is_directory: boolean
+        is_file: boolean
+        is_symlink: boolean
+        is_ignored: boolean
       }>
-    >('plugin:fs|read_dir', { path })
+    >('fs_read_dir', { path }).then(entries =>
+      entries.map(entry => ({
+        name: entry.name,
+        isDirectory: entry.is_directory,
+        isFile: entry.is_file,
+        isSymlink: entry.is_symlink,
+        isIgnored: entry.is_ignored,
+      }))
+    )
   }
 
   /**

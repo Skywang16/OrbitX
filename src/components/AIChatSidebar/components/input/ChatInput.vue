@@ -1,24 +1,23 @@
 <script setup lang="ts">
-  import { computed, ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+  import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useNodeVersion } from '@/composables/useNodeVersion'
   import { useProjectRules } from '@/composables/useProjectRules'
-  import { useTabManagerStore } from '@/stores/TabManager'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { TabType } from '@/types'
   import { homeDir } from '@tauri-apps/api/path'
-  import TerminalSelectionTag from '../tags/TerminalSelectionTag.vue'
-  import TerminalTabTag from '../tags/TerminalTabTag.vue'
   import NodeVersionTag from '../tags/NodeVersionTag.vue'
   import ProjectRulesTag from '../tags/ProjectRulesTag.vue'
   import InputPopover from '@/components/ui/InputPopover.vue'
-  import CkIndexContent from '../ckIndex/CkIndexContent.vue'
-  import FolderPicker from '../tags/FolderPicker.vue'
+  import VectorIndexContent from '../vectorIndex/VectorIndexContent.vue'
   import NodeVersionPicker from '../tags/NodeVersionPicker.vue'
   import ProjectRulesPicker from '../tags/ProjectRulesPicker.vue'
   import CircularProgress from '@/components/ui/CircularProgress.vue'
-  import { ckApi, nodeApi } from '@/api'
+  import ImagePreview, { type ImageAttachment } from './ImagePreview.vue'
+  import { vectorDbApi as vdbApi, nodeApi } from '@/api'
+  import { processImageFile, getImageFromClipboard, validateImageFile } from '@/utils/imageUtils'
+  import { createMessage } from '@/ui/composables/message-api'
+  import type { ChannelSubscription } from '@/api/channel'
 
   interface Props {
     modelValue: string
@@ -33,7 +32,7 @@
 
   interface Emits {
     (e: 'update:modelValue', value: string): void
-    (e: 'send'): void
+    (e: 'send', images?: ImageAttachment[]): void
     (e: 'stop'): void
     (e: 'update:selectedModel', value: string | null): void
     (e: 'model-change', value: string | null): void
@@ -51,10 +50,8 @@
   })
 
   onBeforeUnmount(() => {
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
+    buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
     if (compositionTimer) {
       clearTimeout(compositionTimer)
       compositionTimer = undefined
@@ -65,20 +62,19 @@
   const { t } = useI18n()
 
   const inputTextarea = ref<HTMLTextAreaElement>()
+  const fileInput = ref<HTMLInputElement>()
   const isComposing = ref(false)
   let compositionTimer: number | undefined
+
+  // 图片附件
+  const imageAttachments = ref<ImageAttachment[]>([])
 
   const terminalSelection = useTerminalSelection()
   const nodeVersion = useNodeVersion()
   const projectRules = useProjectRules()
 
-  const tabManagerStore = useTabManagerStore()
   const terminalStore = useTerminalStore()
   const activeTerminalCwd = computed(() => terminalStore.activeTerminal?.cwd || null)
-
-  const isInSettingsTab = computed(() => {
-    return tabManagerStore.activeTab?.type === TabType.SETTINGS
-  })
 
   const homePath = ref<string>('')
 
@@ -154,9 +150,71 @@
   const handleButtonClick = () => {
     if (props.loading) {
       emit('stop')
-    } else if (props.canSend) {
-      emit('send')
+    } else if (props.canSend || imageAttachments.value.length > 0) {
+      emit('send', imageAttachments.value.length > 0 ? imageAttachments.value : undefined)
+      imageAttachments.value = []
     }
+  }
+
+  // 图片上传相关
+  const handleImageUpload = () => {
+    fileInput.value?.click()
+  }
+
+  const handleFileSelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) return
+
+    for (const file of Array.from(files)) {
+      await addImageFile(file)
+    }
+
+    // 清空 input，允许重复选择同一文件
+    target.value = ''
+  }
+
+  const addImageFile = async (file: File) => {
+    // 检查图片数量限制
+    if (imageAttachments.value.length >= 5) {
+      console.warn(t('chat.max_images_reached'))
+      // TODO: 显示错误提示
+      return
+    }
+
+    // 验证文件 (Tauri macOS 下 accept 属性不生效，必须在代码层验证)
+    const validation = validateImageFile(file)
+    if (!validation.valid) {
+      createMessage.error(validation.error || t('chat.invalid_file_type'))
+      return
+    }
+
+    try {
+      const processed = await processImageFile(file)
+      const attachment: ImageAttachment = {
+        id: `${Date.now()}-${Math.random()}`,
+        dataUrl: processed.dataUrl,
+        fileName: processed.fileName,
+        fileSize: processed.fileSize,
+        mimeType: processed.mimeType,
+      }
+      imageAttachments.value.push(attachment)
+    } catch (error) {
+      console.error('Failed to process image:', error)
+      // TODO: 显示错误提示
+    }
+  }
+
+  const handlePaste = async (event: ClipboardEvent) => {
+    const imageFile = await getImageFromClipboard(event)
+    if (imageFile) {
+      event.preventDefault()
+      await addImageFile(imageFile)
+    }
+  }
+
+  const removeImage = (id: string) => {
+    imageAttachments.value = imageAttachments.value.filter(img => img.id !== id)
   }
 
   const handleModelChange = (value: string | number | null) => {
@@ -219,11 +277,9 @@
 
   const buildProgress = ref(0)
   const isBuilding = ref(false)
-  const progressHasData = ref(false)
-  let progressTimer: number | undefined
+  let buildSubscription: ChannelSubscription | null = null
 
   const showIndexModal = ref(false)
-  const showNavigatorModal = ref(false)
   const showNodeVersionModal = ref(false)
   const showProjectRulesModal = ref(false)
 
@@ -243,23 +299,19 @@
     showProjectRulesModal.value = false
   }
 
-  const handleCkIndexClick = async () => {
-    await checkCkIndexStatus()
+  const handleVectorIndexClick = async () => {
+    await checkVectorIndexStatus()
     showIndexModal.value = true
   }
 
-  const handleOpenNavigator = () => {
-    showNavigatorModal.value = true
-  }
-
-  const checkCkIndexStatus = async () => {
+  const checkVectorIndexStatus = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) {
       indexStatus.value = { isReady: false, path: '' }
       return
     }
-    const status = await ckApi.getIndexStatus({ path: activeTerminal.cwd })
-    indexStatus.value = status
+    const status = await vdbApi.getIndexStatus({ path: activeTerminal.cwd })
+    indexStatus.value = { isReady: status.isReady, path: status.path, size: status.size }
   }
 
   watch(activeTerminalCwd, cwd => {
@@ -267,53 +319,23 @@
       indexStatus.value = { isReady: false, path: '' }
       return
     }
-    checkCkIndexStatus()
+    checkVectorIndexStatus()
   })
 
-  const startProgressPolling = (targetPath: string) => {
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
-    progressHasData.value = false
-    progressTimer = window.setInterval(async () => {
-      const progress = await ckApi.getBuildProgress({ path: targetPath })
-      if (progress.totalFiles > 0) {
-        const totalFiles = Math.max(progress.totalFiles, 1)
-        const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-        const perFile = 100 / totalFiles
-        let pct = filesCompleted * perFile
-
-        if (progress.totalChunks && progress.totalChunks > 0) {
-          const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-          pct += (chunkDone / progress.totalChunks) * perFile
-        }
-
-        const nextPct = Math.min(progress.isComplete ? 100 : 99, Math.max(0, pct))
-        if (!progressHasData.value) {
-          progressHasData.value = true
-          buildProgress.value = nextPct
-        } else {
-          buildProgress.value = Math.max(buildProgress.value, nextPct)
-        }
-      }
-
-      if (progress.isComplete) {
-        if (progressTimer) {
-          clearInterval(progressTimer)
-          progressTimer = undefined
-        }
-        buildProgress.value = 100
-        setTimeout(() => {
-          isBuilding.value = false
-          buildProgress.value = 0
-        }, 500)
-        await checkCkIndexStatus()
-      }
-    }, 600)
+  const computeBuildPercent = (p: {
+    totalFiles: number
+    filesDone: number
+    currentFileChunksTotal: number
+    currentFileChunksDone: number
+    isDone: boolean
+  }): number => {
+    if (p.totalFiles <= 0) return 0
+    const currentFrac = p.currentFileChunksTotal > 0 ? p.currentFileChunksDone / p.currentFileChunksTotal : 0
+    const pct = ((p.filesDone + currentFrac) / p.totalFiles) * 100
+    return p.isDone ? 100 : Math.min(99, Math.max(0, pct))
   }
 
-  const buildCkIndex = async () => {
+  const rebuildVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
     const targetPath = activeTerminal.cwd
@@ -321,31 +343,65 @@
     isBuilding.value = true
     buildProgress.value = 0
 
-    await ckApi.buildIndex({ path: targetPath })
+    await buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
 
-    startProgressPolling(targetPath)
+    await vdbApi.startBuildIndex({ root: targetPath })
+    buildSubscription = vdbApi.subscribeBuildProgress(
+      { root: targetPath },
+      {
+        onMessage: async progress => {
+          buildProgress.value = computeBuildPercent(progress)
+          if (!progress.isDone) return
+
+          await buildSubscription?.unsubscribe().catch(() => {})
+          buildSubscription = null
+
+          isBuilding.value = false
+          buildProgress.value = 0
+
+          if (progress.phase === 'failed') {
+            createMessage.error(
+              progress.error ? t('ck.build_failed_with_error', { error: progress.error }) : t('ck.build_failed')
+            )
+          } else if (progress.phase === 'cancelled') {
+            createMessage.info(t('ck.build_cancelled'))
+          } else if (progress.filesFailed > 0) {
+            createMessage.warning(t('ck.build_done_with_failures', { count: progress.filesFailed }))
+          } else {
+            createMessage.success(t('ck.build_done'))
+          }
+
+          await checkVectorIndexStatus()
+        },
+        onError: err => {
+          console.warn('vector build channel error:', err)
+          createMessage.error(t('ck.build_channel_error'))
+          isBuilding.value = false
+          buildProgress.value = 0
+        },
+      }
+    )
   }
 
-  const cancelCkIndex = async () => {
+  const cancelVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
 
-    await ckApi.cancelBuild({ path: activeTerminal.cwd })
+    await vdbApi.cancelBuild({ root: activeTerminal.cwd })
+    await buildSubscription?.unsubscribe().catch(() => {})
+    buildSubscription = null
 
     isBuilding.value = false
     buildProgress.value = 0
-
-    if (progressTimer) {
-      clearInterval(progressTimer)
-      progressTimer = undefined
-    }
   }
 
-  const deleteCkIndex = async () => {
+  const deleteVectorIndex = async () => {
     const activeTerminal = terminalStore.terminals.find(t => t.id === terminalStore.activeTerminalId)
     if (!activeTerminal || !activeTerminal.cwd) return
-    await ckApi.deleteIndex({ path: activeTerminal.cwd })
-    await checkCkIndexStatus()
+
+    await vdbApi.deleteWorkspaceIndex(activeTerminal.cwd)
+    await checkVectorIndexStatus()
   }
 
   const getButtonTitle = () => {
@@ -354,56 +410,6 @@
     } else {
       return t('ck.build_index')
     }
-  }
-
-  const getSelectionDisplayText = () => {
-    const info = terminalSelection.selectionInfo.value
-    const activeTab = tabManagerStore.activeTab
-
-    if (!activeTab || activeTab.type !== TabType.TERMINAL) {
-      return info || t('session.selected_content')
-    }
-
-    let currentTabPath = 'terminal'
-    if (activeTab.path && activeTab.path !== '~') {
-      currentTabPath = activeTab.path
-    } else {
-      const terminal = terminalStore.terminals.find(t => t.id === activeTab.id)
-      if (terminal?.cwd) {
-        const parts = terminal.cwd
-          .replace(/\/$/, '')
-          .split(/[/\\]/)
-          .filter(p => p.length > 0)
-        if (parts.length === 0) {
-          currentTabPath = '~'
-        } else {
-          const lastPart = parts[parts.length - 1]
-          currentTabPath = lastPart.length > 15 ? lastPart.substring(0, 12) + '...' : lastPart
-        }
-      }
-    }
-
-    if (info) {
-      const parts = info.split(' ')
-      if (parts.length > 1) {
-        return `${currentTabPath} ${parts.slice(1).join(' ')}`
-      }
-    }
-    return `${currentTabPath} ${t('session.selected_content')}`
-  }
-
-  const handleInsertSelectedText = () => {
-    const selectedText = terminalSelection.getSelectedText()
-    if (!selectedText.trim()) return
-
-    const newValue = props.modelValue ? `${props.modelValue} ${selectedText}` : selectedText
-
-    emit('update:modelValue', newValue)
-
-    nextTick(() => {
-      inputTextarea.value?.focus()
-      adjustTextareaHeight()
-    })
   }
 
   const getTagContextInfo = () => {
@@ -416,33 +422,38 @@
     } catch (error) {
       console.warn('获取用户主目录失败:', error)
     }
-    await checkCkIndexStatus()
+    await checkVectorIndexStatus()
     syncResolvedPath()
 
     nodeVersion.setupListener(() => terminalSelection.currentTerminalTab.value?.terminalId ?? 0)
 
-    try {
-      const targetPath = indexStatus.value.path || activeTerminalCwd.value
-      if (targetPath) {
-        const progress = await ckApi.getBuildProgress({ path: targetPath })
-        if (!progress.isComplete && (progress.totalFiles > 0 || progress.error !== 'progress_unavailable')) {
-          isBuilding.value = true
-          if (progress.totalFiles > 0) {
-            const totalFiles = Math.max(progress.totalFiles, 1)
-            const filesCompleted = Math.min(progress.filesCompleted, totalFiles)
-            const perFile = 100 / totalFiles
-            let pct = filesCompleted * perFile
-            if (progress.totalChunks && progress.totalChunks > 0) {
-              const chunkDone = Math.min(progress.currentFileChunks ?? 0, progress.totalChunks)
-              pct += (chunkDone / progress.totalChunks) * perFile
-            }
-            buildProgress.value = Math.min(99, Math.max(0, pct))
+    const targetPath = indexStatus.value.path || activeTerminalCwd.value
+    if (targetPath) {
+      const progress = await vdbApi.getBuildStatus({ root: targetPath })
+      if (progress && !progress.isDone) {
+        isBuilding.value = true
+        buildProgress.value = computeBuildPercent(progress)
+        buildSubscription = vdbApi.subscribeBuildProgress(
+          { root: targetPath },
+          {
+            onMessage: async p => {
+              buildProgress.value = computeBuildPercent(p)
+              if (!p.isDone) return
+
+              await buildSubscription?.unsubscribe().catch(() => {})
+              buildSubscription = null
+              isBuilding.value = false
+              buildProgress.value = 0
+              await checkVectorIndexStatus()
+            },
+            onError: err => {
+              console.warn('vector build channel error:', err)
+              isBuilding.value = false
+              buildProgress.value = 0
+            },
           }
-          startProgressPolling(targetPath)
-        }
+        )
       }
-    } catch (e) {
-      console.warn('Failed to start progress polling:', e)
     }
   })
 
@@ -450,20 +461,17 @@
     adjustTextareaHeight,
     focus: () => inputTextarea.value?.focus(),
     getTagContextInfo,
+    clearImages: () => {
+      imageAttachments.value = []
+    },
+    setImages: (images: ImageAttachment[]) => {
+      imageAttachments.value = images
+    },
   })
 </script>
 
 <template>
   <div class="chat-input">
-    <TerminalTabTag
-      :visible="terminalSelection.hasTerminalTab.value"
-      :terminal-id="terminalSelection.currentTerminalTab.value?.terminalId"
-      :shell="terminalSelection.currentTerminalTab.value?.shell"
-      :cwd="terminalSelection.currentTerminalTab.value?.cwd"
-      :display-path="terminalSelection.currentTerminalTab.value?.displayPath"
-      @open-navigator="handleOpenNavigator"
-    />
-
     <NodeVersionTag
       :visible="nodeVersion.state.value.isNodeProject"
       :version="nodeVersion.state.value.currentVersion"
@@ -476,13 +484,7 @@
       @click="showProjectRulesModal = true"
     />
 
-    <TerminalSelectionTag
-      :visible="terminalSelection.hasSelection.value"
-      :selected-text="terminalSelection.selectedText.value"
-      :display-text="getSelectionDisplayText()"
-      @clear="terminalSelection.clearSelection"
-      @insert="handleInsertSelectedText"
-    />
+    <ImagePreview :images="imageAttachments" @remove="removeImage" />
 
     <div class="input-main">
       <div class="input-content">
@@ -496,9 +498,12 @@
           @input="adjustTextareaHeight"
           @compositionstart="handleCompositionStart"
           @compositionend="handleCompositionEnd"
+          @paste="handlePaste"
         />
       </div>
     </div>
+
+    <input ref="fileInput" type="file" accept="image/*" multiple style="display: none" @change="handleFileSelect" />
 
     <div class="input-bottom">
       <div class="bottom-left">
@@ -523,20 +528,26 @@
       </div>
       <div class="bottom-right">
         <button
+          class="image-upload-button"
+          :disabled="imageAttachments.length >= 5"
+          :title="imageAttachments.length >= 5 ? t('chat.max_images_reached') : t('chat.upload_image')"
+          @click="handleImageUpload"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="3" ry="3" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+        </button>
+        <button
           class="database-button"
           :class="{
             'has-index': indexStatus.isReady,
             building: isBuilding,
           }"
-          :disabled="isInSettingsTab || !canBuild"
-          :title="
-            isInSettingsTab
-              ? t('ck.index_button_disabled_in_settings')
-              : !canBuild
-                ? t('ck.index_button_select_non_home')
-                : getButtonTitle()
-          "
-          @click="handleCkIndexClick"
+          :disabled="!canBuild"
+          :title="!canBuild ? t('ck.index_button_select_non_home') : getButtonTitle()"
+          @click="handleVectorIndexClick"
         >
           <div class="button-content">
             <CircularProgress v-if="isBuilding" :percentage="buildProgress">
@@ -559,8 +570,7 @@
         <button
           class="send-button"
           :class="{ 'stop-button': loading }"
-          :disabled="!loading && (!canSend || isInSettingsTab)"
-          :title="isInSettingsTab ? t('ck.send_button_disabled_in_settings') : ''"
+          :disabled="!loading && !canSend"
           @click="handleButtonClick"
         >
           <svg v-if="loading" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -575,23 +585,14 @@
     </div>
 
     <InputPopover :visible="showIndexModal" @update:visible="showIndexModal = $event">
-      <CkIndexContent
+      <VectorIndexContent
         :index-status="{ hasIndex: indexStatus.isReady, path: indexStatus.path, size: indexStatus.size }"
         :is-building="isBuilding"
         :build-progress="buildProgress"
-        @build="buildCkIndex"
-        @delete="deleteCkIndex"
-        @refresh="checkCkIndexStatus"
-        @cancel="cancelCkIndex"
-      />
-    </InputPopover>
-
-    <InputPopover :visible="showNavigatorModal" @update:visible="showNavigatorModal = $event">
-      <FolderPicker
-        v-if="terminalSelection.currentTerminalTab.value?.terminalId && terminalSelection.currentTerminalTab.value?.cwd"
-        :current-path="terminalSelection.currentTerminalTab.value.cwd"
-        :terminal-id="terminalSelection.currentTerminalTab.value.terminalId"
-        @close="showNavigatorModal = false"
+        @build="rebuildVectorIndex"
+        @delete="deleteVectorIndex"
+        @refresh="checkVectorIndexStatus"
+        @cancel="cancelVectorIndex"
       />
     </InputPopover>
 
@@ -736,6 +737,34 @@
     width: 160px;
     min-width: 80px;
     flex-shrink: 1;
+  }
+
+  .image-upload-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-300);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .image-upload-button:hover:not(:disabled) {
+    background: var(--bg-300);
+    color: var(--color-primary);
+  }
+
+  .image-upload-button:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  .image-upload-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .database-button {

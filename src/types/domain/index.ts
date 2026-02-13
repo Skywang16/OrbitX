@@ -1,12 +1,13 @@
 export * from './ai'
+export * from './checkpoint'
+export * from './aiMessage'
 export * from './terminal'
 export * from './storage'
 export * from './shortcuts'
 export * from './completion'
 export * from './llm-registry'
-
-// Prevent Theme type conflicts between ui and theme modules
 export * from './ui'
+
 export type {
   ThemeType,
   ThemeInfo,

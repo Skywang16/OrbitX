@@ -154,33 +154,6 @@ export interface SelectEmits {
   'remove-tag': (value: string | number) => void
 }
 
-// 气泡确认框组件属性类型
-export interface PopconfirmProps {
-  title?: string
-  description?: string
-  confirmText?: string
-  cancelText?: string
-  type?: 'warning' | 'danger' | 'info'
-  placement?: Placement
-  trigger?: 'click' | 'hover' | 'manual'
-  disabled?: boolean
-  loading?: boolean
-  closeOnClickOutside?: boolean
-  offset?: number
-  icon?: string | object
-  triggerText?: string
-  triggerButtonVariant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'link'
-  triggerButtonSize?: Size
-  triggerButtonProps?: Record<string, unknown>
-}
-
-// 气泡确认框组件事件类型
-export interface PopconfirmEmits {
-  confirm: () => void
-  cancel: () => void
-  'update:visible': (value: boolean) => void
-}
-
 // 组件实例类型
 export type ButtonInstance = InstanceType<typeof import('./Button.vue').default>
 export type SwitchInstance = InstanceType<typeof import('./Switch.vue').default>
@@ -188,4 +161,3 @@ export type ModalInstance = InstanceType<typeof import('./Modal.vue').default>
 export type SearchInputInstance = InstanceType<typeof import('./SearchInput.vue').default>
 export type MessageInstance = InstanceType<typeof import('./Message.vue').default>
 export type SelectInstance = InstanceType<typeof import('./Select.vue').default>
-export type PopconfirmInstance = InstanceType<typeof import('./Popconfirm.vue').default>

@@ -45,6 +45,12 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::workspace::commands::workspace_add_recent,
         crate::workspace::commands::workspace_remove_recent,
         crate::workspace::commands::workspace_maintain,
+        crate::workspace::commands::workspace_get_or_create,
+        crate::workspace::commands::workspace_list_sessions,
+        crate::workspace::commands::workspace_get_messages,
+        crate::workspace::commands::workspace_get_active_session,
+        crate::workspace::commands::workspace_create_session,
+        crate::workspace::commands::workspace_set_active_session,
         crate::workspace::commands::workspace_get_project_rules,
         crate::workspace::commands::workspace_set_project_rules,
         crate::workspace::commands::workspace_list_rules_files,
@@ -90,6 +96,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::terminal::commands::stream::terminal_subscribe_output_cancel,
         // Shell 集成命令
         crate::shell::commands::shell_execute_background_command,
+        crate::shell::commands::shell_execute_background_program,
         crate::shell::commands::shell_setup_integration,
         crate::shell::commands::shell_check_integration_status,
         crate::shell::commands::shell_update_pane_cwd,
@@ -108,6 +115,16 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::completion::commands::completion_get,
         crate::completion::commands::completion_clear_cache,
         crate::completion::commands::completion_get_stats,
+        // Git 集成命令
+        crate::git::commands::git_check_repository,
+        crate::git::commands::git_get_status,
+        crate::git::commands::git_get_branches,
+        crate::git::commands::git_get_commits,
+        crate::git::commands::git_get_commit_files,
+        crate::git::commands::git_get_diff,
+        crate::git::commands::git_watch_start,
+        crate::git::commands::git_watch_stop,
+        crate::git::commands::git_watch_status,
         // 配置管理命令
         crate::config::commands::config_get,
         crate::config::commands::config_update,
@@ -173,23 +190,15 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::commands::llm_get_providers,
         // Agent 执行器命令（注册以供前端调用）
         crate::agent::core::commands::agent_execute_task,
-        crate::agent::core::commands::agent_pause_task,
         crate::agent::core::commands::agent_cancel_task,
+        crate::agent::core::commands::agent_tool_confirm,
         crate::agent::core::commands::agent_list_tasks,
         crate::agent::core::commands::agent_get_file_context_status,
         crate::agent::core::commands::agent_get_user_rules,
         crate::agent::core::commands::agent_set_user_rules,
+        crate::agent::core::commands::agent_trigger_session_summary,
         // 项目规则命令已迁移到 workspace 模块
-        // 双轨架构命令
-        crate::agent::core::commands::agent_create_conversation,
-        crate::agent::core::commands::agent_delete_conversation,
-        crate::agent::core::commands::agent_update_conversation_title,
-        crate::agent::core::commands::agent_ui_get_conversations,
-        crate::agent::core::commands::agent_ui_get_messages,
-        // crate::agent::core::commands::agent_trigger_context_summary, // 暂时注释：类型问题待修复
-        // 存储系统命令
-        crate::ai::tool::storage::storage_get_config,
-        crate::ai::tool::storage::storage_update_config,
+        // 存储系统命令（State/Runtime）
         crate::ai::tool::storage::storage_save_session_state,
         crate::ai::tool::storage::storage_load_session_state,
         crate::ai::tool::storage::storage_get_terminals_state,
@@ -198,17 +207,28 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // 网络请求命令
         crate::ai::tool::network::network_web_fetch_headless,
         crate::ai::tool::network::network_simple_web_fetch,
-        // CK 索引与搜索命令（供前端 ckApi 使用）
-        crate::ck::commands::ck_index_status,
-        crate::ck::commands::ck_build_index,
-        crate::ck::commands::ck_get_build_progress,
-        crate::ck::commands::ck_cancel_build,
-        crate::ck::commands::ck_delete_index,
-        crate::ck::commands::ck_search,
         // Node.js 版本管理命令
         crate::node::commands::node_check_project,
         crate::node::commands::node_get_version_manager,
         crate::node::commands::node_list_versions,
         crate::node::commands::node_get_switch_command,
+        // 向量数据库命令
+        crate::vector_db::commands::semantic_search,
+        crate::vector_db::commands::get_index_status,
+        crate::vector_db::commands::delete_workspace_index,
+        crate::vector_db::commands::vector_build_index_start,
+        crate::vector_db::commands::vector_build_index_status,
+        crate::vector_db::commands::vector_build_index_subscribe,
+        crate::vector_db::commands::vector_build_index_cancel,
+        // Checkpoint 系统命令
+        crate::checkpoint::commands::checkpoint_create,
+        crate::checkpoint::commands::checkpoint_list,
+        crate::checkpoint::commands::checkpoint_rollback,
+        crate::checkpoint::commands::checkpoint_diff,
+        crate::checkpoint::commands::checkpoint_diff_with_workspace,
+        crate::checkpoint::commands::checkpoint_get_file_content,
+        crate::checkpoint::commands::checkpoint_delete,
+        // 文件系统命令
+        crate::filesystem::commands::fs_read_dir,
     ])
 }

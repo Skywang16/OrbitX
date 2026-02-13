@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from './store'
   import { useAISettingsStore } from '@/components/settings/components/AI'
@@ -9,7 +9,9 @@
   import MessageList from './components/messages/MessageList.vue'
   import ChatInput from './components/input/ChatInput.vue'
   import ResizeHandle from './components/layout/ResizeHandle.vue'
-  //  import TaskList from './components/TaskList.vue'
+  import ImageLightbox from './components/input/ImageLightbox.vue'
+  import RollbackConfirmDialog from './components/messages/RollbackConfirmDialog.vue'
+  import ToolConfirmationDialog from './components/messages/ToolConfirmationDialog.vue'
 
   const aiChatStore = useAIChatStore()
   const aiSettingsStore = useAISettingsStore()
@@ -27,8 +29,10 @@
     return messageInput.value.trim().length > 0 && aiChatStore.canSendMessage
   })
 
-  const sendMessage = async () => {
-    if (!canSend.value) return
+  const sendMessage = async (
+    images?: Array<{ id: string; dataUrl: string; fileName: string; fileSize: number; mimeType: string }>
+  ) => {
+    if (!canSend.value && (!images || images.length === 0)) return
 
     const message = messageInput.value.trim()
     messageInput.value = ''
@@ -36,26 +40,27 @@
     // 重置输入框高度
     chatInputRef.value?.adjustTextareaHeight()
 
-    await aiChatStore.sendMessage(message)
+    // 清空图片
+    if (images && images.length > 0) {
+      chatInputRef.value?.clearImages()
+    }
+
+    await aiChatStore.sendMessage(message, images)
   }
 
-  const selectSession = (sessionId: number) => {
-    aiChatStore.switchToConversation(sessionId)
+  const handleSessionSelect = async (sessionId: number) => {
+    await aiChatStore.switchSession(sessionId)
   }
 
-  const deleteSession = (sessionId: number) => {
-    aiChatStore.deleteConversation(sessionId)
+  const handleCreateSession = async () => {
+    await aiChatStore.createSession()
   }
 
-  const refreshSessions = async () => {
-    await aiChatStore.refreshConversations()
+  const handleRefreshSessions = async () => {
+    await aiChatStore.refreshSessions()
   }
 
-  const createNewSession = () => {
-    aiChatStore.createConversation()
-  }
-
-  const handleSwitchMode = async (mode: 'chat' | 'agent') => {
+  const handleSwitchMode = (mode: 'chat' | 'agent') => {
     aiChatStore.chatMode = mode
   }
 
@@ -110,19 +115,24 @@
   }
 
   const stopMessage = () => {
-    if (aiChatStore.isLoading) {
-      if (aiChatStore.cancelFunction) {
-        aiChatStore.cancelFunction()
-        aiChatStore.cancelFunction = null
+    aiChatStore.stopCurrentTask()
+  }
+
+  const handleRollbackResult = async (result: { success: boolean; message: string; restoreContent?: string }) => {
+    console.warn('Checkpoint rollback:', result.message)
+    if (result.success) {
+      await aiChatStore.refreshSessions()
+      if (result.restoreContent && result.restoreContent.trim().length > 0) {
+        messageInput.value = result.restoreContent
+        chatInputRef.value?.adjustTextareaHeight()
+        chatInputRef.value?.focus()
       }
-      aiChatStore.isLoading = false
     }
   }
 
   onMounted(async () => {
     await aiChatStore.initialize()
 
-    // 从 sessionStore 恢复选中的模型（改用公开的计算属性）
     const savedModelId = sessionStore.aiState?.selectedModelId || null
     if (savedModelId) {
       selectedModelId.value = savedModelId
@@ -131,11 +141,6 @@
     }
 
     await handleModelChange(selectedModelId.value)
-  })
-
-  // 在组件卸载前保存状态
-  onBeforeUnmount(() => {
-    // Task state is now managed by TaskManager, no need to save manually
   })
 </script>
 
@@ -152,29 +157,31 @@
 
     <div class="ai-chat-content">
       <ChatHeader
-        :sessions="aiChatStore.conversations"
-        :current-session-id="aiChatStore.currentConversationId"
-        :is-loading="aiChatStore.isLoading"
-        @select-session="selectSession"
-        @create-new-session="createNewSession"
-        @delete-session="deleteSession"
-        @refresh-sessions="refreshSessions"
+        :sessions="aiChatStore.sessions"
+        :current-session-id="aiChatStore.currentSession?.id ?? null"
+        :is-loading="aiChatStore.isSending"
+        @select-session="handleSessionSelect"
+        @create-new-session="handleCreateSession"
+        @refresh-sessions="handleRefreshSessions"
       />
       <div class="messages-and-tasks">
         <MessageList
           :messages="aiChatStore.messageList"
-          :is-loading="aiChatStore.isLoading"
+          :is-loading="aiChatStore.isSending"
           :chat-mode="aiChatStore.chatMode"
+          :session-id="aiChatStore.currentSession?.id ?? null"
+          :workspace-path="aiChatStore.currentWorkspacePath ?? ''"
         />
 
         <!--  <TaskList /> -->
       </div>
 
+      <ToolConfirmationDialog />
       <ChatInput
         ref="chatInputRef"
         v-model="messageInput"
         :placeholder="t('chat.input_placeholder')"
-        :loading="aiChatStore.isLoading"
+        :loading="aiChatStore.isSending"
         :can-send="canSend"
         :selected-model="selectedModelId"
         :model-options="modelOptions"
@@ -185,6 +192,9 @@
         @mode-change="handleSwitchMode"
       />
     </div>
+
+    <ImageLightbox />
+    <RollbackConfirmDialog @rollback="handleRollbackResult" />
   </div>
 </template>
 

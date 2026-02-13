@@ -7,7 +7,6 @@
 
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::info;
 
 /// 项目上下文配置文件优先级列表
 const CONTEXT_FILES: &[&str] = &[
@@ -88,8 +87,6 @@ impl ProjectContextLoader {
                 if trimmed.is_empty() {
                     return None;
                 }
-
-                info!("Loaded project context from {}", filename);
 
                 Some(ProjectContext {
                     source_file: filename.to_string(),

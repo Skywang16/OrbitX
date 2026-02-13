@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use tracing::warn;
 
 use crate::agent::error::{AgentError, AgentResult};
-use crate::agent::persistence::{AgentPersistence, ConversationSummary};
+use crate::agent::persistence::{AgentPersistence, SessionSummary};
 use crate::agent::prompt::components::conversation_summary::{
     build_conversation_summary_user_prompt, CONVERSATION_SUMMARY_SYSTEM_PROMPT,
 };
-use crate::llm::anthropic_types::{ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt};
+use crate::llm::anthropic_types::{
+    ContentBlock, CreateMessageRequest, MessageContent, MessageParam, SystemPrompt,
+};
 use crate::llm::service::LLMService;
 use crate::storage::DatabaseManager;
 
@@ -15,7 +18,7 @@ const COMPRESSION_THRESHOLD: f32 = 0.85;
 const SUMMARY_MAX_TOKENS: u32 = 512;
 const RECENT_MESSAGES_TO_KEEP: usize = 3;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SummaryResult {
     pub summary: String,
     pub token_count: u32,
@@ -25,20 +28,20 @@ pub struct SummaryResult {
     pub tokens_saved: u32,
 }
 
-pub struct ConversationSummarizer {
-    conversation_id: i64,
+pub struct SessionSummarizer {
+    session_id: i64,
     persistence: Arc<AgentPersistence>,
     repositories: Arc<DatabaseManager>,
 }
 
-impl ConversationSummarizer {
+impl SessionSummarizer {
     pub fn new(
-        conversation_id: i64,
+        session_id: i64,
         persistence: Arc<AgentPersistence>,
         repositories: Arc<DatabaseManager>,
     ) -> Self {
         Self {
-            conversation_id,
+            session_id,
             persistence,
             repositories,
         }
@@ -79,7 +82,7 @@ impl ConversationSummarizer {
             Err(err) => {
                 warn!(
                     "Conversation summarization failed for conversation {}: {}. Falling back to sliding window.",
-                    self.conversation_id, err
+                    self.session_id, err
                 );
                 let fallback = self.fallback_to_sliding_window(messages, current_tokens);
                 self.persist_summary(&fallback).await?;
@@ -113,7 +116,7 @@ impl ConversationSummarizer {
             Err(err) => {
                 warn!(
                     "Manual conversation summarization failed for conversation {}: {}. Using fallback window.",
-                    self.conversation_id, err
+                    self.session_id, err
                 );
                 let fallback = self.fallback_to_sliding_window(messages, current_tokens);
                 self.persist_summary(&fallback).await?;
@@ -173,21 +176,35 @@ impl ConversationSummarizer {
         })
     }
 
-    fn build_summary_request(&self, model_id: &str, summary_scope: &[MessageParam]) -> CreateMessageRequest {
+    fn build_summary_request(
+        &self,
+        model_id: &str,
+        summary_scope: &[MessageParam],
+    ) -> CreateMessageRequest {
         let mut history_builder = String::new();
         for message in summary_scope {
             history_builder.push_str(&format!(
                 "[{role}] {content}\n\n",
-                role = match message.role { crate::llm::anthropic_types::MessageRole::User => "user", crate::llm::anthropic_types::MessageRole::Assistant => "assistant" },
+                role = match message.role {
+                    crate::llm::anthropic_types::MessageRole::User => "user",
+                    crate::llm::anthropic_types::MessageRole::Assistant => "assistant",
+                },
                 content = render_message_param_content(&message.content)
             ));
         }
 
         CreateMessageRequest {
             model: model_id.to_string(),
-            messages: std::collections::VecDeque::from(vec![MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text(build_conversation_summary_user_prompt(&history_builder)) }]),
+            messages: vec![MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::User,
+                content: MessageContent::Text(build_conversation_summary_user_prompt(
+                    &history_builder,
+                )),
+            }],
             max_tokens: SUMMARY_MAX_TOKENS,
-            system: Some(SystemPrompt::Text(CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string())),
+            system: Some(SystemPrompt::Text(
+                CONVERSATION_SUMMARY_SYSTEM_PROMPT.to_string(),
+            )),
             tools: None,
             temperature: Some(0.3),
             stop_sequences: None,
@@ -230,15 +247,14 @@ impl ConversationSummarizer {
         }
     }
 
-    async fn persist_summary(&self, result: &SummaryResult) -> AgentResult<ConversationSummary> {
-        let repo = self.persistence.conversation_summaries();
+    async fn persist_summary(&self, result: &SummaryResult) -> AgentResult<SessionSummary> {
+        let repo = self.persistence.session_summaries();
         repo.upsert(
-            self.conversation_id,
+            self.session_id,
             &result.summary,
             result.token_count as i64,
             result.messages_before_summary as i64,
             result.tokens_saved as i64,
-            result.cost,
         )
         .await
     }
@@ -305,7 +321,9 @@ fn render_content_blocks(blocks: &Vec<ContentBlock>) -> String {
     for b in blocks {
         match b {
             ContentBlock::Text { text, .. } => {
-                if !out.is_empty() { out.push_str("\n"); }
+                if !out.is_empty() {
+                    out.push_str("\n");
+                }
                 out.push_str(text);
             }
             ContentBlock::Thinking { thinking, .. } => {
@@ -315,7 +333,9 @@ fn render_content_blocks(blocks: &Vec<ContentBlock>) -> String {
             other => {
                 // 对于非文本块，简化为 JSON 摘要
                 let s = serde_json::to_string(other).unwrap_or_default();
-                if !out.is_empty() { out.push_str("\n"); }
+                if !out.is_empty() {
+                    out.push_str("\n");
+                }
                 out.push_str(&s);
             }
         }
@@ -328,7 +348,7 @@ fn extract_cost_from_usage(total_tokens: u32) -> f64 {
     (total_tokens as f64) * 0.000_002
 }
 
-impl ConversationSummarizer {
+impl SessionSummarizer {
     fn repositories(&self) -> Arc<DatabaseManager> {
         Arc::clone(&self.repositories)
     }
@@ -341,8 +361,14 @@ mod tests {
     #[test]
     fn split_messages_handles_short_history() {
         let messages = vec![
-            MessageParam { role: crate::llm::anthropic_types::MessageRole::User, content: MessageContent::Text("hello".into()) },
-            MessageParam { role: crate::llm::anthropic_types::MessageRole::Assistant, content: MessageContent::Text("world".into()) },
+            MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::User,
+                content: MessageContent::Text("hello".into()),
+            },
+            MessageParam {
+                role: crate::llm::anthropic_types::MessageRole::Assistant,
+                content: MessageContent::Text("world".into()),
+            },
         ];
 
         let (summary, tail) = split_messages(&messages, 3);
@@ -353,7 +379,14 @@ mod tests {
     #[test]
     fn split_messages_keeps_tail() {
         let messages = (0..5)
-            .map(|i| MessageParam { role: if i % 2 == 0 { crate::llm::anthropic_types::MessageRole::User } else { crate::llm::anthropic_types::MessageRole::Assistant }, content: MessageContent::Text(format!("m{}", i)) })
+            .map(|i| MessageParam {
+                role: if i % 2 == 0 {
+                    crate::llm::anthropic_types::MessageRole::User
+                } else {
+                    crate::llm::anthropic_types::MessageRole::Assistant
+                },
+                content: MessageContent::Text(format!("m{}", i)),
+            })
             .collect::<Vec<_>>();
 
         let (summary, tail) = split_messages(&messages, 3);

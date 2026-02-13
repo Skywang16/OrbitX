@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 use crate::mux::error::{MuxConfigError, MuxConfigResult};
 
@@ -108,8 +108,8 @@ impl Default for TerminalSystemConfig {
 impl Default for BufferConfig {
     fn default() -> Self {
         Self {
-            max_size: 50_000,
-            keep_size: 25_000,
+            max_size: 1_000_000,
+            keep_size: 500_000,
             max_truncation_attempts: 1000,
         }
     }
@@ -180,7 +180,6 @@ impl TerminalSystemConfig {
     /// Load configuration from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> MuxConfigResult<Self> {
         let path = path.as_ref();
-        debug!("Loading terminal mux config from {}", path.display());
 
         let content = std::fs::read_to_string(path).map_err(|err| MuxConfigError::ReadFile {
             path: path.display().to_string(),
@@ -191,14 +190,12 @@ impl TerminalSystemConfig {
             source: err,
         })?;
 
-        info!("Loaded terminal mux config from {}", path.display());
         Ok(config)
     }
 
     /// Persist configuration to a file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> MuxConfigResult<()> {
         let path = path.as_ref();
-        debug!("Persisting terminal mux config to {}", path.display());
 
         let content = toml::to_string_pretty(self).map_err(|err| {
             MuxConfigError::Serialize(format!("Failed to serialize mux config: {err}"))
@@ -215,25 +212,20 @@ impl TerminalSystemConfig {
             path: path.display().to_string(),
             source: err,
         })?;
-        info!("Saved terminal mux config to {}", path.display());
         Ok(())
     }
 
     /// Apply environment variable overrides
     pub fn override_from_env(&mut self) {
-        debug!("Updating terminal mux config from environment variables");
-
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_MAX_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.max_size = size;
-                debug!("Applied env override: buffer.max_size = {}", size);
             }
         }
 
         if let Ok(val) = std::env::var("TERMINAL_BUFFER_KEEP_SIZE") {
             if let Ok(size) = val.parse::<usize>() {
                 self.buffer.keep_size = size;
-                debug!("Applied env override: buffer.keep_size = {}", size);
             }
         }
 
@@ -241,7 +233,6 @@ impl TerminalSystemConfig {
         if let Ok(val) = std::env::var("TERMINAL_SHELL_CACHE_TTL") {
             if let Ok(ttl) = val.parse::<u64>() {
                 self.shell.cache_ttl_seconds = ttl;
-                debug!("Applied env override: shell.cache_ttl_seconds = {}", ttl);
             }
         }
 
@@ -249,20 +240,12 @@ impl TerminalSystemConfig {
         if let Ok(val) = std::env::var("TERMINAL_CLEANUP_INTERVAL") {
             if let Ok(interval) = val.parse::<u64>() {
                 self.cleanup.interval_seconds = interval;
-                debug!(
-                    "Applied env override: cleanup.interval_seconds = {}",
-                    interval
-                );
             }
         }
 
         if let Ok(val) = std::env::var("TERMINAL_AUTO_CLEANUP") {
             if let Ok(enabled) = val.parse::<bool>() {
                 self.cleanup.auto_cleanup_enabled = enabled;
-                debug!(
-                    "Applied env override: cleanup.auto_cleanup_enabled = {}",
-                    enabled
-                );
             }
         }
     }
@@ -316,7 +299,6 @@ impl TerminalSystemConfig {
             });
         }
 
-        debug!("Terminal mux config validated successfully");
         Ok(())
     }
 
@@ -354,7 +336,6 @@ impl ConfigManager {
         GLOBAL_CONFIG
             .set(Arc::new(Mutex::new(config)))
             .map_err(|_| MuxConfigError::Internal("Config manager already initialized".into()))?;
-        info!("Terminal mux config manager initialised");
         Ok(())
     }
 
@@ -385,7 +366,6 @@ impl ConfigManager {
                 match TerminalSystemConfig::from_file(path) {
                     Ok(file_config) => {
                         config = file_config;
-                        info!("Loaded terminal mux config from file {path}");
                         break;
                     }
                     Err(e) => {
@@ -412,7 +392,6 @@ impl ConfigManager {
             .lock()
             .map_err(|_| MuxConfigError::Internal("Failed to acquire config lock".into()))?;
         *config = new_config;
-        info!("Reloaded terminal mux config");
         Ok(())
     }
 
@@ -448,7 +427,6 @@ impl ConfigManager {
         updater(&mut config);
         config.validate()?;
 
-        info!("Terminal mux config updated");
         Ok(())
     }
 }

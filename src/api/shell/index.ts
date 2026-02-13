@@ -48,6 +48,18 @@ export class ShellApi {
       working_directory: workingDirectory,
     })
   }
+
+  executeBackgroundProgram = async (
+    program: string,
+    args: string[],
+    workingDirectory?: string
+  ): Promise<BackgroundCommandResult> => {
+    return await invoke<BackgroundCommandResult>('shell_execute_background_program', {
+      program,
+      args,
+      working_directory: workingDirectory,
+    })
+  }
 }
 
 export const shellApi = new ShellApi()

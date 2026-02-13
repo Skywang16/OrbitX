@@ -199,7 +199,6 @@ impl StoragePathsError {
     }
 }
 
-
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("Database error: {0}")]

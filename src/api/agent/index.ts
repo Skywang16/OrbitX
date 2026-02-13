@@ -6,17 +6,7 @@
 
 import { invoke } from '@/utils/request'
 import { agentChannelApi } from '@/api/channel/agent'
-import type {
-  ExecuteTaskParams,
-  TaskControlCommand,
-  TaskListFilter,
-  TaskProgressPayload,
-  TaskProgressStream,
-  TaskSummary,
-  UiConversation,
-  UiMessage,
-} from './types'
-import type { Conversation as ChatConversation, Message } from '@/types'
+import type { ExecuteTaskParams, TaskListFilter, TaskProgressPayload, TaskProgressStream, TaskSummary } from './types'
 
 /**
  * Agent API 主类
@@ -27,44 +17,14 @@ export class AgentApi {
   /**
    * 执行 Agent 任务
    * @param userPrompt 用户输入
-   * @param conversationId 会话ID
+   * @param sessionId 会话ID
    * @param chatMode 聊天模式 ('chat' | 'agent')
+   * @param modelId 模型ID
+   * @param images 图片附件（可选）
    * @returns 返回任务进度流
    */
-  executeTask = async (
-    userPrompt: string,
-    conversationId: number,
-    chatMode: 'chat' | 'agent' = 'agent',
-    modelId: string
-  ): Promise<TaskProgressStream> => {
-    const params: ExecuteTaskParams = {
-      conversationId,
-      userPrompt,
-      chatMode,
-      modelId,
-    }
-
+  executeTask = async (params: ExecuteTaskParams): Promise<TaskProgressStream> => {
     const stream = agentChannelApi.createTaskStream(params)
-
-    return this.createProgressStreamFromReadableStream(stream)
-  }
-
-  /**
-   * 暂停正在执行的任务
-   * @param taskId 任务ID
-   */
-  pauseTask = async (taskId: string): Promise<void> => {
-    await invoke('agent_pause_task', { taskId })
-  }
-
-  /**
-   * 恢复已暂停的任务
-   * @param taskId 任务ID
-   * @returns 返回任务进度流
-   */
-  resumeTask = async (taskId: string): Promise<TaskProgressStream> => {
-    const stream = agentChannelApi.createResumeStream(taskId)
-
     return this.createProgressStreamFromReadableStream(stream)
   }
 
@@ -77,6 +37,16 @@ export class AgentApi {
     await invoke('agent_cancel_task', { taskId, reason })
   }
 
+  confirmTool = async (
+    taskId: string,
+    requestId: string,
+    decision: 'allow_once' | 'allow_always' | 'deny'
+  ): Promise<void> => {
+    await invoke('agent_tool_confirm', {
+      params: { taskId, requestId, decision },
+    })
+  }
+
   /**
    * 列出任务
    * @param filters 过滤条件
@@ -84,59 +54,9 @@ export class AgentApi {
    */
   listTasks = async (filters?: TaskListFilter): Promise<TaskSummary[]> => {
     return await invoke<TaskSummary[]>('agent_list_tasks', {
-      conversationId: filters?.conversationId,
+      sessionId: filters?.sessionId,
       statusFilter: filters?.status,
     })
-  }
-
-  // === 双轨架构新增方法 ===
-
-  /**
-   * 创建新会话
-   * @param title 会话标题
-   * @param workspacePath 工作空间路径
-   * @returns 会话ID
-   */
-  createConversation = async (title?: string, workspacePath?: string): Promise<number> => {
-    return await invoke<number>('agent_create_conversation', { title, workspacePath })
-  }
-
-  /**
-   * 获取会话列表
-   * @param limit 限制数量
-   * @param offset 偏移量
-   * @returns 会话列表
-   */
-  listConversations = async (): Promise<ChatConversation[]> => {
-    const conversations = await invoke<UiConversation[]>('agent_ui_get_conversations')
-    return conversations.map(record => this.convertUiConversation(record))
-  }
-
-  /**
-   * 删除会话
-   * @param conversationId 会话ID
-   */
-  deleteConversation = async (conversationId: number): Promise<void> => {
-    await invoke('agent_delete_conversation', { conversationId })
-  }
-
-  /**
-   * 更新会话标题
-   * @param conversationId 会话ID
-   * @param title 新标题
-   */
-  updateConversationTitle = async (conversationId: number, title: string): Promise<void> => {
-    await invoke('agent_update_conversation_title', { conversationId, title })
-  }
-
-  /** 获取单个会话 */
-  getConversation = async (conversationId: number): Promise<ChatConversation> => {
-    const conversations = await this.listConversations()
-    const target = conversations.find(convo => convo.id === conversationId)
-    if (!target) {
-      throw new Error(`Conversation ${conversationId} not found`)
-    }
-    return target
   }
 
   /**
@@ -155,34 +75,8 @@ export class AgentApi {
     return task
   }
 
-  /**
-   * 获取会话消息（UI轨）
-   */
-  getMessages = async (conversationId: number): Promise<Message[]> => {
-    const uiMessages = await invoke<UiMessage[]>('agent_ui_get_messages', {
-      conversationId,
-    })
-    return uiMessages.map(record => this.convertUiMessage(record))
-  }
-
-  /**
-   * 发送任务控制命令
-   * @param taskId 任务ID
-   * @param command 控制命令
-   */
-  sendCommand = async (taskId: string, command: TaskControlCommand): Promise<void> => {
-    switch (command.type) {
-      case 'pause':
-        await this.pauseTask(taskId)
-        break
-      case 'cancel':
-        await this.cancelTask(taskId, command.reason)
-        break
-      default: {
-        const _exhaustiveCheck: never = command
-        throw new Error(`Unsupported command: ${(_exhaustiveCheck as TaskControlCommand).type}`)
-      }
-    }
+  sendCommand = async (taskId: string, command: { type: 'cancel'; reason?: string }): Promise<void> => {
+    await this.cancelTask(taskId, command.reason)
   }
 
   /**
@@ -215,7 +109,7 @@ export class AgentApi {
           // 打印Channel输出的内容（使用 warn 以符合 no-console 规则）
           console.warn('[Channel输出]', {
             type: value.type,
-            payload: value.payload,
+            data: value,
             timestamp: new Date().toISOString(),
           })
 
@@ -317,41 +211,6 @@ export class AgentApi {
     }
 
     return taskProgressStream
-  }
-
-  private convertUiMessage = (message: UiMessage): Message => {
-    const toDate = (timestamp: number) => new Date(timestamp * 1000)
-    const base: Message = {
-      id: message.id,
-      conversationId: message.conversationId,
-      role: message.role,
-      createdAt: toDate(message.createdAt),
-      status: message.status ?? (message.role === 'assistant' ? 'streaming' : undefined),
-      duration: message.durationMs ?? undefined,
-    }
-
-    if (message.role === 'user') {
-      return {
-        ...base,
-        content: message.content,
-      }
-    }
-
-    return {
-      ...base,
-      steps: message.steps || [],
-    }
-  }
-
-  private convertUiConversation = (record: UiConversation): ChatConversation => {
-    const toDate = (timestamp: number) => new Date(timestamp * 1000)
-    return {
-      id: record.id,
-      title: record.title ?? '',
-      messageCount: record.messageCount,
-      createdAt: toDate(record.createdAt),
-      updatedAt: toDate(record.updatedAt),
-    }
   }
 }
 

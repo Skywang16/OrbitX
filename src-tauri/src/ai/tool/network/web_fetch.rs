@@ -4,6 +4,7 @@
  * 提供无头 HTTP 请求功能，绕过浏览器的 CORS 限制
  */
 
+use futures::StreamExt;
 use html2text::from_read;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -49,8 +50,6 @@ pub struct WebFetchResponse {
 pub async fn network_web_fetch_headless(
     request: WebFetchRequest,
 ) -> WebFetchResult<WebFetchResponse> {
-    tracing::debug!("🌐 [WebFetch] 开始无头请求: {}", request.url);
-
     let start_time = std::time::Instant::now();
 
     // 验证 URL
@@ -152,8 +151,6 @@ pub async fn network_web_fetch_headless(
         request_builder = request_builder.body(body.clone());
     }
 
-    tracing::info!("🚀 [WebFetch] 发送请求到: {}", request.url);
-
     // 发送请求
     match request_builder.send().await {
         Ok(response) => {
@@ -172,27 +169,52 @@ pub async fn network_web_fetch_headless(
                 }
             }
 
-            tracing::debug!("📡 [WebFetch] 收到响应: {} {}", status, status_text);
-
             let content_type = headers.get("content-type").cloned();
 
-            let raw_data = match response.text().await {
+            let mut body = Vec::new();
+            let mut truncated = false;
+            let max_download = request
+                .max_content_length
+                .and_then(|limit| limit.checked_mul(64))
+                .unwrap_or(1024 * 1024); // 默认最多抓取 1MB
+
+            let mut stream = response.bytes_stream();
+            while let Some(chunk) = stream.next().await {
+                match chunk {
+                    Ok(bytes) => {
+                        if body.len() + bytes.len() > max_download {
+                            let allowed = max_download.saturating_sub(body.len());
+                            body.extend_from_slice(&bytes[..allowed]);
+                            truncated = true;
+                            break;
+                        } else {
+                            body.extend_from_slice(&bytes);
+                        }
+                    }
+                    Err(e) => {
+                        return Ok(WebFetchResponse {
+                            status: 0,
+                            status_text: "Read Error".to_string(),
+                            headers: HashMap::new(),
+                            data: format!("读取响应失败: {}", e),
+                            response_time: start_time.elapsed().as_millis() as u64,
+                            final_url,
+                            success: false,
+                            error: Some(format!("读取响应失败: {}", e)),
+                            content_type: None,
+                            content_length: None,
+                            extracted_text: None,
+                            page_title: None,
+                        });
+                    }
+                }
+            }
+
+            let raw_data = match String::from_utf8(body) {
                 Ok(text) => text,
-                Err(e) => {
-                    return Ok(WebFetchResponse {
-                        status: 0,
-                        status_text: "Read Error".to_string(),
-                        headers: HashMap::new(),
-                        data: format!("读取响应失败: {}", e),
-                        response_time: start_time.elapsed().as_millis() as u64,
-                        final_url,
-                        success: false,
-                        error: Some(format!("读取响应失败: {}", e)),
-                        content_type: None,
-                        content_length: None,
-                        extracted_text: None,
-                        page_title: None,
-                    })
+                Err(err) => {
+                    truncated = true;
+                    String::from_utf8_lossy(&err.into_bytes()).into_owned()
                 }
             };
 
@@ -213,19 +235,17 @@ pub async fn network_web_fetch_headless(
                 (None, None)
             };
 
-            let final_data = if extract_content && extracted_text.is_some() {
+            let mut final_data = if extract_content && extracted_text.is_some() {
                 create_content_summary(extracted_text.as_ref().unwrap())
             } else {
                 match request.response_format.as_deref().unwrap_or("text") {
-                    "json" => {
-                        match serde_json::from_str::<serde_json::Value>(&raw_data) {
-                            Ok(json) => serde_json::to_string_pretty(&json).unwrap_or(raw_data),
-                            Err(_) => raw_data, // 如果不是有效的 JSON，返回原始文本
-                        }
-                    }
+                    "json" => match serde_json::from_str::<serde_json::Value>(&raw_data) {
+                        Ok(json) => serde_json::to_string_pretty(&json).unwrap_or(raw_data),
+                        Err(_) => raw_data,
+                    },
                     _ => {
-                        // 限制原始数据长度
                         if raw_data.len() > max_length {
+                            truncated = true;
                             format!(
                                 "{}...\n\n[内容被截断，总长度: {} 字符]",
                                 &raw_data[..max_length],
@@ -237,6 +257,10 @@ pub async fn network_web_fetch_headless(
                     }
                 }
             };
+
+            if truncated {
+                final_data.push_str("\n\n[响应内容已截断]");
+            }
 
             let response_time = start_time.elapsed().as_millis() as u64;
 

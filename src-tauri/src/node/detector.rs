@@ -155,10 +155,15 @@ pub fn get_current_version(cwd: Option<&str>) -> Result<Option<String>, String> 
 
 // 从 node 路径中提取版本号
 fn parse_node_path(path: &str) -> Option<String> {
+    use once_cell::sync::Lazy;
     use regex::Regex;
-    // 支持常见的安装路径：nvm/fnm(volta inventory)/asdf(nodejs)
-    let re = Regex::new(r"/(?:node|node-versions|nodejs)/v?(\d+\.\d+\.\d+)").unwrap();
-    re.captures(path)
+
+    // Compile regex once
+    static NODE_VERSION_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"/(?:node|node-versions|nodejs)/v?(\d+\.\d+\.\d+)").unwrap());
+
+    NODE_VERSION_RE
+        .captures(path)
         .and_then(|c| c.get(1))
         .map(|m| format!("v{}", m.as_str()))
 }

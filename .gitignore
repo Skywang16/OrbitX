@@ -24,7 +24,9 @@ src-tauri/logs/
 
 # Rust build outputs
 target/
-ck-main/target/
+
+# Cargo local config (mirror source for China)                                    
+.cargo/
 
 # Documentation
 docs/
@@ -41,6 +43,6 @@ docs/
 *.sln
 *.sw?
 *.oxi
-*.ck
 AGENTS.md
 WARP.md
+.ace-tool/

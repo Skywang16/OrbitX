@@ -8,7 +8,7 @@
 use chrono::Utc;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::error;
 
 use crate::agent::core::context::TaskContext;
 use crate::agent::error::AgentResult;
@@ -59,14 +59,6 @@ impl ToolExecutionLogger {
             )
             .await?;
 
-        if self.verbose {
-            info!(
-                "工具执行开始: task_id={}, tool={}, call_id={}",
-                context.task_id, tool_name, call_id
-            );
-            debug!("工具参数: {}", args_str);
-        }
-
         Ok(call_id.to_string())
     }
 
@@ -90,9 +82,6 @@ impl ToolExecutionLogger {
             )
             .await?;
 
-        if self.verbose {
-            info!("工具执行成功: log_id={}, 耗时={}ms", log_id, duration_ms);
-        }
         Ok(())
     }
 

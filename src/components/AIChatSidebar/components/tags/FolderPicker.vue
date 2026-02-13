@@ -2,7 +2,7 @@
   import { ref, onMounted, computed } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { filesystemApi } from '@/api'
-  import { useTerminalStore } from '@/stores/Terminal'
+  import { useEditorStore } from '@/stores/Editor'
 
   interface Props {
     currentPath: string
@@ -17,7 +17,7 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  const terminalStore = useTerminalStore()
+  const editorStore = useEditorStore()
 
   const folders = ref<Array<{ name: string; isDirectory: boolean }>>([])
   const loading = ref(false)
@@ -84,16 +84,16 @@
   }
 
   // 处理文件夹点击
-  const handleFolderClick = (folderName: string) => {
+  const handleFolderClick = async (folderName: string) => {
     const targetPath = buildTargetPath(folderName)
-    terminalStore.writeToTerminal(props.terminalId, `cd "${targetPath}"\n`)
+    await editorStore.createTerminalTab({ directory: targetPath, activate: true })
     emit('close')
   }
 
   // 处理返回上级目录
-  const handleParentClick = () => {
+  const handleParentClick = async () => {
     const parentPath = getParentPath()
-    terminalStore.writeToTerminal(props.terminalId, `cd "${parentPath}"\n`)
+    await editorStore.createTerminalTab({ directory: parentPath, activate: true })
     emit('close')
   }
 

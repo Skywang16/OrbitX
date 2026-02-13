@@ -23,7 +23,7 @@ use tracing_subscriber::{self, EnvFilter};
 pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
-        let default_level = "debug";
+        let default_level = "debug,ignore=warn,globset=warn";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -40,9 +40,7 @@ pub fn init_logging() {
         .try_init();
 
     match result {
-        Ok(_) => {
-            println!("Log system initialized successfully");
-        }
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Log system initialization failed: {}", e);
             std::process::exit(1);
@@ -85,14 +83,12 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
         let paths = StoragePaths::new(app_dir)?;
         let options = crate::storage::DatabaseOptions::default();
-        
-        Arc::new(
-            tauri::async_runtime::block_on(async {
-                let db = DatabaseManager::new(paths.clone(), options).await?;
-                db.initialize().await?;
-                Ok::<_, SetupError>(db)
-            })?
-        )
+
+        Arc::new(tauri::async_runtime::block_on(async {
+            let db = DatabaseManager::new(paths.clone(), options).await?;
+            db.initialize().await?;
+            Ok::<_, SetupError>(db)
+        })?)
     };
     app.manage(database_manager.clone());
 
@@ -109,12 +105,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         };
 
         let paths = StoragePaths::new(app_dir)?;
-        
-        Arc::new(
-            tauri::async_runtime::block_on(async {
-                MessagePackManager::new(paths, MessagePackOptions::default()).await
-            })?
-        )
+
+        Arc::new(tauri::async_runtime::block_on(async {
+            MessagePackManager::new(paths, MessagePackOptions::default()).await
+        })?)
     };
     app.manage(messagepack_manager);
 
@@ -122,10 +116,19 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     let cache = Arc::new(crate::storage::cache::UnifiedCache::new());
     app.manage(cache.clone());
 
+    // 在 ThemeManager 初始化前复制主题文件
+    tauri::async_runtime::block_on(async {
+        let _ = copy_themes_from_resources(app.handle()).await;
+        let _ = copy_default_config_from_resources(app.handle()).await;
+    });
+
     let theme_service = tauri::async_runtime::block_on(async {
         use crate::config::{paths::ConfigPaths, theme::ThemeManagerOptions, theme::ThemeService};
 
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
         let paths = app.state::<ConfigPaths>().inner().clone();
 
         ThemeService::new(paths, ThemeManagerOptions::default(), cache).await
@@ -134,6 +137,17 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     let completion_state = CompletionState::new();
     app.manage(completion_state);
+
+    // Completion learning (SQLite-backed, offline)
+    {
+        use crate::completion::learning::{CompletionLearningConfig, CompletionLearningState};
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let learning = CompletionLearningState::new(database, CompletionLearningConfig::default());
+        app.manage(learning);
+    }
 
     // 创建 Shell Integration 并注册 Node 版本回调
     let shell_integration = Arc::new(crate::shell::ShellIntegrationManager::new());
@@ -148,7 +162,10 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
 
     let terminal_context_state = {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
 
         // 启用与 ShellIntegration 的上下文服务集成（回调、缓存失效、事件转发）
         let context_service = TerminalContextService::new_with_integration(
@@ -163,8 +180,14 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(terminal_context_state);
 
     let ai_state = {
-        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
-        let cache = app.state::<Arc<crate::storage::cache::UnifiedCache>>().inner().clone();
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let cache = app
+            .state::<Arc<crate::storage::cache::UnifiedCache>>()
+            .inner()
+            .clone();
         let terminal_context_state = app.state::<TerminalContextState>();
         let terminal_context_service = terminal_context_state.context_service().clone();
 
@@ -183,30 +206,48 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     app.manage(ai_state);
 
     let llm_state = {
-        let database = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
         LLMManagerState::new(database)
     };
     app.manage(llm_state);
 
-    // 初始化TaskExecutor状态
+    // 初始化 Checkpoint 服务（提前创建，供 TaskExecutor 使用）
+    let checkpoint_service = {
+        use crate::checkpoint::{BlobStore, CheckpointService, CheckpointStorage};
+
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let pool = database.pool().clone();
+
+        let storage = Arc::new(CheckpointStorage::new(pool.clone()));
+        let blob_store = Arc::new(BlobStore::new(pool));
+        Arc::new(CheckpointService::new(storage, blob_store))
+    };
+
+    // 初始化TaskExecutor状态（带有 Checkpoint 服务）
     let task_executor_state = {
-        let terminal_context_state = app.state::<TerminalContextState>();
-        let database_manager = app.state::<Arc<crate::storage::DatabaseManager>>().inner().clone();
+        let database_manager = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
         let agent_persistence = Arc::new(crate::agent::persistence::AgentPersistence::new(
             Arc::clone(&database_manager),
         ));
-        let ui_persistence = Arc::new(crate::agent::ui::AgentUiPersistence::new(Arc::clone(
-            &database_manager,
-        )));
-        let terminal_context_service = terminal_context_state.context_service().clone();
-        let cache = app.state::<Arc<crate::storage::UnifiedCache>>().inner().clone();
+        let cache = app
+            .state::<Arc<crate::storage::UnifiedCache>>()
+            .inner()
+            .clone();
 
-        let executor = Arc::new(crate::agent::core::TaskExecutor::new(
+        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
             Arc::clone(&database_manager),
-            Arc::clone(&agent_persistence),
-            Arc::clone(&ui_persistence),
-            Arc::clone(&terminal_context_service),
             Arc::clone(&cache),
+            Arc::clone(&agent_persistence),
+            Arc::clone(&checkpoint_service),
         ));
 
         crate::agent::core::commands::TaskExecutorState::new(executor)
@@ -227,10 +268,101 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     match crate::dock::DockManager::new(&app.handle()) {
         Ok(dock_manager) => {
             app.manage(dock_manager);
-            tracing::info!("Dock manager initialized successfully");
         }
         Err(e) => {
             tracing::warn!("Failed to initialize dock manager: {}", e);
+        }
+    }
+
+    // 初始化 Checkpoint 状态（复用之前创建的 checkpoint_service）
+    let checkpoint_state = {
+        use crate::checkpoint::CheckpointState;
+        CheckpointState::new(checkpoint_service)
+    };
+    app.manage(checkpoint_state);
+
+    // 初始化 Git Watcher 状态
+    let git_watcher = crate::git::GitWatcher::new();
+    app.manage(git_watcher);
+
+    // 初始化向量数据库状态
+    {
+        use crate::llm::types::LLMProviderConfig;
+        use crate::storage::repositories::{AIModels, ModelType};
+        use crate::vector_db::{
+            commands::VectorDbState,
+            core::{RemoteEmbeddingConfig, VectorDbConfig},
+            search::SemanticSearchEngine,
+        };
+        use std::sync::Arc;
+
+        // 从数据库读取 embedding 模型配置
+        let database = app
+            .state::<Arc<crate::storage::DatabaseManager>>()
+            .inner()
+            .clone();
+        let embedding_config = tauri::async_runtime::block_on(async {
+            let models = AIModels::new(&database)
+                .find_all()
+                .await
+                .unwrap_or_default();
+            models
+                .into_iter()
+                .find(|m| m.model_type == ModelType::Embedding)
+        });
+
+        let config =
+            if let Some(model) = embedding_config {
+                // 从 options 中读取维度，默认 1024
+                let dimension = model
+                    .options
+                    .as_ref()
+                    .and_then(|opts| opts.get("dimension"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize)
+                    .unwrap_or(1024);
+
+                tracing::info!(
+                    "使用配置的 embedding 模型: {} @ {}, 维度: {}",
+                    model.model,
+                    model.api_url,
+                    dimension
+                );
+                VectorDbConfig {
+                    embedding: RemoteEmbeddingConfig {
+                        provider_config: LLMProviderConfig {
+                            provider_type: model.provider.as_str().to_string(),
+                            api_key: model.api_key,
+                            api_url: Some(model.api_url),
+                            options: model.options.as_ref().and_then(|v| v.as_object()).map(
+                                |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+                            ),
+                        },
+                        model_name: model.model,
+                        dimension,
+                        chunk_size: 512,
+                        chunk_overlap: 100,
+                    },
+                    ..VectorDbConfig::default()
+                }
+            } else {
+                tracing::warn!("未找到 embedding 模型配置，使用默认值");
+                VectorDbConfig::default()
+            };
+
+        if let Err(e) = config.validate() {
+            warn!("Vector DB config validate failed: {}", e);
+        }
+
+        if let Ok(state) = (|| -> Result<VectorDbState, crate::vector_db::core::VectorDbError> {
+            let embedder = crate::vector_db::embedding::create_embedder(&config.embedding)?;
+            let search_engine = Arc::new(SemanticSearchEngine::new(embedder, config));
+            crate::vector_db::commands::set_global_state(search_engine.clone());
+            Ok(VectorDbState::new(search_engine))
+        })() {
+            app.manage(state);
+        } else {
+            warn!("Failed to initialize vector DB");
         }
     }
 
@@ -244,17 +376,52 @@ pub fn setup_app_events<R: tauri::Runtime>(app: &tauri::App<R>) {
     // 启动系统主题监听器
     start_system_theme_listener(app.handle().clone());
 
-    // 在窗口关闭请求时优雅关闭 TerminalMux，释放后台线程
+    // 配置窗口关闭行为：macOS 上隐藏窗口，其他平台退出应用
     if let Some(window) = app.get_webview_window("main") {
-        use tauri::WindowEvent;
-        window.on_window_event(|event| {
-            if let WindowEvent::CloseRequested { .. } = event {
-                if let Err(e) = crate::mux::singleton::shutdown_mux() {
-                    warn!("Failed to shutdown TerminalMux: {}", e);
-                } else {
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: 点击关闭按钮时隐藏窗口，应用保持在 Dock 栏运行
+            // 用户可以通过 Command+Q 或菜单退出来真正退出应用
+            let window_clone = window.clone();
+            let app_handle = app.handle().clone();
+            window.on_window_event(move |event| {
+                use tauri::WindowEvent;
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    // 阻止默认的关闭行为
+                    api.prevent_close();
+
+                    // 清空所有标签页
+                    if let Some(dock_manager) = app_handle.try_state::<crate::dock::DockManager>() {
+                        if let Err(e) = dock_manager.state().clear() {
+                            warn!("Failed to clear dock tabs: {}", e);
+                        }
+                    }
+
+                    // 通知前端清空所有标签页
+                    if let Err(e) = window_clone.emit("clear-all-tabs", ()) {
+                        warn!("Failed to emit clear-all-tabs event: {}", e);
+                    }
+
+                    // 隐藏窗口而不是关闭
+                    if let Err(e) = window_clone.hide() {
+                        warn!("Failed to hide window: {}", e);
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // 其他平台：点击关闭按钮时退出应用并清理资源
+            use tauri::WindowEvent;
+            window.on_window_event(|event| {
+                if let WindowEvent::CloseRequested { .. } = event {
+                    if let Err(e) = crate::mux::singleton::shutdown_mux() {
+                        warn!("Failed to shutdown TerminalMux: {}", e);
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -360,9 +527,13 @@ fn setup_unified_terminal_events<R: tauri::Runtime>(app_handle: tauri::AppHandle
     let shell_integration = mux.shell_integration();
     let shell_event_receiver = shell_integration.subscribe_events();
 
-    match create_terminal_event_handler(app_handle.clone(), &mux, context_event_receiver, shell_event_receiver) {
+    match create_terminal_event_handler(
+        app_handle.clone(),
+        &mux,
+        context_event_receiver,
+        shell_event_receiver,
+    ) {
         Ok(handler) => {
-            tracing::debug!("统一终端事件处理器已启动");
             // Use Box::leak to prevent the handler from being dropped
             // This ensures the event subscriptions remain active for the app lifetime
             // The memory will be cleaned up when the process exits
@@ -401,16 +572,17 @@ fn start_system_theme_listener<R: tauri::Runtime>(app_handle: tauri::AppHandle<R
 /// 获取回退的主题文件列表
 fn get_fallback_theme_list() -> Vec<String> {
     vec![
+        "catppuccin-latte.toml".to_string(),
+        "catppuccin-mocha.toml".to_string(),
         "dark.toml".to_string(),
-        "light.toml".to_string(),
         "dracula.toml".to_string(),
+        "github-dark.toml".to_string(),
         "gruvbox-dark.toml".to_string(),
         "index.toml".to_string(),
-        "monokai.toml".to_string(),
+        "light.toml".to_string(),
+        "material-dark.toml".to_string(),
         "nord.toml".to_string(),
         "one-dark.toml".to_string(),
-        "solarized-dark.toml".to_string(),
-        "solarized-light.toml".to_string(),
         "tokyo-night.toml".to_string(),
     ]
 }
@@ -422,39 +594,38 @@ async fn get_theme_files_from_resources<R: tauri::Runtime>(
     use std::path::PathBuf;
     use tauri::path::BaseDirectory;
 
-    // 开发模式直接从项目根目录读取，生产模式从资源读取
     let themes_resource_path = if cfg!(debug_assertions) {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         current_dir.join("..").join("config").join("themes")
     } else {
         app_handle
             .path()
-            .resolve("themes", BaseDirectory::Resource)
+            .resolve("_up_/config/themes", BaseDirectory::Resource)
             .map_err(|_| "Failed to resolve resource path")?
     };
+
     match std::fs::read_dir(&themes_resource_path) {
         Ok(entries) => {
-            let mut theme_files = Vec::new();
-            for entry in entries {
-                if let Ok(entry) = entry {
+            let theme_files: Vec<String> = entries
+                .flatten()
+                .filter_map(|entry| {
                     let path = entry.path();
                     if path.is_file() {
-                        if let Some(file_name) = path.file_name() {
-                            if let Some(file_name_str) = file_name.to_str() {
-                                if file_name_str.ends_with(".toml") {
-                                    theme_files.push(file_name_str.to_string());
-                                }
-                            }
-                        }
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .filter(|name| name.ends_with(".toml"))
+                            .map(String::from)
+                    } else {
+                        None
                     }
-                }
-            }
+                })
+                .collect();
 
-            if theme_files.is_empty() {
-                Ok(get_fallback_theme_list())
+            Ok(if theme_files.is_empty() {
+                get_fallback_theme_list()
             } else {
-                Ok(theme_files)
-            }
+                theme_files
+            })
         }
         Err(_) => Ok(get_fallback_theme_list()),
     }
@@ -471,46 +642,32 @@ async fn copy_themes_from_resources<R: tauri::Runtime>(
     let paths = ConfigPaths::new()?;
     let themes_dir = paths.themes_dir();
 
-    // 确保主题目录存在
     if !themes_dir.exists() {
         fs::create_dir_all(themes_dir)?;
     }
 
-    // 动态获取所有主题文件，避免硬编码列表
     let theme_files = get_theme_files_from_resources(app_handle).await?;
-
-    let mut _copied_count = 0;
 
     for theme_file in &theme_files {
         let dest_path = themes_dir.join(theme_file);
 
-        if dest_path.exists() {
-            continue;
-        }
-
-        // 开发模式直接从项目根目录读取，生产模式从资源读取
         let source_path = if cfg!(debug_assertions) {
             let current_dir =
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let dev_file_path = current_dir
+            current_dir
                 .join("..")
                 .join("config")
                 .join("themes")
-                .join(theme_file);
-            Some(dev_file_path)
+                .join(theme_file)
         } else {
-            app_handle
-                .path()
-                .resolve(theme_file, BaseDirectory::Resource)
-                .ok()
+            app_handle.path().resolve(
+                format!("_up_/config/themes/{}", theme_file),
+                BaseDirectory::Resource,
+            )?
         };
 
-        if let Some(resource_path) = source_path {
-            if let Ok(content) = std::fs::read_to_string(&resource_path) {
-                if std::fs::write(&dest_path, content).is_ok() {
-                    _copied_count += 1;
-                }
-            }
+        if let Ok(content) = std::fs::read_to_string(&source_path) {
+            let _ = std::fs::write(&dest_path, content);
         }
     }
 
@@ -541,7 +698,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     // 尝试从资源目录读取默认配置文件
     match app_handle
         .path()
-        .resolve("config.toml", BaseDirectory::Resource)
+        .resolve("_up_/config/config.toml", BaseDirectory::Resource)
     {
         Ok(resource_path) => match fs::read_to_string(&resource_path) {
             Ok(content) => match fs::write(&config_file_path, content) {
@@ -564,24 +721,7 @@ async fn copy_default_config_from_resources<R: tauri::Runtime>(
     Ok(())
 }
 
-/// 创建一个 Tauri 插件，用于在应用启动时复制默认主题
+/// 创建一个 Tauri 插件，用于应用初始化
 pub fn init_plugin<R: tauri::Runtime>(name: &'static str) -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new(name)
-        .setup(|app_handle, _api| {
-            // 从资源目录复制配置文件和主题文件到用户配置目录
-            let app_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                // 复制默认配置文件
-                if let Err(e) = copy_default_config_from_resources(&app_handle).await {
-                    eprintln!("Failed to copy default config file: {}", e);
-                }
-
-                // 复制主题文件
-                if let Err(e) = copy_themes_from_resources(&app_handle).await {
-                    eprintln!("Failed to copy theme files: {}", e);
-                }
-            });
-            Ok(())
-        })
-        .build()
+    tauri::plugin::Builder::new(name).build()
 }

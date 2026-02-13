@@ -43,7 +43,10 @@
     "new_session": "新建会话",
     "new_session_placeholder": "新建会话",
     "session_select": "选择会话",
-    "input_placeholder": "输入消息..."
+    "input_placeholder": "输入消息...",
+    "upload_image": "上传图片",
+    "max_images_reached": "最多只能上传5张图片",
+    "model_not_support_images": "当前模型不支持图片输入"
   },
   "search": {
     "placeholder": "搜索",
@@ -52,6 +55,52 @@
     "previous": "上一个",
     "next": "下一个",
     "close": "关闭"
+  },
+  "git": {
+    "title": "Git",
+    "no_repository": "当前目录不是 Git 仓库",
+    "init_repository": "初始化仓库",
+    "unknown_branch": "未知",
+    "refresh": "刷新",
+    "branches": "分支",
+    "local": "本地",
+    "remote": "远程",
+    "changes": "变更",
+    "no_changes": "工作区干净",
+    "staged": "已暂存",
+    "staged_changes": "暂存的更改",
+    "modified": "已修改",
+    "untracked": "未跟踪",
+    "conflicted": "冲突",
+    "merge_conflicts": "合并冲突",
+    "commits": "提交历史",
+    "no_commits": "暂无提交",
+    "author": "作者",
+    "date": "时间",
+    "message": "消息",
+    "diff_staged": "暂存区 Diff",
+    "diff_unstaged": "工作区 Diff",
+    "no_diff": "暂无 Diff",
+    "toggle_panel": "切换 Git 面板",
+    "commit": "提交",
+    "push": "推送",
+    "pull": "拉取",
+    "sync": "同步",
+    "fetch": "获取",
+    "stage": "暂存",
+    "unstage": "取消暂存",
+    "discard": "丢弃",
+    "discard_confirm": "确定要丢弃对 \"{file}\" 的更改吗？此操作无法撤销。",
+    "discard_all_confirm": "确定要丢弃所有更改吗？此操作无法撤销。",
+    "discard_selected_confirm": "确定要丢弃选中的 {count} 个文件的更改吗？此操作无法撤销。",
+    "stage_all": "暂存全部",
+    "unstage_all": "取消全部暂存",
+    "discard_all": "丢弃全部",
+    "stage_selected": "暂存选中",
+    "unstage_selected": "取消暂存选中",
+    "discard_selected": "丢弃选中",
+    "loading": "加载中",
+    "no_files": "没有文件更改"
   },
   "onboarding": {
     "navigation": {
@@ -137,11 +186,11 @@
     "delete_confirm_text": "确认",
     "cancel": "取消",
     "add_new_model": "添加新模型",
-    "add_model_description": "配置AI模型和向量模型连接信息",
+    "add_model_description": "配置AI模型连接信息",
     "no_models": "暂无模型配置",
     "all_models": "所有模型",
     "chat": "聊天",
-    "add_chat_model": "添加AI模型",
+    "add_chat_model": "添加Chat模型",
     "context_window": "上下文窗口 (tokens)",
     "context_window_description": "模型能处理的最大上下文长度",
     "max_output_tokens": "最大输出 (tokens)",
@@ -149,7 +198,6 @@
     "advanced_options": "高级选项",
     "feature_support": "功能支持",
     "supports_images": "支持图片输入",
-    "supports_prompt_cache": "支持提示词缓存",
     "validation": {
       "api_key_required": "API Key 是必填项",
       "preset_required": "请选择一个预设提供商",
@@ -222,6 +270,17 @@
     "generating": "正在生成...",
     "duration_info": "耗时: {duration}"
   },
+  "checkpoint": {
+    "rollback": "回滚",
+    "rollback_confirm": "确定要回滚到此检查点吗？这将恢复文件到该时刻的状态。",
+    "rollback_success": "成功恢复 {count} 个文件",
+    "rollback_partial": "恢复了 {restored} 个文件，{failed} 个失败",
+    "rollback_failed": "回滚失败",
+    "confirm_revert": "确认回滚",
+    "revert_changes_desc": "回滚将恢复以下文件的修改：",
+    "loading_files": "加载文件列表...",
+    "no_files_changed": "没有文件变更"
+  },
   "tool": {
     "data_error": "数据错误"
   },
@@ -261,7 +320,8 @@
     "settings": "设置",
     "open_settings": "打开设置",
     "feedback": "问题反馈",
-    "pin": "置顶"
+    "pin": "置顶",
+    "toggle_sidebar": "切换侧边栏"
   },
   "ai_model_config": {
     "empty_description": "点击\"添加模型\"按钮开始配置您的第一个AI模型"
@@ -273,7 +333,6 @@
   "cache": {
     "directory_cleared": "目录缓存已清除"
   },
-  "config": {},
   "ck": {
     "index_ready": "已构建向量索引",
     "index_not_ready": "语义索引未就绪",
@@ -281,6 +340,7 @@
     "index_button_disabled_in_settings": "在设置页面时不可用",
     "index_button_select_non_home": "请选择非初始目录后再使用",
     "send_button_disabled_in_settings": "在设置页面时不可用",
+    "upload_button_disabled_in_settings": "在设置页面时不可用",
     "title": "代码库索引",
     "subtitle": "配置代码库索引设置以启用项目的语义搜索。",
     "current_workspace": "当前工作区",
@@ -289,13 +349,24 @@
     "build_index_tooltip_enabled": "点击构建索引",
     "refresh": "刷新",
     "delete": "删除",
-    "cancel_build": "取消索引"
+    "cancel_build": "取消索引",
+    "build_failed": "索引构建失败",
+    "build_failed_with_error": "索引构建失败：{error}",
+    "build_cancelled": "索引构建已取消",
+    "build_done": "索引构建完成",
+    "build_done_with_failures": "索引构建完成，但有 {count} 个文件失败",
+    "build_channel_error": "索引构建通道错误",
+    "embedding_model": "向量模型"
   },
   "workspace": {
+    "title": "工作区",
+    "new_terminal": "新建终端",
+    "empty": "暂无工作区",
     "parent_directory": "上级目录",
     "no_folders": "当前目录无子文件夹",
     "read_dir_error": "读取目录失败",
-    "current_directory": "当前目录"
+    "current_directory": "当前目录",
+    "trim_session_failed": "裁剪会话历史失败"
   },
   "recent_workspaces": {
     "title": "最近的工作区"
@@ -303,5 +374,21 @@
   "node": {
     "click_to_switch": "点击切换版本",
     "no_versions": "未找到已安装的Node.js版本"
+  },
+  "embedding_model": {
+    "add_title": "添加向量模型",
+    "edit_title": "编辑向量模型",
+    "api_url": "API URL",
+    "api_key": "API Key",
+    "api_key_placeholder": "输入您的 API Key",
+    "model_name": "模型名称",
+    "dimension": "向量维度",
+    "dimension_hint": "必须与模型输出维度一致，否则索引会失败",
+    "validation": {
+      "api_url_required": "API URL 是必填项",
+      "api_key_required": "API Key 是必填项",
+      "model_name_required": "模型名称是必填项",
+      "dimension_required": "向量维度必须大于 0"
+    }
   }
 }

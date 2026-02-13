@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS ai_features (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 全局偏好设置表
+CREATE TABLE IF NOT EXISTS app_preferences (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 终端会话表
 CREATE TABLE IF NOT EXISTS terminal_sessions (
     id TEXT PRIMARY KEY,
@@ -69,55 +76,74 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 
 -- ===========================
--- Agent 会话上下文架构
+-- Workspace 中心化架构
 -- ===========================
--- 注意：自动清库逻辑已移除，避免正常启动时清空会话数据。
--- 如需在迁移时清理旧表，请改用专用手动脚本。
 
--- 会话表：顶层会话容器
-CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    workspace_path TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
--- 会话摘要表：智能压缩信息
-CREATE TABLE IF NOT EXISTS conversation_summaries (
-    conversation_id INTEGER PRIMARY KEY,
-    summary_content TEXT NOT NULL DEFAULT '',
-    summary_tokens INTEGER NOT NULL DEFAULT 0,
-    messages_before_summary INTEGER NOT NULL DEFAULT 0,
-    tokens_saved INTEGER NOT NULL DEFAULT 0,
-    compression_cost REAL NOT NULL DEFAULT 0.0,
+CREATE TABLE IF NOT EXISTS workspaces (
+    path TEXT PRIMARY KEY,
+    display_name TEXT,
+    active_session_id INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    last_accessed_at INTEGER NOT NULL
 );
 
--- 文件上下文表：跟踪文件状态
-CREATE TABLE IF NOT EXISTS file_context_entries (
+CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL,
-    file_path TEXT NOT NULL,
+    workspace_path TEXT NOT NULL,
+    title TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    status TEXT NOT NULL CHECK (status IN ('streaming', 'completed', 'cancelled', 'error')),
+    blocks_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    duration_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cache_read_tokens INTEGER,
+    cache_write_tokens INTEGER,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS session_summaries (
+    session_id INTEGER PRIMARY KEY,
+    summary_content TEXT NOT NULL DEFAULT '',
+    summary_tokens INTEGER NOT NULL DEFAULT 0,
+    messages_summarized INTEGER NOT NULL DEFAULT 0,
+    tokens_saved INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS workspace_file_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_path TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
     record_state TEXT NOT NULL CHECK (record_state IN ('active', 'stale')),
     record_source TEXT NOT NULL CHECK (
         record_source IN ('read_tool', 'user_edited', 'agent_edited', 'file_mentioned')
     ),
-    agent_read_timestamp INTEGER,
-    agent_edit_timestamp INTEGER,
-    user_edit_timestamp INTEGER,
+    agent_read_at INTEGER,
+    agent_edit_at INTEGER,
+    user_edit_at INTEGER,
     created_at INTEGER NOT NULL,
-    UNIQUE (conversation_id, file_path),
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    UNIQUE (workspace_path, relative_path),
+    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE
 );
 
--- 执行记录表：单次Agent执行元数据
 CREATE TABLE IF NOT EXISTS agent_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL UNIQUE,
-    conversation_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
     user_request TEXT NOT NULL,
     system_prompt_used TEXT NOT NULL,
     execution_config TEXT,
@@ -134,10 +160,9 @@ CREATE TABLE IF NOT EXISTS agent_executions (
     updated_at INTEGER NOT NULL,
     started_at INTEGER,
     completed_at INTEGER,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- 执行消息表：ReAct循环消息
 CREATE TABLE IF NOT EXISTS execution_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL,
@@ -151,7 +176,6 @@ CREATE TABLE IF NOT EXISTS execution_messages (
     FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
 );
 
--- 工具执行表：工具调用持久化
 CREATE TABLE IF NOT EXISTS tool_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL,
@@ -170,7 +194,6 @@ CREATE TABLE IF NOT EXISTS tool_executions (
     FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
 );
 
--- 执行事件表：调试与审计
 CREATE TABLE IF NOT EXISTS execution_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL,
@@ -181,64 +204,117 @@ CREATE TABLE IF NOT EXISTS execution_events (
     FOREIGN KEY (execution_id) REFERENCES agent_executions(execution_id) ON DELETE CASCADE
 );
 
--- Agent UI 缓存表
-DROP TABLE IF EXISTS agent_ui_events;
-DROP TABLE IF EXISTS agent_ui_tasks;
-DROP TABLE IF EXISTS agent_ui_context_snapshots;
-
-CREATE TABLE IF NOT EXISTS agent_ui_conversations (
-    id INTEGER PRIMARY KEY,
-    title TEXT,
-    message_count INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (id) REFERENCES conversations(id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS checkpoint_blobs (
+    hash TEXT PRIMARY KEY,
+    content BLOB NOT NULL,
+    size INTEGER NOT NULL,
+    ref_count INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS agent_ui_messages (
+CREATE TABLE IF NOT EXISTS checkpoints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    content TEXT,
-    steps_json TEXT,
-    status TEXT CHECK (status IN ('streaming', 'complete', 'error')),
-    duration_ms INTEGER,
+    workspace_path TEXT NOT NULL,
+    session_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    parent_id INTEGER,
     created_at INTEGER NOT NULL,
-    FOREIGN KEY (conversation_id) REFERENCES agent_ui_conversations(id) ON DELETE CASCADE
+    FOREIGN KEY (workspace_path) REFERENCES workspaces(path) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES checkpoints(id) ON DELETE SET NULL
 );
 
--- Agent 相关索引
-CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_file_context_conversation_state
-    ON file_context_entries(conversation_id, record_state);
-CREATE INDEX IF NOT EXISTS idx_file_context_path_state
-    ON file_context_entries(file_path, record_state);
-CREATE INDEX IF NOT EXISTS idx_executions_conversation_created
-    ON agent_executions(conversation_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_executions_status_created
-    ON agent_executions(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_execution_iter_seq
-    ON execution_messages(execution_id, iteration, sequence);
-CREATE INDEX IF NOT EXISTS idx_messages_summary
-    ON execution_messages(execution_id, is_summary);
-CREATE INDEX IF NOT EXISTS idx_tools_execution_started
-    ON tool_executions(execution_id, started_at);
-CREATE INDEX IF NOT EXISTS idx_tools_name_status
-    ON tool_executions(tool_name, status);
-CREATE INDEX IF NOT EXISTS idx_events_execution_iter
-    ON execution_events(execution_id, iteration);
-CREATE INDEX IF NOT EXISTS idx_events_type_created
-    ON execution_events(event_type, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_agent_ui_messages_conversation
-    ON agent_ui_messages(conversation_id, created_at ASC);
+CREATE TABLE IF NOT EXISTS checkpoint_file_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checkpoint_id INTEGER NOT NULL,
+    relative_path TEXT NOT NULL,
+    blob_hash TEXT NOT NULL,
+    change_type TEXT NOT NULL CHECK (change_type IN ('added', 'modified', 'deleted')),
+    file_size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (checkpoint_id, relative_path),
+    FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id) ON DELETE CASCADE,
+    FOREIGN KEY (blob_hash) REFERENCES checkpoint_blobs(hash)
+);
 
--- Agent 相关触发器
-CREATE TRIGGER IF NOT EXISTS trg_conversation_summaries_updated_at
-AFTER UPDATE ON conversation_summaries
+CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
+    ON workspaces(last_accessed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace
+    ON sessions(workspace_path, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_session
+    ON messages(session_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_session_summaries
+    ON session_summaries(session_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_file_context_state
+    ON workspace_file_context(workspace_path, record_state);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_session
+    ON agent_executions(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_status
+    ON agent_executions(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_execution_messages_iter
+    ON execution_messages(execution_id, iteration, sequence);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_started
+    ON tool_executions(execution_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_execution_events_iter
+    ON execution_events(execution_id, iteration);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace
+    ON checkpoints(workspace_path, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_session
+    ON checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_message
+    ON checkpoints(message_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_parent
+    ON checkpoints(parent_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_files_checkpoint
+    ON checkpoint_file_snapshots(checkpoint_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_files_blob
+    ON checkpoint_file_snapshots(blob_hash);
+CREATE INDEX IF NOT EXISTS idx_blob_refcount
+    ON checkpoint_blobs(ref_count);
+
+-- ===========================
+-- Completion learning model (offline, small footprint)
+-- ===========================
+
+CREATE TABLE IF NOT EXISTS completion_command_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    root TEXT NOT NULL,
+    sub TEXT,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS completion_transitions (
+    prev_id INTEGER NOT NULL,
+    next_id INTEGER NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (prev_id, next_id),
+    FOREIGN KEY (prev_id) REFERENCES completion_command_keys(id) ON DELETE CASCADE,
+    FOREIGN KEY (next_id) REFERENCES completion_command_keys(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS completion_entity_stats (
+    entity_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_ts INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (entity_type, value)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_session_summaries_updated_at
+AFTER UPDATE ON session_summaries
 FOR EACH ROW
 BEGIN
-    UPDATE conversation_summaries
+    UPDATE session_summaries
     SET updated_at = strftime('%s','now')
-    WHERE conversation_id = NEW.conversation_id;
+    WHERE session_id = NEW.session_id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_agent_executions_completed_at
@@ -250,10 +326,3 @@ BEGIN
     SET completed_at = COALESCE(NEW.completed_at, strftime('%s','now'))
     WHERE id = NEW.id;
 END;
-
--- 最近打开的工作区表
-CREATE TABLE IF NOT EXISTS recent_workspaces (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    path TEXT NOT NULL UNIQUE,
-    last_accessed_at INTEGER NOT NULL
-);

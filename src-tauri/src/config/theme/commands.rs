@@ -14,7 +14,6 @@ use crate::{api_error, api_success};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
-use tracing::{debug, info};
 
 /// 主题信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,8 +228,6 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     app_handle: &AppHandle<R>,
     is_dark: bool,
 ) -> ConfigCommandResult<()> {
-    debug!("系统主题变化: {}", if is_dark { "深色" } else { "浅色" });
-
     let config_manager = app_handle.state::<Arc<TomlConfigManager>>();
     let theme_service = app_handle.state::<Arc<ThemeService>>();
 
@@ -243,8 +240,6 @@ pub async fn handle_system_theme_change<R: tauri::Runtime>(
     if config.appearance.theme_config.follow_system {
         let current_theme_name =
             theme_service.get_current_theme_name(&config.appearance.theme_config, Some(is_dark));
-
-        info!("系统主题变化，切换到主题: {}", current_theme_name);
 
         // 通知前端主题已更改
         app_handle

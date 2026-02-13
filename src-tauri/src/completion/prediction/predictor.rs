@@ -5,7 +5,6 @@
 /// 2. 从输出提取实体
 /// 3. 生成带参数的建议
 use super::command_pairs::get_suggested_commands;
-use super::context_detector::ContextDetector;
 use crate::completion::smart_extractor::SmartExtractor;
 use crate::completion::types::{CompletionItem, CompletionType};
 use std::path::PathBuf;
@@ -35,8 +34,9 @@ impl PredictionResult {
 
     /// 转换为补全项
     pub fn to_completion_item(&self) -> CompletionItem {
+        let score = (90.0 + (self.confidence / 10.0)).min(100.0);
         CompletionItem::new(self.full_command(), CompletionType::Command)
-            .with_score(90.0 + self.confidence)
+            .with_score(score)
             .with_source(self.source.clone())
             .with_description(format!("预测的后续命令 (置信度: {:.0}%)", self.confidence))
     }
@@ -44,17 +44,14 @@ impl PredictionResult {
 
 /// 命令序列预测器
 pub struct CommandPredictor {
-    /// 上下文检测器
-    context_detector: ContextDetector,
     /// 实体提取器
     extractor: &'static SmartExtractor,
 }
 
 impl CommandPredictor {
     /// 创建新的预测器
-    pub fn new(current_dir: PathBuf) -> Self {
+    pub fn new(_current_dir: PathBuf) -> Self {
         Self {
-            context_detector: ContextDetector::new(current_dir),
             extractor: SmartExtractor::global(),
         }
     }
@@ -85,6 +82,15 @@ impl CommandPredictor {
         // 步骤3: 按置信度排序
         predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
         predictions
+    }
+
+    pub fn build_prediction_for_suggestion(
+        &self,
+        suggested_cmd: &str,
+        last_command: &str,
+        last_output: Option<&str>,
+    ) -> PredictionResult {
+        self.build_prediction(suggested_cmd, last_command, last_output)
     }
 
     /// 构建预测结果（包含参数注入）
@@ -188,15 +194,8 @@ impl CommandPredictor {
         None
     }
 
-    /// 计算上下文加分
-    pub fn calculate_context_boost(&self, input_prefix: &str) -> f64 {
-        self.context_detector.calculate_context_boost(input_prefix)
-    }
-
-    /// 获取项目类型（调试用）
-    pub fn get_project_types(&self) -> Vec<&'static str> {
-        self.context_detector.get_project_types()
-    }
+    // 上下文加分已移除：学习模型负责“项目/用户行为”的动态权重，
+    // 静态启发式只会制造特殊情况和不可解释的排序。
 }
 
 #[cfg(test)]

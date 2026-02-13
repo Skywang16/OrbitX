@@ -2,10 +2,11 @@
 
 use std::io::{Read, Write};
 use std::process;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::mux::error::{PaneError, PaneResult};
+use crate::mux::shell_manager::ShellInfo;
 use crate::mux::{PaneId, PtySize, TerminalConfig};
 use portable_pty::{CommandBuilder, MasterPty, PtySize as PortablePtySize, SlavePty};
 
@@ -23,12 +24,19 @@ pub trait Pane: Send + Sync {
     fn mark_dead(&self);
 
     fn get_size(&self) -> PtySize;
+
+    /// 获取创建时使用的完整 Shell 信息
+    fn shell_info(&self) -> &ShellInfo;
 }
 
 pub struct LocalPane {
     pane_id: PaneId,
-    size: Arc<Mutex<PtySize>>,
-    dead: Arc<AtomicBool>,
+    rows: AtomicU16,
+    cols: AtomicU16,
+    pixel_width: AtomicU16,
+    pixel_height: AtomicU16,
+    dead: AtomicBool,
+    shell_info: ShellInfo,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _slave: Arc<Mutex<Box<dyn SlavePty + Send>>>,
@@ -45,24 +53,19 @@ impl LocalPane {
         size: PtySize,
         config: &TerminalConfig,
     ) -> PaneResult<Self> {
-        tracing::info!(
-            "创建本地面板: {:?}, 大小: {:?}, shell: {}",
-            pane_id,
-            size,
-            config.shell_config.program
-        );
-
         let pty_pair = Self::create_pty(pane_id, size)?;
         let mut cmd = Self::build_command(config)?;
         Self::setup_shell_integration(&mut cmd, config)?;
         let (master, writer, slave) = Self::spawn_process(pane_id, pty_pair, cmd)?;
 
-        tracing::info!("本地面板创建完成: {:?}", pane_id);
-
         Ok(Self {
             pane_id,
-            size: Arc::new(Mutex::new(size)),
-            dead: Arc::new(AtomicBool::new(false)),
+            rows: AtomicU16::new(size.rows),
+            cols: AtomicU16::new(size.cols),
+            pixel_width: AtomicU16::new(size.pixel_width),
+            pixel_height: AtomicU16::new(size.pixel_height),
+            dead: AtomicBool::new(false),
+            shell_info: config.shell_config.shell_info.clone(),
             master,
             writer,
             _slave: slave,
@@ -70,10 +73,7 @@ impl LocalPane {
     }
 
     /// 创建 PTY
-    fn create_pty(
-        pane_id: PaneId,
-        size: PtySize,
-    ) -> PaneResult<portable_pty::PtyPair> {
+    fn create_pty(pane_id: PaneId, size: PtySize) -> PaneResult<portable_pty::PtyPair> {
         let pty_system = portable_pty::native_pty_system();
 
         let pty_size = PortablePtySize {
@@ -90,8 +90,7 @@ impl LocalPane {
 
     /// 构建 Shell 命令
     fn build_command(config: &TerminalConfig) -> PaneResult<CommandBuilder> {
-
-        let mut cmd = CommandBuilder::new(&config.shell_config.program);
+        let mut cmd = CommandBuilder::new(&config.shell_config.shell_info.path);
         cmd.args(&config.shell_config.args);
 
         if let Some(cwd) = &config.shell_config.working_directory {
@@ -120,9 +119,9 @@ impl LocalPane {
         cmd: &mut CommandBuilder,
         config: &TerminalConfig,
     ) -> PaneResult<()> {
+        let shell_type =
+            crate::shell::ShellType::from_program(&config.shell_config.shell_info.path);
 
-        let shell_type = crate::shell::ShellType::from_program(&config.shell_config.program);
-        
         if !shell_type.supports_integration() {
             return Ok(());
         }
@@ -158,20 +157,15 @@ impl LocalPane {
     }
 
     /// 设置 Zsh Shell Integration
-    fn setup_zsh_integration(
-        cmd: &mut CommandBuilder,
-        integration_script: &str,
-    ) -> PaneResult<()> {
+    fn setup_zsh_integration(cmd: &mut CommandBuilder, integration_script: &str) -> PaneResult<()> {
         let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
-        
-        std::fs::create_dir_all(&temp_dir).map_err(|e| {
-            PaneError::Internal(format!("创建临时目录失败: {}", e))
-        })?;
+
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {}", e)))?;
 
         let temp_zshrc = temp_dir.join(".zshrc");
-        let mut file = std::fs::File::create(&temp_zshrc).map_err(|e| {
-            PaneError::Internal(format!("创建 .zshrc 失败: {}", e))
-        })?;
+        let mut file = std::fs::File::create(&temp_zshrc)
+            .map_err(|e| PaneError::Internal(format!("创建 .zshrc 失败: {}", e)))?;
 
         use std::io::Write;
         writeln!(file, "# Load user zshrc FIRST (so nvm etc. loads)").ok();
@@ -194,15 +188,13 @@ impl LocalPane {
         integration_script: &str,
     ) -> PaneResult<()> {
         let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
-        
-        std::fs::create_dir_all(&temp_dir).map_err(|e| {
-            PaneError::Internal(format!("创建临时目录失败: {}", e))
-        })?;
+
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| PaneError::Internal(format!("创建临时目录失败: {}", e)))?;
 
         let temp_bashrc = temp_dir.join(".bashrc");
-        let mut file = std::fs::File::create(&temp_bashrc).map_err(|e| {
-            PaneError::Internal(format!("创建 .bashrc 失败: {}", e))
-        })?;
+        let mut file = std::fs::File::create(&temp_bashrc)
+            .map_err(|e| PaneError::Internal(format!("创建 .bashrc 失败: {}", e)))?;
 
         use std::io::Write;
         writeln!(file, "# Load user bashrc FIRST (so nvm etc. loads)").ok();
@@ -226,12 +218,12 @@ impl LocalPane {
         Arc<Mutex<Box<dyn Write + Send>>>,
         Arc<Mutex<Box<dyn SlavePty + Send>>>,
     )> {
-
-        pty_pair.slave.spawn_command(cmd).map_err(|e| {
-            PaneError::Spawn {
+        pty_pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| PaneError::Spawn {
                 reason: e.to_string(),
-            }
-        })?;
+            })?;
 
         let writer = pty_pair.master.take_writer().map_err(|err| {
             PaneError::Internal(format!(
@@ -283,14 +275,12 @@ impl Pane for LocalPane {
             return Err(PaneError::PaneDead);
         }
 
-        // 更新内部尺寸记录
-        {
-            let mut current_size = self
-                .size
-                .lock()
-                .map_err(|err| PaneError::from_poison("size", err))?;
-            *current_size = size;
-        }
+        // 原子更新尺寸
+        self.rows.store(size.rows, Ordering::Relaxed);
+        self.cols.store(size.cols, Ordering::Relaxed);
+        self.pixel_width.store(size.pixel_width, Ordering::Relaxed);
+        self.pixel_height
+            .store(size.pixel_height, Ordering::Relaxed);
 
         // 调整PTY大小
         let pty_size = PortablePtySize {
@@ -335,15 +325,20 @@ impl Pane for LocalPane {
     }
 
     fn mark_dead(&self) {
-        tracing::debug!("标记面板为死亡状态: {:?}", self.pane_id);
         self.dead.store(true, Ordering::Relaxed);
     }
 
     fn get_size(&self) -> PtySize {
-        self.size
-            .lock()
-            .map(|size| *size)
-            .unwrap_or_else(|_| PtySize::default())
+        PtySize {
+            rows: self.rows.load(Ordering::Relaxed),
+            cols: self.cols.load(Ordering::Relaxed),
+            pixel_width: self.pixel_width.load(Ordering::Relaxed),
+            pixel_height: self.pixel_height.load(Ordering::Relaxed),
+        }
+    }
+
+    fn shell_info(&self) -> &ShellInfo {
+        &self.shell_info
     }
 }
 

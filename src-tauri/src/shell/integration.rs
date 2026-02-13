@@ -4,11 +4,11 @@ use std::sync::{Arc, RwLock, Weak};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::broadcast;
 
-use crate::events::ShellEvent;
 use super::osc_parser::{
     CommandStatus, IntegrationMarker, OscParser, OscSequence, ShellIntegrationState,
 };
 use super::script_generator::{ShellIntegrationConfig, ShellScriptGenerator, ShellType};
+use crate::events::ShellEvent;
 use crate::mux::PaneId;
 use crate::shell::error::ShellScriptResult;
 
@@ -107,7 +107,7 @@ impl ShellIntegrationManager {
 
     pub fn new_with_config(config: ShellIntegrationConfig) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
-        
+
         Self {
             states: DashMap::new(),
             parser: OscParser::new(),
@@ -320,7 +320,6 @@ impl ShellIntegrationManager {
         self.states.remove(&pane_id);
     }
 
-
     pub fn get_multiple_pane_states(&self, pane_ids: &[PaneId]) -> HashMap<PaneId, PaneShellState> {
         pane_ids
             .iter()
@@ -426,7 +425,8 @@ impl ShellIntegrationManager {
             match marker {
                 IntegrationMarker::PromptStart => {
                     if let Some(cmd) = state.current_command.take() {
-                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        let mut finished =
+                            Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
                         finished.end_time = Some(Instant::now());
                         finished.end_time_wallclock = Some(SystemTime::now());
                         finished.status = CommandStatus::Finished { exit_code: None };
@@ -470,7 +470,8 @@ impl ShellIntegrationManager {
                 }
                 IntegrationMarker::CommandFinished { exit_code } => {
                     if let Some(cmd) = state.current_command.take() {
-                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        let mut finished =
+                            Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
                         finished.end_time = Some(Instant::now());
                         finished.end_time_wallclock = Some(SystemTime::now());
                         finished.exit_code = exit_code;
@@ -498,7 +499,8 @@ impl ShellIntegrationManager {
                 IntegrationMarker::RightPrompt => {}
                 IntegrationMarker::CommandInvalid => {
                     if let Some(cmd) = state.current_command.take() {
-                        let mut finished = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        let mut finished =
+                            Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
                         finished.end_time = Some(Instant::now());
                         finished.end_time_wallclock = Some(SystemTime::now());
                         finished.status = CommandStatus::Finished { exit_code: None };
@@ -512,7 +514,8 @@ impl ShellIntegrationManager {
                 }
                 IntegrationMarker::CommandCancelled => {
                     if let Some(cmd) = state.current_command.take() {
-                        let mut cancelled = Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
+                        let mut cancelled =
+                            Arc::try_unwrap(cmd).unwrap_or_else(|arc| (*arc).clone());
                         cancelled.end_time = Some(Instant::now());
                         cancelled.end_time_wallclock = Some(SystemTime::now());
                         cancelled.exit_code = Some(130);
@@ -539,7 +542,11 @@ impl ShellIntegrationManager {
         }
 
         // 转换命令事件为ShellEvent
-        events.extend(command_events.into_iter().map(|command| ShellEvent::CommandEvent { command }));
+        events.extend(
+            command_events
+                .into_iter()
+                .map(|command| ShellEvent::CommandEvent { command }),
+        );
         events
     }
 

@@ -4,6 +4,7 @@
 
 import { createApp, h, ref } from 'vue'
 import XModal from '../components/Modal.vue'
+import XButton from '../components/Button.vue'
 import { createI18n } from 'vue-i18n'
 import zhMessages from '@/i18n/locales/zh.json'
 import enMessages from '@/i18n/locales/en.json'
@@ -144,7 +145,7 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
               onConfirm: handleConfirm,
               onCancel: handleCancel,
               onClose: handleClose,
-              class: `confirm-modal confirm-modal--${normalizedConfig.type}`,
+              modalClass: `confirm-modal confirm-modal--${normalizedConfig.type}`,
               confirmButtonClass: normalizedConfig.type === 'danger' ? 'danger' : '',
             },
             {
@@ -253,6 +254,9 @@ export const confirm = (config: string | ConfirmConfig): Promise<boolean> => {
 
     // 安装i18n插件
     app.use(i18n)
+
+    // 注册x-button组件
+    app.component('x-button', XButton)
 
     // 添加全局样式
     const style = document.createElement('style')

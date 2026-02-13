@@ -11,6 +11,7 @@ use crate::agent::react::types::ReactIteration;
 use crate::agent::tools::ToolResult;
 use crate::llm::anthropic_types::{MessageContent, MessageParam};
 
+#[derive(Clone)]
 pub struct ContextBuilder {
     file_tracker: Arc<FileContextTracker>,
     config: ContextBuilderConfig,
@@ -57,19 +58,19 @@ impl ContextBuilder {
         let mentioned_set: HashSet<_> = mentioned.iter().cloned().collect();
         let mut relevant_active: Vec<_> = active_files
             .into_iter()
-            .filter(|entry| mentioned_set.contains(&entry.file_path))
+            .filter(|entry| mentioned_set.contains(&entry.relative_path))
             .collect();
         let mut relevant_stale: Vec<_> = stale_files
             .into_iter()
-            .filter(|entry| mentioned_set.contains(&entry.file_path))
+            .filter(|entry| mentioned_set.contains(&entry.relative_path))
             .collect();
 
         if relevant_active.is_empty() && relevant_stale.is_empty() {
             return None;
         }
 
-        relevant_active.sort_by(|a, b| a.file_path.cmp(&b.file_path));
-        relevant_stale.sort_by(|a, b| a.file_path.cmp(&b.file_path));
+        relevant_active.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+        relevant_stale.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
         let mut content = String::new();
         content.push_str("Files referenced in recent work:\n\n");
@@ -78,13 +79,13 @@ impl ContextBuilder {
             content.push_str("Active files:\n");
             for entry in &relevant_active {
                 content.push_str("- ");
-                content.push_str(&entry.file_path);
-                if let Some(ts) = entry.agent_read_timestamp {
+                content.push_str(&entry.relative_path);
+                if let Some(ts) = entry.agent_read_at {
                     content.push_str(" (read ");
                     content.push_str(&format_elapsed(ts));
                     content.push(')');
                 }
-                if let Some(ts) = entry.agent_edit_timestamp {
+                if let Some(ts) = entry.agent_edit_at {
                     content.push_str(" (edited ");
                     content.push_str(&format_elapsed(ts));
                     content.push(')');
@@ -98,8 +99,8 @@ impl ContextBuilder {
             content.push_str("Stale files:\n");
             for entry in &relevant_stale {
                 content.push_str("- ");
-                content.push_str(&entry.file_path);
-                if let Some(ts) = entry.user_edit_timestamp {
+                content.push_str(&entry.relative_path);
+                if let Some(ts) = entry.user_edit_at {
                     content.push_str(" (user updated ");
                     content.push_str(&format_elapsed(ts));
                     content.push(')');
@@ -130,22 +131,33 @@ impl ContextBuilder {
         for iter in iterations.iter().rev().take(self.config.recent_file_window) {
             if let Some(action) = &iter.action {
                 if let Some(path) = self.extract_file_from_tool_args(&action.arguments) {
-                    if seen.insert(path.clone()) {
-                        ordered.push(path);
-                    }
+                    self.push_normalized_path(&mut seen, &mut ordered, &path);
                 }
             }
             if let Some(observation) = &iter.observation {
                 if let Some(path) =
                     self.extract_file_from_tool_result(&observation.tool_name, &observation.outcome)
                 {
-                    if seen.insert(path.clone()) {
-                        ordered.push(path);
-                    }
+                    self.push_normalized_path(&mut seen, &mut ordered, &path);
                 }
             }
         }
         ordered
+    }
+
+    fn push_normalized_path(
+        &self,
+        seen: &mut HashSet<String>,
+        ordered: &mut Vec<String>,
+        raw_path: &str,
+    ) {
+        if raw_path.is_empty() {
+            return;
+        }
+        let normalized = self.file_tracker.normalize_path(raw_path);
+        if seen.insert(normalized.clone()) {
+            ordered.push(normalized);
+        }
     }
 
     fn extract_file_from_tool_args(&self, args: &Value) -> Option<String> {

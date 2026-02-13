@@ -15,7 +15,6 @@
   interface Emits {
     (e: 'select-session', sessionId: number): void
     (e: 'create-new-session'): void
-    (e: 'delete-session', sessionId: number): void
     (e: 'refresh-sessions'): void
   }
 
@@ -35,10 +34,6 @@
     emit('create-new-session')
   }
 
-  const handleDeleteSession = (sessionId: number) => {
-    emit('delete-session', sessionId)
-  }
-
   const handleRefreshSessions = () => {
     emit('refresh-sessions')
   }
@@ -53,7 +48,6 @@
         :loading="isLoading"
         @select-session="handleSelectSession"
         @create-new-session="handleCreateNewSession"
-        @delete-session="handleDeleteSession"
         @refresh-sessions="handleRefreshSessions"
       />
     </div>

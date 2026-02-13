@@ -8,34 +8,6 @@ export interface OperationResult<T = void> {
   timestamp?: string
 }
 
-export interface PaginationOptions {
-  page?: number
-  pageSize?: number
-  sortBy?: string
-  sortOrder?: 'asc' | 'desc'
-}
-
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
-}
-
-export interface CacheOptions {
-  ttl?: number
-  maxSize?: number
-  enabled?: boolean
-}
-
-export interface BaseCacheStats {
-  totalEntries: number
-  capacity: number
-  expiredEntries: number
-  hitRate: number
-}
-
 export interface FileInfo {
   name: string
   path: string
@@ -96,19 +68,4 @@ export interface KeyBinding {
   modifiers: string[]
   action: string
   description?: string
-}
-
-export interface SearchOptions {
-  query: string
-  caseSensitive?: boolean
-  regex?: boolean
-  wholeWord?: boolean
-}
-
-export interface SearchResult {
-  file: string
-  line: number
-  column: number
-  text: string
-  match: string
 }

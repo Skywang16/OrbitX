@@ -11,7 +11,6 @@ use crate::agent::prompt::template_engine::TemplateEngine;
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
     vec![
         Arc::new(AgentRoleComponent),
-        Arc::new(AgentCapabilitiesComponent),
         Arc::new(AgentRulesComponent),
         Arc::new(WorkMethodologyComponent),
         Arc::new(CustomInstructionsComponent),
@@ -43,7 +42,7 @@ impl ComponentDefinition for AgentRoleComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions and tools available to assist the user.")
+        Some("You are OrbitX Agent, an interactive CLI tool that helps users with software engineering tasks. Use the instructions and tools available to assist the user.")
     }
 
     async fn render(
@@ -58,107 +57,7 @@ impl ComponentDefinition for AgentRoleComponent {
         let mut template_context = HashMap::new();
         template_context.insert("name".to_string(), json!(context.agent.name));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render agent role template: {}", e))
-            })?;
-
-        Ok(Some(result))
-    }
-}
-
-struct AgentCapabilitiesComponent;
-
-#[async_trait]
-impl ComponentDefinition for AgentCapabilitiesComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::AgentCapabilities
-    }
-
-    fn name(&self) -> &str {
-        "Agent Capabilities"
-    }
-
-    fn description(&self) -> &str {
-        "Agent capabilities description"
-    }
-
-    fn required(&self) -> bool {
-        false
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[PromptComponent::ToolsDescription]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        Some(
-            r#"CAPABILITIES
-
-You excel at terminal-based development workflows and have access to powerful tools for:
-
-## Code & Development
-- Reading, analyzing, and editing source code files across multiple languages
-- Understanding project structure and dependencies from package.json, Cargo.toml, etc.
-- Implementing new features, fixing bugs, and refactoring code
-- Running build systems, test suites, and development servers
-- Analyzing compilation errors and runtime issues
-
-## Shell & System Operations
-- Executing complex shell commands and scripts
-- File system operations (creating, moving, searching files)
-- Process management and system monitoring
-- Environment setup and configuration management
-- Package management (npm, cargo, pip, etc.)
-
-## Git & Version Control
-- Repository operations (clone, branch, merge, rebase)
-- Commit management and history analysis
-- Conflict resolution and code review
-- Remote repository synchronization
-
-Each tool execution provides detailed output that informs subsequent actions. You work methodically through complex tasks by breaking them into logical steps."#,
-        )
-    }
-
-    async fn render(
-        &self,
-        context: &ComponentContext,
-        template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        if context.tools.is_empty() {
-            return Ok(None);
-        }
-
-        let template = template_override
-            .or_else(|| self.default_template())
-            .ok_or_else(|| {
-                AgentError::Internal("missing agent capabilities template".to_string())
-            })?;
-
-        let capabilities = context
-            .tools
-            .iter()
-            .map(|tool| format!("- {}: {}", tool.name, tool.description.clone()))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        if capabilities.trim().is_empty() {
-            return Ok(None);
-        }
-
-        let mut template_context = HashMap::new();
-        template_context.insert("capabilities".to_string(), json!(capabilities));
-
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render agent capabilities template: {}",
-                    e
-                ))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }
@@ -235,11 +134,7 @@ Example: If user asks "how to implement XX?", answer the question first, don't i
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing agent rules template".to_string()))?;
 
-        let result = TemplateEngine::new()
-            .resolve(template, &HashMap::new())
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render agent rules template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &HashMap::new());
         Ok(Some(result))
     }
 }
@@ -319,14 +214,7 @@ assistant: Client marked failed in src/services/process.ts:712 connectToServer f
             .or_else(|| self.default_template())
             .ok_or_else(|| AgentError::Internal("missing work methodology template".to_string()))?;
 
-        let result = TemplateEngine::new()
-            .resolve(template, &HashMap::new())
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render work methodology template: {}",
-                    e
-                ))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &HashMap::new());
         Ok(Some(result))
     }
 }
@@ -356,7 +244,7 @@ impl ComponentDefinition for CustomInstructionsComponent {
     }
 
     fn default_template(&self) -> Option<&str> {
-        Some("ADDITIONAL INSTRUCTIONS\n\n# 项目描述 (from CLAUDE.md)\n\n{instructions}")
+        Some("# Project Instructions (from CLAUDE.md)\n\n{instructions}")
     }
 
     async fn render(
@@ -378,14 +266,7 @@ impl ComponentDefinition for CustomInstructionsComponent {
         let mut template_context = HashMap::new();
         template_context.insert("instructions".to_string(), json!(instructions));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!(
-                    "failed to render custom instructions template: {}",
-                    e
-                ))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
     }

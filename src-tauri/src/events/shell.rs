@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crate::shell::CommandInfo;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum ShellEvent {

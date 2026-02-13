@@ -10,13 +10,14 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Duration;
+use tokio::net::lookup_host;
 use url::Url;
 
 use crate::agent::core::context::TaskContext;
-use crate::agent::error::ToolExecutorResult;
+use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPermission,
-    ToolPriority, ToolResult, ToolResultContent,
+    ToolPriority, ToolResult, ToolResultContent, ToolResultStatus,
 };
 
 #[derive(Debug, Deserialize)]
@@ -41,24 +42,19 @@ impl RunnableTool for WebFetchTool {
         "Fetches content from a specified URL and returns the response data.
 
 Usage:
-- Takes a URL and optional HTTP parameters as input
-- Performs HTTP requests (GET, POST, PUT, DELETE, etc.)
-- Returns response body with optional format conversion
-- Supports custom headers, request body, and timeout configuration
-- Can extract and simplify HTML content for easier analysis
-- Use this tool when you need to retrieve web content or interact with APIs
+- Takes a URL as input
+- Performs an HTTP GET request
+- Follows up to 10 redirects
+- Simplifies HTML to plain text for easier analysis
+- Returns at most 2000 characters
 
 Usage notes:
   - The URL must be a fully-formed valid URL (http:// or https://)
-  - HTTP URLs will be automatically upgraded to HTTPS when possible
-  - Default timeout is 15000ms (15 seconds), max 60000ms (60 seconds)
-  - Redirects are followed by default
-  - Response format can be 'text' (default) or 'json' for automatic parsing
-  - extract_content option (default: true) will simplify HTML to plain text
-  - max_content_length (default: 2000) limits the response size returned
+  - Timeout is fixed at 30000ms (30 seconds)
+  - max_content_length is fixed at 2000 characters
   - This tool is read-only and does not modify any files
   - Rate limited to 10 calls per minute to prevent abuse
-  - SSRF protection: Blocks requests to private IP ranges"
+  - SSRF protection: Blocks requests to localhost/private IPs (including via DNS)"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -115,21 +111,19 @@ Usage notes:
             ));
         }
 
-        if is_local_address(&parsed_url) {
-            return Ok(validation_error(
-                "Requests to local or private network addresses are not allowed",
-            ));
+        if let Err(err) = validate_fetch_url(&parsed_url).await {
+            return Ok(validation_error(err.to_string()));
         }
 
         let timeout_ms = 30_000; // 固定 30 秒超时
-        let follow = true; // 总是跟随重定向
         let max_len = 2000; // 固定 2000 字符限制
 
         match try_jina_reader(&parsed_url, timeout_ms).await {
             Ok(Some(jina_content)) => {
                 return Ok(ToolResult {
                     content: vec![ToolResultContent::Success(jina_content.clone())],
-                    is_error: false,
+                    status: ToolResultStatus::Success,
+                    cancel_reason: None,
                     execution_time_ms: None,
                     ext_info: Some(json!({
                         "url": parsed_url.as_str(),
@@ -147,24 +141,19 @@ Usage notes:
 
         let client_builder = reqwest::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
-            .redirect(if follow {
-                reqwest::redirect::Policy::limited(10)
-            } else {
-                reqwest::redirect::Policy::none()
-            })
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent("OrbitX-Agent/1.0");
 
         let client = client_builder.build()?;
 
-        let request = client.get(parsed_url.clone());
-
         let started = std::time::Instant::now();
-        let resp = match request.send().await {
+        let resp = match fetch_follow_redirects(&client, parsed_url.clone(), 10).await {
             Ok(r) => r,
-            Err(e) => {
+            Err(err) => {
                 return Ok(ToolResult {
-                    content: vec![ToolResultContent::Error(format!("request failed: {}", e))],
-                    is_error: true,
+                    content: vec![ToolResultContent::Error(err.to_string())],
+                    status: ToolResultStatus::Error,
+                    cancel_reason: None,
                     execution_time_ms: Some(started.elapsed().as_millis() as u64),
                     ext_info: None,
                 });
@@ -206,9 +195,16 @@ Usage notes:
             "source": "direct",
         });
 
+        let status_flag = if (200..400).contains(&status) {
+            ToolResultStatus::Success
+        } else {
+            ToolResultStatus::Error
+        };
+
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(data_text)],
-            is_error: !(200..400).contains(&status),
+            status: status_flag,
+            cancel_reason: None,
             execution_time_ms: Some(started.elapsed().as_millis() as u64),
             ext_info: Some(meta),
         })
@@ -266,29 +262,120 @@ fn extract_content_from_html(html: &str, max_length: usize) -> (String, Option<S
     (final_text, None)
 }
 
-fn is_local_address(url: &Url) -> bool {
-    match url.host() {
-        Some(url::Host::Domain(host)) => {
-            let host_lower = host.to_lowercase();
-            if host_lower == "localhost" || host_lower.ends_with(".local") {
-                return true;
-            }
-            if let Ok(addr) = host.parse::<IpAddr>() {
-                return is_private_ip(&addr);
-            }
-            false
-        }
-        Some(url::Host::Ipv4(addr)) => is_private_ip(&IpAddr::V4(addr)),
-        Some(url::Host::Ipv6(addr)) => is_private_ip(&IpAddr::V6(addr)),
-        None => false,
-    }
-}
-
 fn is_private_ip(addr: &IpAddr) -> bool {
     match addr {
         IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
         IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local(),
     }
+}
+
+async fn validate_fetch_url(url: &Url) -> ToolExecutorResult<()> {
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(ToolExecutorError::InvalidArguments {
+            tool_name: "web_fetch".to_string(),
+            error: "Only HTTP and HTTPS protocols are supported".to_string(),
+        });
+    }
+
+    let host = url
+        .host()
+        .ok_or_else(|| ToolExecutorError::InvalidArguments {
+            tool_name: "web_fetch".to_string(),
+            error: "URL host is missing".to_string(),
+        })?;
+    let port = url.port_or_known_default().unwrap_or(80);
+
+    match host {
+        url::Host::Ipv4(addr) => {
+            if is_private_ip(&IpAddr::V4(addr)) {
+                return Err(ToolExecutorError::InvalidArguments {
+                    tool_name: "web_fetch".to_string(),
+                    error: "Requests to local or private network addresses are not allowed"
+                        .to_string(),
+                });
+            }
+        }
+        url::Host::Ipv6(addr) => {
+            if is_private_ip(&IpAddr::V6(addr)) {
+                return Err(ToolExecutorError::InvalidArguments {
+                    tool_name: "web_fetch".to_string(),
+                    error: "Requests to local or private network addresses are not allowed"
+                        .to_string(),
+                });
+            }
+        }
+        url::Host::Domain(host) => {
+            let host_lower = host.to_lowercase();
+            if host_lower == "localhost" || host_lower.ends_with(".local") {
+                return Err(ToolExecutorError::InvalidArguments {
+                    tool_name: "web_fetch".to_string(),
+                    error: "Requests to local or private network addresses are not allowed"
+                        .to_string(),
+                });
+            }
+
+            let addrs = lookup_host((host, port)).await.map_err(|e| {
+                ToolExecutorError::ExecutionFailed {
+                    tool_name: "web_fetch".to_string(),
+                    error: format!("Failed to resolve host '{}': {}", host, e),
+                }
+            })?;
+            for addr in addrs {
+                if is_private_ip(&addr.ip()) {
+                    return Err(ToolExecutorError::InvalidArguments {
+                        tool_name: "web_fetch".to_string(),
+                        error: "Requests to local or private network addresses are not allowed"
+                            .to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn fetch_follow_redirects(
+    client: &reqwest::Client,
+    mut url: Url,
+    max_redirects: usize,
+) -> ToolExecutorResult<reqwest::Response> {
+    for _ in 0..=max_redirects {
+        validate_fetch_url(&url).await?;
+
+        let resp = client.get(url.clone()).send().await.map_err(|e| {
+            ToolExecutorError::ExecutionFailed {
+                tool_name: "web_fetch".to_string(),
+                error: format!("request failed: {}", e),
+            }
+        })?;
+
+        if resp.status().is_redirection() {
+            let location = resp
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+
+            if let Some(location) = location {
+                url = url
+                    .join(location)
+                    .map_err(|e| ToolExecutorError::InvalidArguments {
+                        tool_name: "web_fetch".to_string(),
+                        error: format!("Invalid redirect URL: {}", e),
+                    })?;
+                continue;
+            }
+        }
+
+        return Ok(resp);
+    }
+
+    Err(ToolExecutorError::ResourceLimitExceeded {
+        tool_name: "web_fetch".to_string(),
+        resource_type: format!("too many redirects (max: {})", max_redirects),
+    })
 }
 
 async fn try_jina_reader(url: &Url, timeout_ms: u64) -> Result<Option<String>, ToolResult> {
@@ -317,7 +404,8 @@ async fn try_jina_reader(url: &Url, timeout_ms: u64) -> Result<Option<String>, T
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -326,7 +414,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

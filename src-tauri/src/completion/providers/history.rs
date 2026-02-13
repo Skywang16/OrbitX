@@ -2,21 +2,28 @@
 //!
 //! 基于用户的命令历史提供补全建议
 
+use crate::completion::command_line::extract_command_key;
 use crate::completion::error::{CompletionProviderError, CompletionProviderResult};
 use crate::completion::providers::CompletionProvider;
 use crate::completion::scoring::{
-    BaseScorer, CompositeScorer, HistoryScorer, ScoreCalculator, ScoringContext,
+    BaseScorer, CompositeScorer, FrecencyScorer, HistoryScorer, ScoreCalculator, ScoringContext,
 };
 use crate::completion::types::{CompletionContext, CompletionItem, CompletionType};
 use crate::storage::cache::UnifiedCache;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::fs;
+
+const HISTORY_TTL_DAYS: u64 = 30;
+const KEY_MODE_SCAN_LIMIT: usize = 2000;
+const KEY_MODE_MAX_RESULTS: usize = 50;
+const FULL_MODE_SCAN_LIMIT: usize = 400;
+const PSEUDO_RECENCY_STEP_SECS: u64 = 90;
 
 /// Shell类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +48,19 @@ impl ShellType {
             Self::Unknown
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct HistoryEntry {
+    command: String,
+    last_used_ts: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+struct CommandKeyStats {
+    count: u64,
+    first_index: usize,
+    last_used_ts: Option<u64>,
 }
 
 /// 历史命令补全提供者
@@ -97,13 +117,13 @@ impl HistoryProvider {
     }
 
     /// 从文件读取历史记录
-    async fn read_history(&self) -> CompletionProviderResult<Vec<String>> {
+    async fn read_history(&self) -> CompletionProviderResult<Vec<HistoryEntry>> {
         let cache_key = "completion:history:commands";
 
         // 尝试从缓存获取
         if let Some(cached_value) = self.cache.get(cache_key).await {
-            if let Ok(commands) = serde_json::from_value::<Vec<String>>(cached_value) {
-                return Ok(commands);
+            if let Ok(entries) = serde_json::from_value::<Vec<HistoryEntry>>(cached_value) {
+                return Ok(entries);
             }
         }
 
@@ -117,14 +137,14 @@ impl HistoryProvider {
                         e,
                     )
                 })?;
-                let commands = self.parse_history_content(&content);
+                let entries = self.parse_history_content(&content);
 
                 // 存入缓存
-                if let Ok(commands_value) = serde_json::to_value(&commands) {
-                    let _ = self.cache.set(cache_key, commands_value).await;
+                if let Ok(entries_value) = serde_json::to_value(&entries) {
+                    let _ = self.cache.set(cache_key, entries_value).await;
                 }
 
-                return Ok(commands);
+                return Ok(entries);
             }
         }
 
@@ -132,8 +152,8 @@ impl HistoryProvider {
     }
 
     /// 解析历史文件内容，支持不同的shell格式
-    fn parse_history_content(&self, content: &str) -> Vec<String> {
-        let mut commands = Vec::new();
+    fn parse_history_content(&self, content: &str) -> Vec<HistoryEntry> {
+        let mut entries = Vec::new();
 
         for line in content.lines() {
             let line = line.trim();
@@ -142,54 +162,71 @@ impl HistoryProvider {
             }
 
             // 根据Shell类型解析不同格式
-            let command = match self.shell_type {
+            let entry = match self.shell_type {
                 ShellType::Zsh => {
                     if line.starts_with(": ") && line.contains(';') {
+                        let timestamp = line
+                            .split(';')
+                            .next()
+                            .and_then(|head| head.split(':').nth(1))
+                            .and_then(|ts| ts.trim().parse::<u64>().ok());
+
                         line.find(';')
                             .map(|pos| line[pos + 1..].trim())
                             .filter(|cmd| !cmd.is_empty())
-                            .map(|cmd| cmd.to_string())
+                            .map(|cmd| HistoryEntry {
+                                command: cmd.to_string(),
+                                last_used_ts: timestamp,
+                            })
                     } else {
-                        Some(line.to_string())
+                        Some(HistoryEntry {
+                            command: line.to_string(),
+                            last_used_ts: None,
+                        })
                     }
                 }
                 ShellType::Fish => {
                     // Fish历史格式通常是YAML，这里简化处理
                     if line.starts_with("- cmd: ") {
-                        Some(line[8..].trim().to_string())
+                        Some(HistoryEntry {
+                            command: line[8..].trim().to_string(),
+                            last_used_ts: None,
+                        })
                     } else {
                         None
                     }
                 }
                 _ => {
                     // Bash和其他格式：直接是命令
-                    Some(line.to_string())
+                    Some(HistoryEntry {
+                        command: line.to_string(),
+                        last_used_ts: None,
+                    })
                 }
             };
 
-            if let Some(cmd) = command {
-                commands.push(cmd);
+            if let Some(entry) = entry {
+                entries.push(entry);
             }
         }
 
         // 去重并保持最近的命令
-        self.deduplicate_commands(commands)
+        self.deduplicate_entries(entries)
     }
 
-    /// 去重命令，保持最新的
-    fn deduplicate_commands(&self, commands: Vec<String>) -> Vec<String> {
-        let mut unique_commands = Vec::new();
+    /// 去重命令，保持最新的（返回顺序：新 -> 旧）
+    fn deduplicate_entries(&self, entries: Vec<HistoryEntry>) -> Vec<HistoryEntry> {
+        let mut unique_entries = Vec::new();
         let mut seen = HashSet::new();
 
-        // 从后往前遍历，保持最新的命令
-        for command in commands.into_iter().rev().take(self.max_entries) {
-            if seen.insert(command.clone()) {
-                unique_commands.push(command);
+        // 从后往前遍历（文件尾部通常更“新”），保留最新一条；不 reverse，保持新->旧
+        for entry in entries.into_iter().rev().take(self.max_entries) {
+            if seen.insert(entry.command.clone()) {
+                unique_entries.push(entry);
             }
         }
 
-        unique_commands.reverse();
-        unique_commands
+        unique_entries
     }
 
     /// 获取匹配的历史命令
@@ -197,22 +234,88 @@ impl HistoryProvider {
         &self,
         pattern: &str,
     ) -> CompletionProviderResult<Vec<CompletionItem>> {
-        let commands = self.read_history().await?;
+        let entries = self.read_history().await?;
         let mut matches = Vec::new();
 
-        for (index, command) in commands.iter().enumerate() {
-            if self.is_command_match(command, pattern) {
-                let score = self.calculate_command_score(command, pattern, index);
-                let item = CompletionItem::new(command.clone(), CompletionType::History)
-                    .with_score(score)
-                    .with_description(format!("历史命令 ({})", self.shell_type_name()))
-                    .with_source("history".to_string());
-                matches.push(item);
+        let now_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let cutoff_ts = now_ts.saturating_sub(HISTORY_TTL_DAYS * 24 * 60 * 60);
+
+        if pattern.contains(' ') {
+            // 用户已经输入到“参数级”，返回完整命令，但只扫描最近一段，避免老垃圾刷屏。
+            for (index, entry) in entries.iter().take(FULL_MODE_SCAN_LIMIT).enumerate() {
+                if entry.last_used_ts.is_some_and(|ts| ts < cutoff_ts) {
+                    continue;
+                }
+
+                if self.is_command_match(&entry.command, pattern) {
+                    let score = self.calculate_command_score(
+                        &entry.command,
+                        pattern,
+                        index,
+                        entry.last_used_ts,
+                    );
+                    matches.push(
+                        CompletionItem::new(entry.command.clone(), CompletionType::History)
+                            .with_score(score)
+                            .with_description(format!("历史命令 ({})", self.shell_type_name()))
+                            .with_source("history".to_string()),
+                    );
+                }
+            }
+        } else {
+            // 只输入了 root（例如 "git"）：不要返回带 hash/path 的整行命令。
+            // 这里做 key 聚合（git status / git show / docker ps ...），并带频率+时近性。
+            let mut stats: HashMap<String, CommandKeyStats> = HashMap::new();
+            for (index, entry) in entries.iter().take(KEY_MODE_SCAN_LIMIT).enumerate() {
+                if entry.last_used_ts.is_some_and(|ts| ts < cutoff_ts) {
+                    continue;
+                }
+
+                let Some(key) = extract_command_key(&entry.command) else {
+                    continue;
+                };
+
+                if !key.key.starts_with(pattern) || key.key == pattern {
+                    continue;
+                }
+
+                stats
+                    .entry(key.key)
+                    .and_modify(|s| {
+                        s.count = s.count.saturating_add(1);
+                        s.first_index = s.first_index.min(index);
+                        if s.last_used_ts.is_none() {
+                            s.last_used_ts = entry.last_used_ts;
+                        }
+                    })
+                    .or_insert(CommandKeyStats {
+                        count: 1,
+                        first_index: index,
+                        last_used_ts: entry.last_used_ts,
+                    });
+            }
+
+            for (key, s) in stats {
+                let pseudo_ts =
+                    now_ts.saturating_sub((s.first_index as u64) * PSEUDO_RECENCY_STEP_SECS);
+                let ts = s.last_used_ts.unwrap_or(pseudo_ts);
+                let score =
+                    self.calculate_command_key_score(pattern, &key, s.first_index, s.count, ts);
+                matches.push(
+                    CompletionItem::new(key, CompletionType::History)
+                        .with_score(score)
+                        .with_description(format!("历史命令 ({})", self.shell_type_name()))
+                        .with_source("history".to_string()),
+                );
             }
         }
 
         // 按分数排序（使用 CompletionItem 的 Ord 实现）
         matches.sort_unstable();
+        matches.truncate(KEY_MODE_MAX_RESULTS);
 
         Ok(matches)
     }
@@ -223,17 +326,59 @@ impl HistoryProvider {
     }
 
     /// 计算命令分数（使用统一评分系统）
-    fn calculate_command_score(&self, command: &str, pattern: &str, index: usize) -> f64 {
+    fn calculate_command_score(
+        &self,
+        command: &str,
+        pattern: &str,
+        index: usize,
+        last_used_ts: Option<u64>,
+    ) -> f64 {
         let is_prefix_match = command.starts_with(pattern);
         let history_weight = Self::calculate_history_weight(index);
 
-        let context = ScoringContext::new(pattern, command)
+        let mut context = ScoringContext::new(pattern, command)
             .with_prefix_match(is_prefix_match)
             .with_history_weight(history_weight)
             .with_history_position(index)
             .with_source("history");
 
-        let scorer = CompositeScorer::new(vec![Box::new(BaseScorer), Box::new(HistoryScorer)]);
+        if let Some(ts) = last_used_ts {
+            context = context.with_last_used_timestamp(ts);
+        }
+
+        let scorer = CompositeScorer::new(vec![
+            Box::new(BaseScorer),
+            Box::new(HistoryScorer),
+            Box::new(FrecencyScorer),
+        ]);
+
+        scorer.calculate(&context)
+    }
+
+    fn calculate_command_key_score(
+        &self,
+        pattern: &str,
+        key: &str,
+        index: usize,
+        frequency: u64,
+        last_used_ts: u64,
+    ) -> f64 {
+        let is_prefix_match = key.starts_with(pattern);
+        let history_weight = Self::calculate_history_weight(index);
+
+        let context = ScoringContext::new(pattern, key)
+            .with_prefix_match(is_prefix_match)
+            .with_history_weight(history_weight)
+            .with_history_position(index)
+            .with_frequency(frequency as usize)
+            .with_last_used_timestamp(last_used_ts)
+            .with_source("history");
+
+        let scorer = CompositeScorer::new(vec![
+            Box::new(BaseScorer),
+            Box::new(HistoryScorer),
+            Box::new(FrecencyScorer),
+        ]);
 
         scorer.calculate(&context)
     }
@@ -334,7 +479,8 @@ ls -la
 git commit -m "test"
 "#;
 
-        let commands = provider.parse_history_content(bash_content);
+        let entries = provider.parse_history_content(bash_content);
+        let commands: Vec<String> = entries.into_iter().map(|e| e.command).collect();
 
         // 应该去重，保留最新的命令
         assert!(commands.contains(&"ls -la".to_string()));
@@ -360,13 +506,19 @@ git commit -m "test"
 : 1640995203:0;npm install
 "#;
 
-        let commands = provider.parse_history_content(zsh_content);
+        let entries = provider.parse_history_content(zsh_content);
+        let commands: Vec<String> = entries.iter().map(|e| e.command.clone()).collect();
 
         assert!(commands.contains(&"ls -la".to_string()));
         assert!(commands.contains(&"cd /home/user".to_string()));
         assert!(commands.contains(&"git status".to_string()));
         assert!(commands.contains(&"npm install".to_string()));
         assert_eq!(commands.len(), 4);
+
+        // zsh: should parse timestamp
+        assert!(entries
+            .iter()
+            .any(|e| e.command == "ls -la" && e.last_used_ts.is_some()));
     }
 
     #[tokio::test]
@@ -387,9 +539,9 @@ git commit -m "test"
         let provider = HistoryProvider::new(cache);
 
         // 测试相同输入，不同位置
-        let score1 = provider.calculate_command_score("git status", "git", 0);
-        let score2 = provider.calculate_command_score("git status", "git", 10);
-        let score3 = provider.calculate_command_score("git status", "git", 50);
+        let score1 = provider.calculate_command_score("git status", "git", 0, None);
+        let score2 = provider.calculate_command_score("git status", "git", 10, None);
+        let score3 = provider.calculate_command_score("git status", "git", 50, None);
 
         // 位置越靠前分数越高（新评分系统使用历史权重+位置加分）
         assert!(
@@ -406,8 +558,8 @@ git commit -m "test"
         );
 
         // 测试匹配度：更短的输入匹配更短的命令应该得分更高
-        let score_short = provider.calculate_command_score("git", "g", 0);
-        let score_long = provider.calculate_command_score("git status", "git", 0);
+        let score_short = provider.calculate_command_score("git", "g", 0, None);
+        let score_long = provider.calculate_command_score("git status", "git", 0, None);
 
         // 两者都是前缀匹配，分数应该都大于 0
         assert!(score_short > 0.0, "短匹配应该有分数: {}", score_short);

@@ -2,7 +2,13 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use async_trait::async_trait;
-use ck_core::{self, SearchMode};
+
+#[derive(Clone, Debug)]
+enum SearchMode {
+    Semantic,
+    Hybrid,
+    Regex,
+}
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
@@ -15,7 +21,7 @@ use crate::agent::error::ToolExecutorResult;
 use crate::agent::persistence::FileRecordSource;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolDescriptionContext, ToolMetadata, ToolPermission, ToolPriority,
-    ToolResult, ToolResultContent,
+    ToolResult, ToolResultContent, ToolResultStatus,
 };
 
 const DEFAULT_MAX_RESULTS: usize = 10;
@@ -75,9 +81,15 @@ Usage:
         let has_index = is_index_ready(path);
 
         if has_index {
-            Some("Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results.".to_string())
+            Some(
+                "Search for code snippets in the current project. Supports three modes: 'semantic' (AI-powered understanding of code semantics, recommended), 'hybrid' (combines semantic and keyword matching), and 'regex' (pattern-based search). The project index is ready - use semantic or hybrid mode for best results."
+                    .to_string(),
+            )
         } else {
-            Some("Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the CK index button in the interface.".to_string())
+            Some(
+                "Search for code snippets in the current project. Currently, only 'regex' mode (pattern-based search) is available because no index has been built yet. To use 'semantic' and 'hybrid' intelligent search modes, please build the index first using the Vector Index (workspace index) button in the interface."
+                    .to_string(),
+            )
         }
     }
 
@@ -165,30 +177,51 @@ Usage:
             )));
         }
 
-        let options = build_search_options(&search_path, query, &mode, max_results);
         let started = Instant::now();
-        let raw_results = match ck_engine::search(&options).await {
-            Ok(results) => results,
-            Err(err) => {
-                return Ok(tool_error(format!("Search failed: {}", err)));
+
+        // 使用工作区路径加载向量索引进行搜索
+        let global = match crate::vector_db::commands::get_global_state() {
+            Some(g) => g,
+            None => return Ok(tool_error("Vector DB not initialized")),
+        };
+
+        let search_options = crate::vector_db::search::SearchOptions {
+            top_k: max_results,
+            threshold: 0.3,
+            include_snippet: true,
+            filter_languages: vec![],
+        };
+
+        let results = match global
+            .search_engine
+            .search_in_workspace(&search_path, query, search_options)
+            .await
+        {
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => {
+                return Ok(tool_error(format!(
+                    "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
+                    query
+                )))
             }
+            Err(e) => return Ok(tool_error(format!("Search failed: {}", e))),
         };
 
         let mut entries: Vec<OrbitSearchResultEntry> = Vec::new();
-        for result in raw_results.into_iter().take(max_results) {
-            let span = result.span.clone();
-            let snippet = extract_content_from_span(&result.file, &span).await;
-            let language = language_to_string(&result.lang);
+        for r in results.into_iter().take(max_results) {
+            // Scope to path if provided
+            if !search_path.as_os_str().is_empty() && !r.file_path.starts_with(&search_path) {
+                continue;
+            }
+            let span = r.span.clone();
+            let snippet = extract_content_from_span(&r.file_path, &span).await;
+            let language = language_from_path(&r.file_path);
             entries.push(OrbitSearchResultEntry {
-                file_path: result.file.display().to_string(),
+                file_path: r.file_path.display().to_string(),
                 start_line: span.line_start,
                 end_line: span.line_end,
                 snippet,
-                score: if result.score > 0.0 {
-                    Some(result.score)
-                } else {
-                    None
-                },
+                score: Some(r.score),
                 language,
             });
         }
@@ -213,7 +246,8 @@ Usage:
                     "No code found matching \"{}\". Try using different keywords or ensure the directory is indexed.",
                     query
                 ))],
-                is_error: false,
+                status: ToolResultStatus::Success,
+                cancel_reason: None,
                 execution_time_ms: Some(elapsed_ms),
                 ext_info: Some(json!({
                     "results": entries,
@@ -240,7 +274,8 @@ Usage:
                 "{}\n\n{}",
                 summary, details
             ))],
-            is_error: false,
+            status: ToolResultStatus::Success,
+            cancel_reason: None,
             execution_time_ms: Some(elapsed_ms),
             ext_info: Some(json!({
                 "results": entries,
@@ -254,40 +289,23 @@ Usage:
     }
 }
 
-fn build_search_options(
-    path: &Path,
-    query: &str,
-    mode: &SearchMode,
-    max_results: usize,
-) -> ck_core::SearchOptions {
-    ck_core::SearchOptions {
-        mode: mode.clone(),
-        query: query.to_string(),
-        path: path.to_path_buf(),
-        top_k: Some(max_results),
-        threshold: None,
-        case_insensitive: true,
-        whole_word: false,
-        fixed_string: false,
-        line_numbers: false,
-        context_lines: 0,
-        before_context_lines: 0,
-        after_context_lines: 0,
-        recursive: true,
-        json_output: false,
-        jsonl_output: false,
-        no_snippet: false,
-        reindex: false,
-        show_scores: false,
-        show_filenames: true,
-        files_with_matches: false,
-        files_without_matches: false,
-        exclude_patterns: ck_core::get_default_exclude_patterns(),
-        respect_gitignore: true,
-        full_section: false,
-        rerank: false,
-        rerank_model: None,
-        embedding_model: None,
+fn language_from_path(path: &Path) -> String {
+    use crate::vector_db::core::Language;
+    match Language::from_path(path) {
+        Some(Language::Rust) => "rust".into(),
+        Some(Language::TypeScript) => "typescript".into(),
+        Some(Language::JavaScript) => "javascript".into(),
+        Some(Language::Python) => "python".into(),
+        Some(Language::Go) => "go".into(),
+        Some(Language::Java) => "java".into(),
+        Some(Language::C) => "c".into(),
+        Some(Language::Cpp) => "cpp".into(),
+        Some(Language::CSharp) => "csharp".into(),
+        Some(Language::Ruby) => "ruby".into(),
+        Some(Language::Php) => "php".into(),
+        Some(Language::Swift) => "swift".into(),
+        Some(Language::Kotlin) => "kotlin".into(),
+        None => "text".into(),
     }
 }
 
@@ -296,16 +314,10 @@ fn mode_as_str(mode: &SearchMode) -> &'static str {
         SearchMode::Semantic => "semantic",
         SearchMode::Hybrid => "hybrid",
         SearchMode::Regex => "regex",
-        SearchMode::Lexical => "lexical",
     }
 }
 
-fn language_to_string(lang: &Option<ck_core::Language>) -> String {
-    lang.map(|l| l.to_string())
-        .unwrap_or_else(|| "text".to_string())
-}
-
-async fn extract_content_from_span(file: &Path, span: &ck_core::Span) -> String {
+async fn extract_content_from_span(file: &Path, span: &crate::vector_db::core::Span) -> String {
     match fs::read_to_string(file).await {
         Ok(content) => {
             let lines: Vec<&str> = content.lines().collect();
@@ -381,7 +393,8 @@ fn is_index_ready(search_path: &Path) -> bool {
 fn validation_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }
@@ -390,7 +403,8 @@ fn validation_error(message: impl Into<String>) -> ToolResult {
 fn tool_error(message: impl Into<String>) -> ToolResult {
     ToolResult {
         content: vec![ToolResultContent::Error(message.into())],
-        is_error: true,
+        status: ToolResultStatus::Error,
+        cancel_reason: None,
         execution_time_ms: None,
         ext_info: None,
     }

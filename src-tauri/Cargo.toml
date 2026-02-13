@@ -1,6 +1,6 @@
 [package]
 name = "orbitx"
-version = "0.1.0"
+version = "0.2.0"
 description = "OrbitX - A modern terminal application with AI assistant"
 authors = ["you"]
 edition = "2021"
@@ -34,6 +34,7 @@ parking_lot = "0.12"
 tauri = { version = "2", features = ["macos-private-api", "devtools"] }
 tauri-plugin-opener = "2.5.0"
 tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2.0.0"
 tauri-plugin-http = "2"
 tauri-plugin-process = "2.3.0"
@@ -41,6 +42,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "io-util", "net", "fs", "time", "macros", "process"] }
 thiserror = "2.0"
+anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 portable-pty = "0.8"
@@ -82,9 +84,12 @@ md5 = "0.7"
 rmp = "0.8"
 rmp-serde = "1.1"
 sha2 = "0.10"
+hex = "0.4"
 
 # 主机名获取
 hostname = "0.4"
+# 跨平台机器 UID 获取
+machine-uid = "0.5"
 
 # LLM 提供商 SDK
 async-openai = "0.29"
@@ -118,12 +123,27 @@ glob = "0.3"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"
 eventsource-stream = "0.2.3"
-ck-core = { path = "../ck-main/ck-core", version = "0.5.3" }
-ck-index = { path = "../ck-main/ck-index", version = "0.5.3" }
-ck-engine = { path = "../ck-main/ck-engine", version = "0.5.3" }
-ck-embed = { path = "../ck-main/ck-embed", version = "0.5.3" }
-ck-ann = { path = "../ck-main/ck-ann", version = "0.5.3" }
 ignore = "0.4"
+# 向量数据库相关依赖
+blake3 = "1.5"
+hnsw_rs = "0.3"
+# Tree-sitter 用于语法树解析
+tree-sitter = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-rust = "0.24"
+tree-sitter-go = "0.25"
+tree-sitter-javascript = "0.23"
+tree-sitter-java = "0.23"
+tree-sitter-c = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-ruby = "0.23"
+tree-sitter-php = "0.23"
+tree-sitter-swift = "0.7"
+# Tokenizers 用于精确 token 计数
+tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
+hf-hub = "0.3"
 
 # 文件监控系统依赖
 notify = "6.1"
@@ -150,18 +170,6 @@ windows = { version = "0.58", features = ["Win32_System_Com", "Win32_UI_Shell", 
 
 # 测试配置
 [[test]]
-name = "mux_integration_test"
-path = "tests/mux/mux_integration_test.rs"
-
-[[test]]
-name = "io_integration_test"
-path = "tests/mux/io_integration_test.rs"
-
-[[test]]
-name = "lifecycle_integration_test"
-path = "tests/mux/lifecycle_integration_test.rs"
-
-[[test]]
 name = "mux_unit_tests"
 path = "tests/unit/mux_unit_tests.rs"
 
@@ -170,26 +178,20 @@ name = "pty_test"
 path = "tests/pty/pty_test.rs"
 
 [[test]]
-name = "integration_test"
-path = "tests/integration/integration_test.rs"
-
-[[test]]
-name = "performance_test"
-path = "tests/integration/performance_test.rs"
-
-
-
-[[test]]
 name = "singleton_tests"
 path = "tests/unit/singleton_tests.rs"
 
 [[test]]
-name = "messagepack_tests"
-path = "tests/storage/messagepack_tests.rs"
+name = "terminal_commands_integration"
+path = "tests/terminal_commands_integration.rs"
 
 [[test]]
-name = "storage_repository_tests"
-path = "tests/storage_repository_tests.rs"
+name = "context_service_test"
+path = "tests/unit/context_service_test.rs"
+
+[[test]]
+name = "window_commands_test"
+path = "tests/unit/window_commands_test.rs"
 
 
 # 桌面平台特定依赖

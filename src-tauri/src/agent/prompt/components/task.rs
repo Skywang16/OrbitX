@@ -9,7 +9,7 @@ use crate::agent::prompt::components::types::{ComponentContext, ComponentDefinit
 use crate::agent::prompt::template_engine::TemplateEngine;
 
 pub fn definitions() -> Vec<Arc<dyn ComponentDefinition>> {
-    vec![Arc::new(TaskContextComponent), Arc::new(TaskNodesComponent)]
+    vec![Arc::new(TaskContextComponent)]
 }
 
 struct TaskContextComponent;
@@ -69,49 +69,8 @@ impl ComponentDefinition for TaskContextComponent {
         template_context.insert("task_status".to_string(), json!(task.status.to_string()));
         template_context.insert("additional_context".to_string(), json!(additional_context));
 
-        let result = TemplateEngine::new()
-            .resolve(template, &template_context)
-            .map_err(|e| {
-                AgentError::TemplateRender(format!("failed to render task context template: {}", e))
-            })?;
+        let result = TemplateEngine::new().resolve(template, &template_context);
 
         Ok(Some(result))
-    }
-}
-
-struct TaskNodesComponent;
-
-#[async_trait]
-impl ComponentDefinition for TaskNodesComponent {
-    fn id(&self) -> PromptComponent {
-        PromptComponent::TaskNodes
-    }
-
-    fn name(&self) -> &str {
-        "Task Nodes"
-    }
-
-    fn description(&self) -> &str {
-        "Task node processing description"
-    }
-
-    fn required(&self) -> bool {
-        false
-    }
-
-    fn dependencies(&self) -> &[PromptComponent] {
-        &[]
-    }
-
-    fn default_template(&self) -> Option<&str> {
-        None
-    }
-
-    async fn render(
-        &self,
-        _context: &ComponentContext,
-        _template_override: Option<&str>,
-    ) -> AgentResult<Option<String>> {
-        Ok(None)
     }
 }

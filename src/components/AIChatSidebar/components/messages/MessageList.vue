@@ -5,14 +5,18 @@
   import UserMessage from './UserMessage.vue'
   import AIMessage from './AIMessage.vue'
   import { useAISettingsStore } from '@/components/settings/components/AI/store'
+  import { useCheckpoint } from '@/composables/useCheckpoint'
 
   const { t } = useI18n()
   const aiSettingsStore = useAISettingsStore()
+  const { loadCheckpoints, getCheckpointByMessageId } = useCheckpoint()
 
   interface Props {
     messages: Message[]
     isLoading?: boolean
     chatMode?: string
+    sessionId?: number | null
+    workspacePath?: string
   }
 
   const props = defineProps<Props>()
@@ -28,6 +32,12 @@
 
   const previousLength = ref(props.messages.length)
 
+  // 获取消息对应的 checkpoint（使用 message.id 查找）
+  const getCheckpoint = (message: Message) => {
+    if (!props.sessionId || !props.workspacePath || message.role !== 'user') return null
+    return getCheckpointByMessageId(props.sessionId, props.workspacePath, message.id)
+  }
+
   watch(
     () => props.messages.length,
     newLength => {
@@ -35,6 +45,27 @@
         scrollToBottom()
       }
       previousLength.value = newLength
+    }
+  )
+
+  // 当会话ID变化时加载checkpoints
+  watch(
+    () => [props.sessionId, props.workspacePath] as const,
+    async ([newId, workspacePath]) => {
+      if (newId && newId > 0 && workspacePath) {
+        await loadCheckpoints(newId, workspacePath)
+      }
+    },
+    { immediate: true }
+  )
+
+  // 当消息列表变化时刷新checkpoints
+  watch(
+    () => props.messages.length,
+    async () => {
+      if (props.sessionId && props.sessionId > 0 && props.workspacePath) {
+        await loadCheckpoints(props.sessionId, props.workspacePath)
+      }
     }
   )
 
@@ -68,7 +99,12 @@
 
     <div v-else class="message-container">
       <template v-for="message in messages" :key="message.id">
-        <UserMessage v-if="message.role === 'user'" :message="message" />
+        <UserMessage
+          v-if="message.role === 'user'"
+          :message="message"
+          :checkpoint="getCheckpoint(message)"
+          :workspace-path="workspacePath"
+        />
         <AIMessage v-else-if="message.role === 'assistant'" :message="message" />
       </template>
     </div>

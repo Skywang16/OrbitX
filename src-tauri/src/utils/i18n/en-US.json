@@ -1,4 +1,40 @@
 {
+  "menu": {
+    "about": "About OrbitX",
+    "settings": "Settings...",
+    "services": "Services",
+    "hide": "Hide OrbitX",
+    "hide_others": "Hide Others",
+    "show_all": "Show All",
+    "quit": "Quit OrbitX",
+    "new_tab": "New Tab",
+    "close_tab": "Close Tab",
+    "edit": "Edit",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "select_all": "Select All",
+    "find": "Find...",
+    "clear_terminal": "Clear Terminal",
+    "view": "View",
+    "increase_font_size": "Increase Font Size",
+    "decrease_font_size": "Decrease Font Size",
+    "increase_opacity": "Increase Opacity",
+    "decrease_opacity": "Decrease Opacity",
+    "fullscreen": "Enter Full Screen",
+    "toggle_ai_sidebar": "Toggle AI Sidebar",
+    "toggle_git_panel": "Toggle Git Panel",
+    "window": "Window",
+    "minimize": "Minimize",
+    "always_on_top": "Always on Top",
+    "prev_tab": "Previous Tab",
+    "next_tab": "Next Tab",
+    "help": "Help",
+    "documentation": "OrbitX Documentation",
+    "report_issue": "Report Issue..."
+  },
   "common": {
     "invalid_params": "Invalid parameters",
     "not_found": "Resource not found",
@@ -30,6 +66,12 @@
     "engine_not_initialized": "Completion engine not initialized",
     "stats_failed": "Failed to get completion statistics",
     "clear_cache_failed": "Failed to clear completion cache"
+  },
+  "git": {
+    "not_installed": "Git is not installed or not in PATH",
+    "not_a_repository": "Not a Git repository",
+    "parse_error": "Failed to parse Git output",
+    "command_failed": "Git command failed"
   },
   "config": {
     "get_failed": "Failed to get configuration",
@@ -132,13 +174,21 @@
   "storage": {
     "get_config_failed": "Failed to get configuration",
     "update_config_failed": "Failed to update configuration",
-    "save_session_failed": "Failed to save session state",
-    "load_session_failed": "Failed to load session state"
+    "save_session_failed": "Failed to save session state"
   },
   "dock": {
     "update_failed": "Failed to update dock menu",
     "get_failed": "Failed to get dock tabs",
     "clear_failed": "Failed to clear dock tabs",
     "not_initialized": "Dock manager not initialized"
+  },
+  "vector_db": {
+    "index_failed": "Failed to index files",
+    "status_failed": "Failed to get index status",
+    "delete_failed": "Failed to delete index",
+    "progress_unavailable": "Index build progress unavailable",
+    "update_failed": "Failed to update file index",
+    "remove_failed": "Failed to remove file index",
+    "search_failed": "Semantic search failed"
   }
 }

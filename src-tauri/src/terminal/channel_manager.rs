@@ -1,7 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::RwLock;
 use tauri::ipc::Channel;
-use tracing::debug;
 
 use super::replay;
 use super::types::TerminalChannelMessage;
@@ -53,21 +52,17 @@ impl TerminalChannelManager {
         }
 
         // 检查缓冲区是否太新（<2秒），如果是则跳过 replay（避免新建终端重复输出）
-        if OutputAnalyzer::global().is_pane_buffer_too_new(pane_id) {
-            debug!(
-                pane_id,
-                "TerminalChannelManager skipped replay (buffer too new)"
-            );
-        } else if let Ok(replay_result) = replay::build_replay(pane_id) {
-            if let Ok(map) = self.channels.read() {
-                if let Some(ch) = map.get(&pane_id) {
-                    for event in replay_result.events {
-                        let _ = ch.send(TerminalChannelMessage::Data {
-                            pane_id,
-                            data: event.data.into_bytes(),
-                        });
+        if !OutputAnalyzer::global().is_pane_buffer_too_new(pane_id) {
+            if let Ok(replay_result) = replay::build_replay(pane_id) {
+                if let Ok(map) = self.channels.read() {
+                    if let Some(ch) = map.get(&pane_id) {
+                        for event in replay_result.events {
+                            let _ = ch.send(TerminalChannelMessage::Data {
+                                pane_id,
+                                data: event.data.into_bytes(),
+                            });
+                        }
                     }
-                    debug!(pane_id, "TerminalChannelManager sent replay on register");
                 }
             }
         }
@@ -83,18 +78,12 @@ impl TerminalChannelManager {
         if let Some(chunks) = buffered {
             if let Ok(map) = self.channels.read() {
                 if let Some(ch) = map.get(&pane_id) {
-                    let mut replayed = 0usize;
                     for chunk in chunks {
                         let _ = ch.send(TerminalChannelMessage::Data {
                             pane_id,
                             data: chunk,
                         });
-                        replayed += 1;
                     }
-                    debug!(
-                        pane_id,
-                        replayed, "TerminalChannelManager sent buffered chunks after replay"
-                    );
                 }
             }
         }
@@ -139,18 +128,7 @@ impl TerminalChannelManager {
                     .entry(pane_id)
                     .or_insert_with(PendingQueue::default)
                     .push(data);
-                debug!(
-                    pane_id,
-                    buffered_len = data.len(),
-                    "TerminalChannelManager buffered data (no subscriber)"
-                );
             }
-        } else {
-            debug!(
-                pane_id,
-                sent_len = data.len(),
-                "TerminalChannelManager sent data to subscriber"
-            );
         }
     }
 

@@ -52,7 +52,6 @@ pub use scorers::{
 /// 评分常量 - 消除 magic numbers
 ///
 /// 这些常量是经过权衡的结果，而不是随意的数字
-
 /// 基础匹配分数 - 任何有效补全的最低分
 pub const BASE_SCORE: f64 = 70.0;
 

@@ -14,6 +14,14 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_operation ON audit_logs(operation);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON audit_logs(table_name);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success);
 
--- 最近工作区索引
-CREATE INDEX IF NOT EXISTS idx_recent_workspaces_last_accessed ON recent_workspaces(last_accessed_at DESC);
-
+-- Completion learning model indexes
+CREATE INDEX IF NOT EXISTS idx_completion_command_keys_last_used
+    ON completion_command_keys(last_used_ts);
+CREATE INDEX IF NOT EXISTS idx_completion_command_keys_root
+    ON completion_command_keys(root);
+CREATE INDEX IF NOT EXISTS idx_completion_transitions_prev_last_used
+    ON completion_transitions(prev_id, last_used_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_completion_transitions_last_used
+    ON completion_transitions(last_used_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_completion_entities_type_last_used
+    ON completion_entity_stats(entity_type, last_used_ts DESC);

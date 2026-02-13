@@ -103,7 +103,7 @@ impl IterationContext {
                 .read()
                 .await
                 .iter()
-                .any(|result| result.is_error),
+                .any(|result| result.status != crate::agent::tools::ToolResultStatus::Success),
         }
     }
 }

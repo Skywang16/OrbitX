@@ -20,7 +20,6 @@
 //!     api_url: None,
 //!     model: "claude-3-5-sonnet-20241022".to_string(),
 //!     options: None,
-//!     supports_prompt_cache: false,
 //! };
 //!
 //! let provider = AnthropicProvider::new(config);
@@ -379,9 +378,7 @@ mod tests {
             provider_type: "anthropic".to_string(),
             api_key: "test-key".to_string(),
             api_url: None,
-            model: "test-model".to_string(),
             options: None,
-            supports_prompt_cache: false,
         };
 
         let provider = AnthropicProvider::new(config);

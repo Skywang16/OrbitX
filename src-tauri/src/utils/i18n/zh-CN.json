@@ -1,4 +1,40 @@
 {
+  "menu": {
+    "about": "关于 OrbitX",
+    "settings": "设置...",
+    "services": "服务",
+    "hide": "隐藏 OrbitX",
+    "hide_others": "隐藏其他",
+    "show_all": "显示全部",
+    "quit": "退出 OrbitX",
+    "new_tab": "新建标签页",
+    "close_tab": "关闭标签页",
+    "edit": "编辑",
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "拷贝",
+    "paste": "粘贴",
+    "select_all": "全选",
+    "find": "查找...",
+    "clear_terminal": "清空终端",
+    "view": "显示",
+    "increase_font_size": "放大字体",
+    "decrease_font_size": "缩小字体",
+    "increase_opacity": "增加不透明度",
+    "decrease_opacity": "降低不透明度",
+    "fullscreen": "进入全屏幕",
+    "toggle_ai_sidebar": "切换 AI 侧边栏",
+    "toggle_git_panel": "切换 Git 面板",
+    "window": "窗口",
+    "minimize": "最小化",
+    "always_on_top": "窗口置顶",
+    "prev_tab": "上一个标签页",
+    "next_tab": "下一个标签页",
+    "help": "帮助",
+    "documentation": "OrbitX 文档",
+    "report_issue": "报告问题..."
+  },
   "common": {
     "invalid_params": "参数无效",
     "not_found": "资源不存在",
@@ -30,6 +66,12 @@
     "engine_not_initialized": "补全引擎未初始化",
     "stats_failed": "获取统计信息失败",
     "clear_cache_failed": "清理补全缓存失败"
+  },
+  "git": {
+    "not_installed": "未找到 Git（请确认已安装并在 PATH 中）",
+    "not_a_repository": "当前目录不是 Git 仓库",
+    "parse_error": "解析 Git 输出失败",
+    "command_failed": "Git 命令执行失败"
   },
   "config": {
     "get_failed": "获取配置失败",
@@ -132,13 +174,21 @@
   "storage": {
     "get_config_failed": "获取配置失败",
     "update_config_failed": "更新配置失败",
-    "save_session_failed": "保存会话状态失败",
-    "load_session_failed": "加载会话状态失败"
+    "save_session_failed": "保存会话状态失败"
   },
   "dock": {
     "update_failed": "更新 Dock 菜单失败",
     "get_failed": "获取 Dock 标签页失败",
     "clear_failed": "清除 Dock 标签页失败",
     "not_initialized": "Dock 管理器未初始化"
+  },
+  "vector_db": {
+    "index_failed": "索引文件失败",
+    "status_failed": "获取索引状态失败",
+    "delete_failed": "删除索引失败",
+    "progress_unavailable": "索引构建进度不可用",
+    "update_failed": "更新文件索引失败",
+    "remove_failed": "移除文件索引失败",
+    "search_failed": "语义搜索失败"
   }
 }

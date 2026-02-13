@@ -4,13 +4,18 @@
 pub mod builtin;
 pub mod logger;
 pub mod metadata;
+pub mod parallel;
 pub mod registry;
 pub mod r#trait;
 // Re-exports for external use
 pub use logger::ToolExecutionLogger;
-pub use metadata::{BackoffStrategy, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority};
+pub use metadata::{
+    BackoffStrategy, ExecutionMode, RateLimitConfig, ToolCategory, ToolMetadata, ToolPriority,
+};
+pub use parallel::{execute_batch, ToolCall, ToolCallResult};
 pub use r#trait::{
-    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent, ToolSchema,
+    RunnableTool, ToolDescriptionContext, ToolPermission, ToolResult, ToolResultContent,
+    ToolResultStatus, ToolSchema,
 };
 pub use registry::{get_permissions_for_mode, ToolExecutionStats, ToolRegistry};
 
@@ -32,9 +37,6 @@ pub async fn create_tool_registry(chat_mode: &str) -> Arc<ToolRegistry> {
 
 async fn register_builtin_tools(registry: &ToolRegistry, is_chat_mode: bool) {
     use std::sync::Arc;
-    use tracing::info;
-
-    info!("注册 Agent 工具集 (chat_mode={})", is_chat_mode);
 
     registry
         .register("web_fetch", Arc::new(WebFetchTool::new()), is_chat_mode)

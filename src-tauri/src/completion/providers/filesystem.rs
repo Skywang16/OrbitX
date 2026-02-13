@@ -94,8 +94,14 @@ impl FilesystemProvider {
                 CompletionType::File
             };
 
-            let mut item = CompletionItem::new(file_name.clone(), completion_type)
-                .with_source("filesystem".to_string());
+            let mut text = file_name.clone();
+            if metadata.is_dir() {
+                text = format!("{text}/");
+            }
+
+            let mut item = CompletionItem::new(text, completion_type)
+                .with_source("filesystem".to_string())
+                .with_score(if metadata.is_dir() { 60.0 } else { 55.0 });
 
             // 为目录添加斜杠
             if metadata.is_dir() {
@@ -153,8 +159,13 @@ impl FilesystemProvider {
                     .to_string_lossy()
                     .to_string();
 
-                let mut item = CompletionItem::new(relative_path.clone(), completion_type)
-                    .with_score(score as f64)
+                let mut text = relative_path.clone();
+                if path.is_dir() {
+                    text = format!("{text}/");
+                }
+
+                let mut item = CompletionItem::new(text, completion_type)
+                    .with_score(((score as f64) / 100.0 * 60.0 + 40.0).min(100.0))
                     .with_source("filesystem".to_string());
 
                 if path.is_dir() {
@@ -235,9 +246,10 @@ impl CompletionProvider for FilesystemProvider {
                     items = items
                         .into_iter()
                         .filter_map(|mut item| {
-                            if let Some(score) = self.matcher.fuzzy_match(&item.text, &file_name) {
+                            let haystack = item.text.trim_end_matches('/');
+                            if let Some(score) = self.matcher.fuzzy_match(haystack, &file_name) {
                                 // 更新分数
-                                item.score = score as f64;
+                                item.score = ((score as f64) / 100.0 * 60.0 + 40.0).min(100.0);
                                 Some(item)
                             } else {
                                 None

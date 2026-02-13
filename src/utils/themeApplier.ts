@@ -124,10 +124,11 @@ const clearAllOldVariables = (style: CSSStyleDeclaration) => {
  * 应用背景透明度
  * 当透明度变化时,重新应用主题 CSS 变量
  */
-export const applyBackgroundOpacity = (_opacity: number): void => {
+export const applyBackgroundOpacity = (opacity: number): void => {
   if (!cachedTheme || !cachedTheme.ui) {
     return
   }
+  void opacity
   // 重新应用 CSS 变量,getCurrentOpacity() 会读取最新的透明度值
   updateCSSVariables(cachedTheme)
 }
