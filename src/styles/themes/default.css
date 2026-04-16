@@ -81,7 +81,7 @@
 
   /* Compatibility aliases */
   --bg-50: var(--bg-100);
-  --accent-500: var(--color-warning);
+  --accent-500: var(--color-primary);
   --font-mono: var(--font-family-mono);
 }
 

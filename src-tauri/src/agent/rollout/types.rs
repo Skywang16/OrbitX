@@ -9,6 +9,7 @@ pub struct ThreadMeta {
     pub thread_id: i64,
     pub workspace_path: String,
     pub title: String,
+    pub thread_type: String,
     pub agent_type: String,
     pub parent_thread_id: Option<i64>,
     pub spawned_by_tool_call_id: Option<String>,

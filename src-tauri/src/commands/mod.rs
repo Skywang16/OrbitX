@@ -104,6 +104,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::workspace::commands::workspace_set_active_thread,
         crate::workspace::commands::workspace_clear_active_thread,
         crate::workspace::commands::workspace_delete_thread,
+        crate::workspace::commands::workspace_update_thread_title,
         crate::workspace::commands::workspace_get_project_rules,
         crate::workspace::commands::workspace_set_project_rules,
         crate::workspace::commands::workspace_list_rules_files,

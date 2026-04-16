@@ -31,6 +31,7 @@ export class TerminalApi {
       rows: options.rows,
       cols: options.cols,
       cwd: options.cwd,
+      threadId: options.threadId,
     })
   }
 
@@ -39,6 +40,7 @@ export class TerminalApi {
       shellName: options.shellName,
       rows: options.rows,
       cols: options.cols,
+      threadId: options.threadId,
     })
   }
 

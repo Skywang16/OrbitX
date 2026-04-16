@@ -490,10 +490,14 @@ impl DatabaseManager {
             })?;
 
         let mut has_display_name = false;
+        let mut has_thread_type = false;
         for row in &rows {
-            if pragma_text_column(row, "name", "threads table_info")? == "display_name" {
+            let col_name = pragma_text_column(row, "name", "threads table_info")?;
+            if col_name == "display_name" {
                 has_display_name = true;
-                break;
+            }
+            if col_name == "thread_type" {
+                has_thread_type = true;
             }
         }
 
@@ -504,6 +508,17 @@ impl DatabaseManager {
                 .map_err(|err| {
                     DatabaseError::internal(format!(
                         "Failed to migrate threads schema (add display_name): {err}"
+                    ))
+                })?;
+        }
+
+        if !has_thread_type {
+            sqlx::query("ALTER TABLE threads ADD COLUMN thread_type TEXT NOT NULL DEFAULT 'agent'")
+                .execute(&self.pool)
+                .await
+                .map_err(|err| {
+                    DatabaseError::internal(format!(
+                        "Failed to migrate threads schema (add thread_type): {err}"
                     ))
                 })?;
         }

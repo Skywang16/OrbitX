@@ -438,7 +438,12 @@
     "delete_workspace_confirm": "Are you sure you want to delete this workspace?",
     "delete_session": "Delete Thread",
     "delete_session_confirm": "Are you sure you want to delete this thread?",
-    "just_now": "just now"
+    "just_now": "just now",
+    "new_agent_session": "New Agent Session",
+    "new_shell_session": "New Shell Session",
+    "session_type": "Session Type",
+    "agent_session": "Agent Session",
+    "shell_session": "Shell Session"
   },
   "skills_page": {
     "title": "Skills",

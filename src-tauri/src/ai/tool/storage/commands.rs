@@ -137,6 +137,7 @@ fn build_terminal_runtime_state(
     cwd: String,
     shell: String,
     computed_display_title: String,
+    thread_id: Option<i64>,
     agent_terminal: Option<AgentTerminal>,
 ) -> TerminalRuntimeState {
     let is_agent_terminal = agent_terminal.is_some();
@@ -163,7 +164,10 @@ fn build_terminal_runtime_state(
         } else {
             TerminalRuntimeKind::Workspace
         },
-        thread_id: agent_terminal.as_ref().map(|terminal| terminal.thread_id),
+        thread_id: agent_terminal
+            .as_ref()
+            .map(|terminal| terminal.thread_id)
+            .or(thread_id),
         agent_terminal_id: agent_terminal.as_ref().map(|terminal| terminal.id.clone()),
         source_label,
         agent_mode: agent_terminal
@@ -207,12 +211,16 @@ pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<TerminalRuntime
             let agent_terminal = terminal_manager
                 .as_ref()
                 .and_then(|manager| manager.get_terminal_by_pane_id(pane_id.as_u32()));
+            let thread_id = mux
+                .get_pane_runtime_metadata(pane_id)
+                .and_then(|metadata| metadata.thread_id);
 
             Some(build_terminal_runtime_state(
                 pane_id.as_u32(),
                 cwd,
                 shell,
                 display_title,
+                thread_id,
                 agent_terminal,
             ))
         })
@@ -256,12 +264,16 @@ pub async fn storage_get_terminal_state(
     let agent_terminal = terminal_manager
         .as_ref()
         .and_then(|manager| manager.get_terminal_by_pane_id(pane_id.as_u32()));
+    let thread_id = mux
+        .get_pane_runtime_metadata(pane_id)
+        .and_then(|metadata| metadata.thread_id);
 
     Ok(api_success!(Some(build_terminal_runtime_state(
         pane_id.as_u32(),
         cwd,
         shell,
         display_title,
+        thread_id,
         agent_terminal,
     ))))
 }

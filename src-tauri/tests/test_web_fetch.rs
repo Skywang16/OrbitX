@@ -109,6 +109,7 @@ mod web_fetch_tests {
                     workspace_path: &cwd,
                     title: "Web Fetch Test",
                     display_name: None,
+                    thread_type: "agent",
                     agent_type: "chat",
                     parent_thread_id: None,
                     spawned_by_tool_call_id: None,

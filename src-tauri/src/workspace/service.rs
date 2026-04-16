@@ -44,6 +44,7 @@ pub struct ThreadRecord {
     pub title: String,
     pub message_count: i64,
     pub status: String,
+    pub thread_type: String,
     pub agent_type: String,
     pub created_at: i64,
     pub updated_at: i64,
@@ -164,7 +165,7 @@ impl WorkspaceService {
     pub async fn list_threads(&self, workspace_path: &str) -> WorkspaceResult<Vec<ThreadRecord>> {
         let normalized = self.normalize_path(workspace_path).await?;
         let rows = sqlx::query(
-            "SELECT id, workspace_path, parent_thread_id, title, status, agent_type, created_at, updated_at
+            "SELECT id, workspace_path, parent_thread_id, title, status, thread_type, agent_type, created_at, updated_at
              FROM threads
              WHERE workspace_path = ? AND is_archived = 0
              ORDER BY updated_at DESC, id DESC",
@@ -183,6 +184,7 @@ impl WorkspaceService {
                 parent_thread_id: row.try_get("parent_thread_id")?,
                 title: row.try_get("title")?,
                 status: row.try_get("status")?,
+                thread_type: row.try_get("thread_type")?,
                 agent_type: row.try_get("agent_type")?,
                 created_at: row.try_get("created_at")?,
                 updated_at: row.try_get("updated_at")?,
@@ -218,17 +220,20 @@ impl WorkspaceService {
     pub async fn create_thread(
         &self,
         workspace_path: &str,
-        title: Option<&str>,
+        title: &str,
+        thread_type: &str,
     ) -> WorkspaceResult<ThreadRecord> {
         let workspace = self.get_or_create_workspace(workspace_path).await?;
+        let agent_type_value = "coder"; // agent_type 用于 agent 子类型
         let thread = self
             .agent_persistence
             .threads()
             .create(crate::agent::rollout::projection::CreateThreadParams {
                 workspace_path: &workspace.path,
-                title: title.unwrap_or_default(),
+                title,
                 display_name: None,
-                agent_type: "coder",
+                thread_type,
+                agent_type: agent_type_value,
                 parent_thread_id: None,
                 spawned_by_tool_call_id: None,
                 rollout_path: "",
@@ -243,8 +248,9 @@ impl WorkspaceService {
         let real_meta = crate::agent::rollout::ThreadMeta {
             thread_id: thread.id,
             workspace_path: workspace.path.clone(),
-            title: title.unwrap_or_default().to_string(),
-            agent_type: "coder".to_string(),
+            title: title.to_string(),
+            thread_type: thread_type.to_string(),
+            agent_type: agent_type_value.to_string(),
             parent_thread_id: None,
             spawned_by_tool_call_id: None,
             model_id: None,
@@ -303,11 +309,9 @@ impl WorkspaceService {
                 .ok_or_else(|| WorkspaceError::thread_not_found(thread.id));
         }
 
-        let created = self
-            .create_thread(workspace_path, (!title.trim().is_empty()).then_some(title))
-            .await?;
-        self.set_active_thread(workspace_path, Some(created.id))
-            .await?;
+        let thread_title = if title.trim().is_empty() { "" } else { title };
+        let created = self.create_thread(workspace_path, thread_title, "agent").await?;
+        self.set_active_thread(workspace_path, Some(created.id)).await?;
         Ok(created)
     }
 
@@ -521,7 +525,7 @@ impl WorkspaceService {
 
     pub async fn get_thread(&self, id: i64) -> WorkspaceResult<Option<ThreadRecord>> {
         let row = sqlx::query(
-            "SELECT id, workspace_path, parent_thread_id, title, status, agent_type, created_at, updated_at
+            "SELECT id, workspace_path, parent_thread_id, title, status, thread_type, agent_type, created_at, updated_at
              FROM threads WHERE id = ?",
         )
         .bind(id)
@@ -538,6 +542,7 @@ impl WorkspaceService {
             parent_thread_id: row.try_get("parent_thread_id")?,
             title: row.try_get("title")?,
             status: row.try_get("status")?,
+            thread_type: row.try_get("thread_type")?,
             agent_type: row.try_get("agent_type")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,

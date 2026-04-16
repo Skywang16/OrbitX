@@ -54,6 +54,7 @@ pub async fn terminal_create<R: Runtime>(
     rows: u16,
     cols: u16,
     cwd: Option<String>,
+    thread_id: Option<i64>,
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> TauriApiResult<u32> {
@@ -64,27 +65,26 @@ pub async fn terminal_create<R: Runtime>(
     let mux = get_mux();
     let size = PtySize::new(rows, cols);
 
-    // Choose creation method based on whether initial directory is specified
-    let result = if let Some(working_dir) = cwd {
-        let mut shell_config = match MuxShellConfig::with_default_shell() {
-            Ok(shell_config) => shell_config,
-            Err(err) => {
-                error!(
-                    "Failed to resolve default shell for terminal creation: {}",
-                    err
-                );
-                return Ok(api_error!("shell.shell_not_found"));
-            }
-        };
-        shell_config.working_directory = Some(working_dir.clone().into());
-        let config = MuxSessionConfig::with_shell(shell_config);
-
-        mux.create_pane_with_config(size, &config)
-            .await
-            .map(|pane_id| (pane_id, Some(working_dir)))
-    } else {
-        mux.create_pane(size).await.map(|pane_id| (pane_id, None))
+    let mut shell_config = match MuxShellConfig::with_default_shell() {
+        Ok(shell_config) => shell_config,
+        Err(err) => {
+            error!(
+                "Failed to resolve default shell for terminal creation: {}",
+                err
+            );
+            return Ok(api_error!("shell.shell_not_found"));
+        }
     };
+    if let Some(working_dir) = cwd.clone() {
+        shell_config.working_directory = Some(working_dir.into());
+    }
+    let mut config = MuxSessionConfig::with_shell(shell_config);
+    config.runtime_metadata.thread_id = thread_id;
+
+    let result = mux
+        .create_pane_with_config(size, &config)
+        .await
+        .map(|pane_id| (pane_id, cwd));
 
     match result {
         Ok((pane_id, working_dir)) => {
@@ -223,6 +223,7 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     shell_name: Option<String>,
     rows: u16,
     cols: u16,
+    thread_id: Option<i64>,
     _app: AppHandle<R>,
     _state: State<'_, TerminalState>,
 ) -> TauriApiResult<u32> {
@@ -251,7 +252,8 @@ pub async fn terminal_create_with_shell<R: Runtime>(
     let size = PtySize::new(rows, cols);
 
     let shell_config = MuxShellConfig::with_shell(shell_info);
-    let config = MuxSessionConfig::with_shell(shell_config);
+    let mut config = MuxSessionConfig::with_shell(shell_config);
+    config.runtime_metadata.thread_id = thread_id;
 
     // Create pane using configuration
     match mux.create_pane_with_config(size, &config).await {

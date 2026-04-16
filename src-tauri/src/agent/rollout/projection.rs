@@ -16,6 +16,7 @@ pub struct ThreadRecord {
     pub spawned_by_tool_call_id: Option<String>,
     pub title: String,
     pub display_name: Option<String>,
+    pub thread_type: String,
     pub agent_type: String,
     pub model_id: Option<String>,
     pub provider_id: Option<String>,
@@ -40,6 +41,7 @@ pub struct CreateThreadParams<'a> {
     pub workspace_path: &'a str,
     pub title: &'a str,
     pub display_name: Option<&'a str>,
+    pub thread_type: &'a str,
     pub agent_type: &'a str,
     pub parent_thread_id: Option<i64>,
     pub spawned_by_tool_call_id: Option<&'a str>,
@@ -71,15 +73,16 @@ impl ThreadRepository {
         let result = sqlx::query(
             "INSERT INTO threads (
                 workspace_path, parent_thread_id, spawned_by_tool_call_id, title, display_name,
-                agent_type, model_id, provider_id, rollout_path, worktree_path, status,
+                thread_type, agent_type, model_id, provider_id, rollout_path, worktree_path,
                 created_at, updated_at, last_event_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(params.workspace_path)
         .bind(params.parent_thread_id)
         .bind(params.spawned_by_tool_call_id)
         .bind(params.title)
         .bind(params.display_name)
+        .bind(params.thread_type)
         .bind(params.agent_type)
         .bind(params.model_id)
         .bind(params.provider_id)
@@ -257,6 +260,7 @@ fn build_thread(row: &sqlx::sqlite::SqliteRow) -> AgentResult<ThreadRecord> {
         spawned_by_tool_call_id: row.try_get("spawned_by_tool_call_id")?,
         title: row.try_get("title")?,
         display_name: row.try_get("display_name")?,
+        thread_type: row.try_get("thread_type")?,
         agent_type: row.try_get("agent_type")?,
         model_id: row.try_get("model_id")?,
         provider_id: row.try_get("provider_id")?,

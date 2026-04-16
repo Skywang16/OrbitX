@@ -6,6 +6,7 @@ export interface TerminalCreateOptions {
   rows: number
   cols: number
   cwd?: string
+  threadId?: number
 }
 
 export interface TerminalWriteOptions {
@@ -23,6 +24,7 @@ export interface CreateTerminalWithShellOptions {
   shellName?: string
   rows: number
   cols: number
+  threadId?: number
 }
 
 // ===== Replay types =====

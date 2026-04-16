@@ -170,7 +170,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     try {
       const path = currentWorkspacePath.value
       if (path) {
-        await workspaceStore.createThread(path)
+        await workspaceStore.createThread(path, '', 'agent')
       } else {
         workspaceStore.clearSelection()
       }

@@ -116,12 +116,6 @@ struct ConfirmationState {
     queue: VecDeque<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredApprovalRule {
-    permission: String,
-    pattern: String,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct ToolExecutionStats {
     pub total_calls: u64,

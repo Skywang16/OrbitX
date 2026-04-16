@@ -174,11 +174,12 @@ pub async fn workspace_get_thread(
 #[tauri::command]
 pub async fn workspace_create_thread(
     path: String,
-    title: Option<String>,
+    title: String,
+    thread_type: String,
     database: State<'_, Arc<DatabaseManager>>,
 ) -> TauriApiResult<ThreadRecord> {
     let service = WorkspaceService::new(Arc::clone(&database));
-    match service.create_thread(&path, title.as_deref()).await {
+    match service.create_thread(&path, &title, &thread_type).await {
         Ok(thread) => Ok(api_success!(thread)),
         Err(err) => {
             tracing::error!("workspace_create_thread failed: {}", err);
@@ -229,6 +230,22 @@ pub async fn workspace_delete_thread(
         Err(err) => {
             tracing::error!("workspace_delete_thread failed: {}", err);
             Ok(api_error!("workspace.delete_thread_failed"))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn workspace_update_thread_title(
+    thread_id: i64,
+    title: String,
+    database: State<'_, Arc<DatabaseManager>>,
+) -> TauriApiResult<EmptyData> {
+    let service = WorkspaceService::new(Arc::clone(&database));
+    match service.update_thread_title(thread_id, &title).await {
+        Ok(()) => Ok(api_success!()),
+        Err(err) => {
+            tracing::error!("workspace_update_thread_title failed: {}", err);
+            Ok(api_error!("workspace.update_thread_failed"))
         }
     }
 }

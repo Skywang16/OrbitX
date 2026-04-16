@@ -18,6 +18,7 @@ export interface ThreadRecord {
   title: string
   messageCount: number
   status: 'idle' | 'running' | 'completed' | 'error' | 'cancelled'
+  threadType: 'agent' | 'shell'
   agentType: string
   createdAt: number
   updatedAt: number
@@ -70,8 +71,12 @@ export class WorkspaceApi {
     return invoke<ThreadViewRecord[]>('workspace_list_thread_views', { path })
   }
 
-  createThread = async (path: string, title?: string): Promise<ThreadRecord> => {
-    return invoke<ThreadRecord>('workspace_create_thread', { path, title })
+  createThread = async (path: string, title: string, threadType: string): Promise<ThreadRecord> => {
+    return invoke<ThreadRecord>('workspace_create_thread', { path, title, threadType })
+  }
+
+  updateThreadTitle = async (threadId: number, title: string): Promise<void> => {
+    await invoke('workspace_update_thread_title', { threadId, title })
   }
 
   deleteThread = async (threadId: number): Promise<void> => {

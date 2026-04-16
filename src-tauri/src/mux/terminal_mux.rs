@@ -12,7 +12,8 @@ use tracing::{error, instrument, warn};
 
 use crate::mux::{
     error::{TerminalMuxError, TerminalMuxResult},
-    IoHandler, LocalPane, MuxNotification, MuxSessionConfig, Pane, PaneId, PtySize,
+    IoHandler, LocalPane, MuxNotification, MuxSessionConfig, Pane, PaneId, PaneRuntimeMetadata,
+    PtySize,
 };
 use crate::shell::ShellIntegrationManager;
 
@@ -28,6 +29,8 @@ pub struct TerminalMuxStatus {
 
 pub struct TerminalMux {
     panes: RwLock<HashMap<PaneId, Arc<dyn Pane>>>,
+
+    pane_metadata: RwLock<HashMap<PaneId, PaneRuntimeMetadata>>,
 
     /// Event subscribers - subscriber ID -> callback function
     subscribers: RwLock<HashMap<usize, SubscriberCallback>>,
@@ -69,6 +72,7 @@ impl TerminalMux {
 
         let mux = Arc::new(Self {
             panes: RwLock::new(HashMap::new()),
+            pane_metadata: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
             next_pane_id: AtomicU32::new(1),
             next_subscriber_id: AtomicU32::new(1),
@@ -177,6 +181,14 @@ impl TerminalMux {
             panes.insert(pane_id, pane.clone());
         }
 
+        {
+            let mut pane_metadata = self
+                .pane_metadata
+                .write()
+                .map_err(|err| TerminalMuxError::from_write_poison("pane_metadata", err))?;
+            pane_metadata.insert(pane_id, config.runtime_metadata.clone());
+        }
+
         // Set pane's Shell type to shell_integration
         let shell_type =
             crate::shell::ShellType::from_program(&config.shell_config.shell_info.path);
@@ -241,6 +253,15 @@ impl TerminalMux {
                 .ok_or(TerminalMuxError::PaneNotFound { pane_id })?
         };
 
+        if let Ok(mut pane_metadata) = self.pane_metadata.write() {
+            pane_metadata.remove(&pane_id);
+        } else {
+            warn!(
+                "Failed to acquire pane metadata write lock while removing pane {:?}",
+                pane_id
+            );
+        }
+
         // Mark pane as dead, stop I/O threads
         pane.mark_dead();
 
@@ -264,6 +285,19 @@ impl TerminalMux {
                     err
                 );
                 Vec::new()
+            }
+        }
+    }
+
+    pub fn get_pane_runtime_metadata(&self, pane_id: PaneId) -> Option<PaneRuntimeMetadata> {
+        match self.pane_metadata.read() {
+            Ok(pane_metadata) => pane_metadata.get(&pane_id).cloned(),
+            Err(err) => {
+                error!(
+                    "failed to acquire pane metadata read lock for {:?}: {}",
+                    pane_id, err
+                );
+                None
             }
         }
     }

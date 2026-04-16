@@ -154,6 +154,7 @@
     "messages_failed": "Failed to get messages",
     "active_thread_failed": "Failed to get active thread",
     "create_thread_failed": "Failed to create thread",
+    "update_thread_failed": "Failed to update thread",
     "set_active_thread_failed": "Failed to set active thread",
     "clear_active_thread_failed": "Failed to clear active thread",
     "delete_thread_failed": "Failed to delete thread",

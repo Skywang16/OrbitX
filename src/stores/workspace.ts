@@ -318,9 +318,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  const createThread = async (workspacePath: string, title?: string) => {
+  const createThread = async (workspacePath: string, title: string, threadType: string) => {
     await workspaceApi.getOrCreate(workspacePath)
-    const thread = await workspaceApi.createThread(workspacePath, title ?? '')
+    const thread = await workspaceApi.createThread(workspacePath, title, threadType)
     const node = tree.value.get(workspacePath)
     if (node) {
       tree.value = new Map(tree.value).set(workspacePath, {
@@ -334,6 +334,44 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     setThreadMessages(thread.id, [])
     setThreadSubagents(thread.id, [])
     return thread
+  }
+
+  const updateThreadTitle = async (threadId: number, title: string) => {
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) return
+
+    for (const [path, node] of tree.value.entries()) {
+      const index = node.threadViews.findIndex(item => item.thread.id === threadId)
+      if (index === -1) continue
+
+      const existing = node.threadViews[index].thread
+      if (existing.title === normalizedTitle) return
+
+      const nextThreadViews = [...node.threadViews]
+      nextThreadViews[index] = {
+        ...nextThreadViews[index],
+        thread: {
+          ...existing,
+          title: normalizedTitle,
+        },
+      }
+      tree.value = new Map(tree.value).set(path, {
+        ...node,
+        threadViews: nextThreadViews,
+      })
+
+      if (selectedThread.value?.id === threadId) {
+        selectedThread.value = {
+          ...selectedThread.value,
+          title: normalizedTitle,
+        }
+      }
+
+      await workspaceApi.updateThreadTitle(threadId, normalizedTitle)
+      return
+    }
+
+    await workspaceApi.updateThreadTitle(threadId, normalizedTitle)
   }
 
   // Message operations (for stream updates)
@@ -482,6 +520,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     clearSelection,
     setActiveWorkspace,
     createThread,
+    updateThreadTitle,
     deleteThread,
     deleteWorkspace,
     // Message

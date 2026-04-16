@@ -2,8 +2,10 @@
   import { workspaceApi, type ThreadRecord, type WorkspaceRecord } from '@/api/workspace'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useLayoutStore } from '@/stores/layout'
+  import { useTerminalStore } from '@/stores/Terminal'
   import { useWorkspaceStore } from '@/stores/workspace'
   import { formatRelativeTime } from '@/utils/dateFormatter'
+  import { showPopoverAt } from '@/ui'
   import { onBeforeUnmount } from 'vue'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { open } from '@tauri-apps/plugin-dialog'
@@ -15,6 +17,7 @@
   const layoutStore = useLayoutStore()
   const workspaceStore = useWorkspaceStore()
   const aiChatStore = useAIChatStore()
+  const terminalStore = useTerminalStore()
 
   const { showSettings } = storeToRefs(layoutStore)
   const { selectedThread } = storeToRefs(workspaceStore)
@@ -175,15 +178,26 @@
     layoutStore.openSettings()
   }
 
-  const getThreadTitle = (thread: { title?: string | null; id: number }) => {
-    return thread.title || t('sidebar.new_thread')
+  const getThreadTitle = (thread: {
+    title?: string | null
+    id: number
+    threadType: string
+    workspacePath?: string
+  }) => {
+    if (thread.threadType === 'shell') {
+      const terminal = terminalStore.terminals.find(t => t.threadId === thread.id && t.kind === 'workspace')
+      if (terminal?.displayTitle) return terminal.displayTitle
+    }
+
+    if (thread.title) return thread.title
+
+    return thread.threadType === 'shell' ? t('sidebar.shell_session') : t('sidebar.agent_session')
   }
 
   const isThreadActive = (thread: ThreadRecord) => thread.id === currentThreadId.value
   const isThreadLoading = (thread: ThreadRecord) => aiChatStore.isThreadRunning(thread.id)
 
-  const handleNewSessionInWorkspace = async (event: MouseEvent, workspacePath: string) => {
-    event.stopPropagation()
+  const createNewSession = async (workspacePath: string, threadType: string) => {
     emit('update:showSkills', false)
     workspaceStore.setActiveWorkspace(workspacePath)
     // Expand the workspace folder
@@ -191,7 +205,24 @@
       expandedPaths.value.add(workspacePath)
       expandedPaths.value = new Set(expandedPaths.value)
     }
-    await workspaceStore.createThread(workspacePath)
+    // Set default title based on thread type
+    const defaultTitle = threadType === 'shell' ? t('sidebar.shell_session') : t('sidebar.agent_session')
+    await workspaceStore.createThread(workspacePath, defaultTitle, threadType)
+  }
+
+  const handleShowSessionMenu = async (event: MouseEvent, workspacePath: string) => {
+    event.stopPropagation()
+    const rect = (event.target as HTMLElement).getBoundingClientRect()
+    await showPopoverAt(rect.left, rect.bottom + 4, [
+      {
+        label: t('sidebar.new_agent_session'),
+        onClick: () => createNewSession(workspacePath, 'agent'),
+      },
+      {
+        label: t('sidebar.new_shell_session'),
+        onClick: () => createNewSession(workspacePath, 'shell'),
+      },
+    ])
   }
 
   const confirmingDeleteId = ref<number | null>(null)
@@ -249,7 +280,7 @@
 <template>
   <aside
     class="sidebar"
-    :class="{ 'sidebar--collapsed': !isVisible && !showSettings }"
+    :class="{ 'sidebar--collapsed': !isVisible && !showSettings, 'sidebar--dragging': isDragging }"
     :style="{ width: isVisible || showSettings ? `${width}px` : '0' }"
   >
     <div class="sidebar-inner" :style="{ width: `${width}px` }">
@@ -294,8 +325,9 @@
             stroke-linecap="round"
             stroke-linejoin="round"
           >
-            <path d="M12 5l0 14" />
-            <path d="M5 12l14 0" />
+            <path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9-9 9-9-1.8-9-9 1.8-9 9-9" />
+            <path d="M12 8v8" />
+            <path d="M8 12h8" />
           </svg>
           <span>{{ t('sidebar.new_thread') }}</span>
         </button>
@@ -309,7 +341,10 @@
             stroke-linecap="round"
             stroke-linejoin="round"
           >
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a2.5 2.5 0 0 1 0-5H20" />
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+            <path d="M8 7h8" />
+            <path d="M8 11h8" />
+            <path d="M15 15h1" />
           </svg>
           <span>{{ t('sidebar.skills') }}</span>
         </button>
@@ -387,10 +422,11 @@
                 <span class="workspace-name">{{ getWorkspaceName(workspace) }}</span>
                 <span v-if="getNode(workspace.path)?.isLoading" class="loading-indicator">...</span>
                 <span class="workspace-actions">
+                  <!-- New session button with native menu -->
                   <button
                     class="action-btn add-btn"
                     :title="t('chat.new_session')"
-                    @click="handleNewSessionInWorkspace($event, workspace.path)"
+                    @click="handleShowSessionMenu($event, workspace.path)"
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -463,6 +499,35 @@
                         </svg>
                       </span>
                       <span class="session-title">{{ getThreadTitle(thread) }}</span>
+                      <!-- Thread type icon -->
+                      <span class="session-type-icon" :class="thread.threadType">
+                        <!-- Agent: sparkle/AI icon -->
+                        <svg
+                          v-if="thread.threadType === 'agent'"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M8 1l1.5 3.5L13 6l-3.5 1.5L8 11l-1.5-3.5L3 6l3.5-1.5z" />
+                          <path d="M12 10l.5 1.5L14 12l-1.5.5L12 14l-.5-1.5L10 12l1.5-.5z" />
+                        </svg>
+                        <!-- Shell: terminal symbol -->
+                        <svg
+                          v-else
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M3 5l3 3-3 3" />
+                          <path d="M7 11h6" />
+                        </svg>
+                      </span>
                       <span class="session-trailing">
                         <span class="session-time">{{ formatRelativeTime(thread.updatedAt * 1000) }}</span>
                         <button
@@ -540,19 +605,18 @@
   .sidebar {
     display: flex;
     flex-direction: column;
-    background:
-      linear-gradient(
-        0deg,
-        color-mix(in srgb, var(--bg-200-solid) 40%, transparent),
-        color-mix(in srgb, var(--bg-200-solid) 40%, transparent)
-      ),
-      var(--sidebar-glass-bg);
+    background: var(--sidebar-glass-bg);
     transition:
       width 0.25s ease,
       background 0.25s ease;
     overflow: hidden;
     position: relative;
     flex-shrink: 0;
+  }
+
+  /* Disable transition during drag for responsive feel */
+  .sidebar--dragging {
+    transition: background 0.25s ease !important;
   }
 
   .sidebar--collapsed {
@@ -1044,6 +1108,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .session-type-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  .session-type-icon.agent {
+    color: var(--text-300);
+  }
+
+  .session-type-icon.shell {
+    color: var(--text-300);
+  }
+
+  .session-item.active .session-type-icon.agent {
+    color: var(--text-200);
+  }
+
+  .session-item.active .session-type-icon.shell {
+    color: var(--text-200);
   }
 
   .session-trailing {

@@ -436,7 +436,12 @@
     "delete_workspace_confirm": "确定要删除此工作区吗？",
     "delete_session": "删除线程",
     "delete_session_confirm": "确定要删除此线程吗？",
-    "just_now": "刚刚"
+    "just_now": "刚刚",
+    "new_agent_session": "新建 Agent 会话",
+    "new_shell_session": "新建 Shell 会话",
+    "session_type": "会话类型",
+    "agent_session": "Agent 会话",
+    "shell_session": "Shell 会话"
   },
   "skills_page": {
     "title": "技能",

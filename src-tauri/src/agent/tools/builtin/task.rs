@@ -113,6 +113,7 @@ impl RunnableTool for TaskTool {
                 workspace_path: &parent_thread.workspace_path,
                 title: &description,
                 display_name: None,
+                thread_type: "agent",
                 agent_type: &profile,
                 parent_thread_id: Some(context.thread_id),
                 spawned_by_tool_call_id: Some(&call_id),

@@ -1298,6 +1298,7 @@ async fn ensure_thread_rollout(
         thread_id,
         workspace_path: workspace_root.to_string_lossy().to_string(),
         title: title.clone(),
+        thread_type: "agent".to_string(),
         agent_type: agent_type.to_string(),
         parent_thread_id: None,
         spawned_by_tool_call_id: None,

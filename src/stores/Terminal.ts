@@ -1,7 +1,7 @@
 import type { ShellInfo } from '@/api'
 import { shellApi, storageApi, terminalApi, terminalContextApi, windowApi, workspaceApi } from '@/api'
+import { useWorkspaceStore } from '@/stores/workspace'
 import type { RuntimeTerminalState } from '@/types'
-import { getPathBasename } from '@/utils/path'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { defineStore } from 'pinia'
 import { computed, nextTick, ref } from 'vue'
@@ -25,6 +25,7 @@ interface ShellManagerState {
 export const useTerminalStore = defineStore('Terminal', () => {
   const terminals = ref<RuntimeTerminalState[]>([])
   const activeTerminalId = ref<number | null>(null)
+  const workspaceStore = useWorkspaceStore()
 
   const shellManager = ref<ShellManagerState>({
     availableShells: [],
@@ -338,42 +339,32 @@ export const useTerminalStore = defineStore('Terminal', () => {
     upsertRuntimeTerminal(terminal)
   }
 
-  const createTerminalPane = async (initialDirectory?: string, options?: { shellName?: string }): Promise<number> => {
+  const createTerminalPane = async (
+    initialDirectory?: string,
+    options?: { shellName?: string; threadId?: number | null }
+  ): Promise<number> => {
     const paneId =
       typeof options?.shellName === 'string'
         ? await terminalApi.createTerminalWithShell({
             shellName: options.shellName,
             rows: 24,
             cols: 80,
+            threadId: options.threadId ?? undefined,
           })
         : await terminalApi.createTerminal({
             rows: 24,
             cols: 80,
             cwd: initialDirectory,
+            threadId: options?.threadId ?? undefined,
           })
 
-    const terminal: RuntimeTerminalState = {
-      id: paneId,
-      cwd: initialDirectory || '~',
-      shell: 'shell',
-      displayTitle: getPathBasename(initialDirectory || '~'),
-      kind: 'workspace',
-      threadId: null,
-      agentTerminalId: null,
-      sourceLabel: null,
-      agentMode: null,
-      agentStatus: null,
+    const runtimeState = await storageApi.getTerminalState(paneId)
+    if (!runtimeState) {
+      throw new Error(`Failed to load runtime state for created terminal ${paneId}`)
     }
 
-    if (typeof options?.shellName === 'string') {
-      const shellInfo = shellManager.value.availableShells.find(s => s.name === options.shellName)
-      terminal.shell = shellInfo?.displayName ?? options.shellName
-    } else {
-      const defaultShell = await shellApi.getDefaultShell()
-      terminal.shell = defaultShell.displayName
-    }
+    upsertRuntimeTerminal(runtimeState)
 
-    upsertRuntimeTerminal(terminal)
     paneCreatedAtById.value.set(paneId, Date.now())
     paneOutputById.value.set(paneId, false)
     return paneId
@@ -542,6 +533,10 @@ export const useTerminalStore = defineStore('Terminal', () => {
           const index = terminals.value.findIndex(t => t.id === paneId)
           if (index !== -1) {
             terminals.value[index] = state
+          }
+
+          if (state.kind === 'workspace' && typeof state.threadId === 'number' && state.displayTitle.trim()) {
+            await workspaceStore.updateThreadTitle(state.threadId, state.displayTitle)
           }
         } catch (error) {
           console.warn(`Failed to refresh terminal state for pane ${paneId}:`, error)

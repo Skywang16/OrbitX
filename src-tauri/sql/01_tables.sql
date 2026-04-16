@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS threads (
     spawned_by_tool_call_id TEXT,
     title TEXT NOT NULL DEFAULT '',
     display_name TEXT,
+    thread_type TEXT NOT NULL DEFAULT 'agent' CHECK (thread_type IN ('agent', 'shell')),
     agent_type TEXT NOT NULL DEFAULT 'coder',
     model_id TEXT,
     provider_id TEXT,

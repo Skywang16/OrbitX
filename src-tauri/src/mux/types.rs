@@ -85,21 +85,32 @@ impl PaneInfo {
     }
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PaneRuntimeMetadata {
+    pub thread_id: Option<i64>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MuxSessionConfig {
     pub shell_config: MuxShellConfig,
+    #[serde(default)]
+    pub runtime_metadata: PaneRuntimeMetadata,
 }
 
 impl MuxSessionConfig {
     pub fn with_default_shell() -> Result<Self, String> {
         Ok(Self {
             shell_config: MuxShellConfig::with_default_shell()?,
+            runtime_metadata: PaneRuntimeMetadata::default(),
         })
     }
 
     pub fn with_shell(shell_config: MuxShellConfig) -> Self {
-        Self { shell_config }
+        Self {
+            shell_config,
+            runtime_metadata: PaneRuntimeMetadata::default(),
+        }
     }
 }
 

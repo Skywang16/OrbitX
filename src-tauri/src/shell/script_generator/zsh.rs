@@ -120,11 +120,22 @@ fi
             r#"
 # Window title update
 __orbitx_update_title() {
-    printf '\e]2;%s@%s:%s\e\\' "$USER" "$HOST" "${PWD/#$HOME/~}"
+    local title="${PWD/#$HOME/~}"
+    printf '\e]2;%s\e\\' "$title"
+}
+
+# Update title to command name when running
+__orbitx_title_preexec() {
+    local cmd="${1[(w)1]}"
+    printf '\e]2;%s\e\\' "$cmd"
 }
 
 if [[ -z "${precmd_functions[(r)__orbitx_update_title]}" ]]; then
     precmd_functions+=(__orbitx_update_title)
+fi
+
+if [[ -z "${preexec_functions[(r)__orbitx_title_preexec]}" ]]; then
+    preexec_functions+=(__orbitx_title_preexec)
 fi
 "#,
         );

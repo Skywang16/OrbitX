@@ -2,6 +2,7 @@
   import { windowApi } from '@/api'
   import AppSidebar from '@/components/AppSidebar/index.vue'
   import MainChatArea from '@/components/MainChatArea/index.vue'
+  import ShellArea from '@/components/ShellArea/index.vue'
   import TerminalPanel from '@/components/TerminalPanel/index.vue'
   import { useLayoutStore } from '@/stores/layout'
   import { useWindowStore } from '@/stores/Window'
@@ -18,6 +19,7 @@
   const layoutStore = useLayoutStore()
   const windowStore = useWindowStore()
   const { showSettings, terminalPanelVisible: isTerminalVisible } = storeToRefs(layoutStore)
+  const { selectedThread } = storeToRefs(workspaceStore)
 
   // Window pin state
   const isAlwaysOnTop = computed(() => windowStore.alwaysOnTop)
@@ -167,24 +169,32 @@
 
           <!-- Main App Content -->
           <template v-else>
-            <div class="chat-area">
-              <MainChatArea :sidebar-collapsed="!layoutStore.sidebarVisible" />
-            </div>
+            <!-- Agent Mode: Show chat interface -->
+            <template v-if="!selectedThread || selectedThread.threadType === 'agent'">
+              <div class="chat-area">
+                <MainChatArea :sidebar-collapsed="!layoutStore.sidebarVisible" />
+              </div>
 
-            <div
-              v-if="isTerminalVisible"
-              class="terminal-divider"
-              :class="{ active: isDraggingDivider }"
-              @mousedown="startDividerDrag"
-            />
+              <div
+                v-if="isTerminalVisible"
+                class="terminal-divider"
+                :class="{ active: isDraggingDivider }"
+                @mousedown="startDividerDrag"
+              />
 
-            <div
-              v-if="isTerminalVisible"
-              class="terminal-area"
-              :style="{ height: `${layoutStore.terminalPanelHeight}px` }"
-            >
-              <TerminalPanel />
-            </div>
+              <div
+                v-if="isTerminalVisible"
+                class="terminal-area"
+                :style="{ height: `${layoutStore.terminalPanelHeight}px` }"
+              >
+                <TerminalPanel />
+              </div>
+            </template>
+
+            <!-- Shell Mode: Show standalone terminal -->
+            <template v-else-if="selectedThread.threadType === 'shell'">
+              <ShellArea :thread-id="selectedThread.id" :workspace-path="selectedThread.workspacePath" />
+            </template>
           </template>
         </div>
       </main>
@@ -281,6 +291,7 @@
     min-width: 0;
     min-height: 0;
     background: var(--sidebar-glass-bg);
+    padding: 4px 4px 4px 0;
   }
 
   .content-area {

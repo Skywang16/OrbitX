@@ -154,6 +154,7 @@
     "messages_failed": "获取消息列表失败",
     "active_thread_failed": "获取活跃线程失败",
     "create_thread_failed": "创建线程失败",
+    "update_thread_failed": "更新线程失败",
     "set_active_thread_failed": "设置活跃线程失败",
     "clear_active_thread_failed": "清除活跃线程失败",
     "delete_thread_failed": "删除线程失败",
