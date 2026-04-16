@@ -47,7 +47,7 @@ impl CheckpointService {
     /// Create an empty checkpoint; actual file snapshots are captured before modifications occur
     pub async fn create_empty(
         &self,
-        session_id: i64,
+        thread_id: i64,
         message_id: i64,
         workspace_path: &Path,
     ) -> CheckpointResult<Checkpoint> {
@@ -56,7 +56,7 @@ impl CheckpointService {
 
         let parent = self
             .storage
-            .find_latest_by_session(session_id, &workspace_key)
+            .find_latest_by_thread(thread_id, &workspace_key)
             .await?;
         let parent_id = parent.as_ref().map(|cp| cp.id);
 
@@ -64,7 +64,7 @@ impl CheckpointService {
             .storage
             .insert(&NewCheckpoint {
                 workspace_path: workspace_key.clone(),
-                session_id,
+                thread_id,
                 message_id,
                 parent_id,
             })
@@ -151,14 +151,14 @@ impl CheckpointService {
         self.storage.find_by_message_id(message_id).await
     }
 
-    /// Get checkpoint list for session
-    pub async fn list_by_session(
+    /// Get checkpoint list for thread
+    pub async fn list_by_thread(
         &self,
-        session_id: i64,
+        thread_id: i64,
         workspace_path: &str,
     ) -> CheckpointResult<Vec<CheckpointSummary>> {
         self.storage
-            .list_summaries_by_session(session_id, workspace_path)
+            .list_summaries_by_thread(thread_id, workspace_path)
             .await
     }
 
@@ -311,7 +311,7 @@ impl CheckpointService {
         let mut chain = Vec::new();
         let mut current = match self
             .storage
-            .find_latest_by_session(target.session_id, &target.workspace_path)
+            .find_latest_by_thread(target.thread_id, &target.workspace_path)
             .await?
         {
             Some(cp) => cp,

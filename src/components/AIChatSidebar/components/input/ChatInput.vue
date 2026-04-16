@@ -8,7 +8,7 @@
   import { useProjectRules } from '@/composables/useProjectRules'
   import { useTerminalSelection } from '@/composables/useTerminalSelection'
   import { useTerminalStore } from '@/stores/Terminal'
-  import { useWorkspaceStore } from '@/stores/workspace'
+  import { useLayoutStore } from '@/stores/layout'
   import { createSlashCommands, SLASH_COMMAND_ICONS, type SlashCommand } from '@/types/slashCommand'
   import { createMessage } from '@/ui/composables/message-api'
   import { getImageFromClipboard, processImageFile, validateImageFile } from '@/utils/imageUtils'
@@ -79,10 +79,10 @@
   const nodeVersion = useNodeVersion()
   const projectRules = useProjectRules()
   const aiChatStore = useAIChatStore()
-
   const terminalStore = useTerminalStore()
-  const workspaceStore = useWorkspaceStore()
-  const workspacePath = computed(() => workspaceStore.currentWorkspacePath ?? null)
+  const layoutStore = useLayoutStore()
+
+  const workspacePath = computed(() => aiChatStore.currentWorkspacePath ?? null)
 
   const homePath = ref<string>('')
 
@@ -311,15 +311,14 @@
   }
 
   watch(
-    () => terminalSelection.currentTerminalTab.value,
-    async tab => {
-      if (!tab?.cwd || tab.cwd === '~') {
+    workspacePath,
+    async path => {
+      if (!path) {
         nodeVersion.state.value = { isNodeProject: false, currentVersion: null, manager: null }
         projectRules.state.value = { hasRulesFile: false, selectedRulesFile: null }
         return
       }
-
-      await Promise.all([nodeVersion.detect(tab.cwd, tab.terminalId), projectRules.detect(tab.cwd)])
+      await Promise.all([nodeVersion.detect(path), projectRules.detect(path)])
     },
     { immediate: true }
   )
@@ -344,12 +343,19 @@
   const showSlashCommandMenu = ref(false)
 
   const handleNodeVersionSelect = async (version: string) => {
-    const terminalId = terminalSelection.currentTerminalTab.value?.terminalId
     const manager = nodeVersion.state.value.manager
-
-    if (!terminalId || !manager) return
+    if (!manager) return
 
     const command = await nodeApi.getSwitchCommand(manager, version)
+
+    let terminalId = terminalSelection.currentTerminalTab.value?.terminalId
+    if (!terminalId) {
+      // No terminal open — create one in the workspace directory and show it
+      layoutStore.openTerminalPanel()
+      terminalId = await terminalStore.createTerminalPane(workspacePath.value ?? undefined)
+      await terminalStore.setActiveTerminal(terminalId)
+    }
+
     await terminalStore.writeToTerminal(terminalId, command)
     showNodeVersionModal.value = false
   }
@@ -565,7 +571,7 @@
     </div>
 
     <MessageQueue
-      :queue="aiChatStore.currentSessionQueue"
+      :queue="aiChatStore.currentThreadQueue"
       @remove="aiChatStore.removeQueuedMessage"
       @update="aiChatStore.updateQueuedMessage"
       @send-now="aiChatStore.sendQueuedMessageNow"
@@ -674,10 +680,9 @@
 
     <InputPopover :visible="showNodeVersionModal" @update:visible="showNodeVersionModal = $event">
       <NodeVersionPicker
-        v-if="nodeVersion.state.value.manager && nodeVersion.state.value.currentVersion"
-        :current-version="nodeVersion.state.value.currentVersion"
-        :manager="nodeVersion.state.value.manager"
-        :cwd="terminalSelection.currentTerminalTab.value?.cwd"
+        :current-version="nodeVersion.state.value.currentVersion ?? ''"
+        :manager="nodeVersion.state.value.manager ?? ''"
+        :cwd="workspacePath ?? undefined"
         @select="handleNodeVersionSelect"
         @close="showNodeVersionModal = false"
       />
@@ -686,7 +691,7 @@
     <InputPopover :visible="showProjectRulesModal" @update:visible="showProjectRulesModal = $event">
       <ProjectRulesPicker
         :current-rules="projectRules.state.value.selectedRulesFile"
-        :cwd="terminalSelection.currentTerminalTab.value?.cwd"
+        :cwd="workspacePath ?? undefined"
         @select="handleProjectRulesSelect"
         @close="showProjectRulesModal = false"
       />

@@ -1,17 +1,19 @@
 <script setup lang="ts">
   import type { Block, Message } from '@/types'
   import { renderMarkdown } from '@/utils/markdown'
+  import { useWorkspaceStore } from '@/stores/workspace'
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useAIChatStore } from '../../store'
   import AgentSwitchBlock from './blocks/AgentSwitchBlock.vue'
   import ExploredGroup from './blocks/ExploredGroup.vue'
-  import SubtaskGroup from './blocks/SubtaskGroup.vue'
-  import SubtaskBlock from './blocks/SubtaskBlock.vue'
+  import ResearchGroup from './blocks/ResearchGroup.vue'
+  import SubagentGroup from './blocks/SubagentGroup.vue'
   import ThinkingBlock from './blocks/ThinkingBlock.vue'
   import ToolBlock from './blocks/ToolBlock.vue'
   const { t } = useI18n()
   const aiChatStore = useAIChatStore()
+  const workspaceStore = useWorkspaceStore()
 
   interface Props {
     message: Message
@@ -31,73 +33,55 @@
   type RenderItem =
     | { kind: 'block'; block: Block; key: string }
     | { kind: 'explored-group'; blocks: Extract<Block, { type: 'tool' }>[]; key: string }
-    | { kind: 'subtask-group'; blocks: Extract<Block, { type: 'subtask' }>[]; key: string }
+    | { kind: 'research-group'; blocks: Extract<Block, { type: 'tool' }>[]; key: string }
 
-  const isExplorationTool = (block: Block): block is Extract<Block, { type: 'tool' }> => {
-    return (
-      block.type === 'tool' &&
-      ['grep', 'semantic_search', 'read_file', 'list_files', 'glob', 'read_terminal', 'web_search', 'web_fetch'].includes(
-        block.name
-      )
-    )
-  }
+  const isExplorationTool = (b: Block): b is Extract<Block, { type: 'tool' }> =>
+    b.type === 'tool' &&
+    ['grep', 'semantic_search', 'read_file', 'list_files', 'glob', 'read_terminal'].includes(b.name)
+
+  const isResearchTool = (b: Block): b is Extract<Block, { type: 'tool' }> =>
+    b.type === 'tool' && ['web_search', 'web_fetch'].includes(b.name)
 
   const renderItems = computed<RenderItem[]>(() => {
     const items: RenderItem[] = []
-    let pendingExplorationTools: Extract<Block, { type: 'tool' }>[] = []
-    let pendingSubtasks: Extract<Block, { type: 'subtask' }>[] = []
+    let explore: Extract<Block, { type: 'tool' }>[] = []
+    let research: Extract<Block, { type: 'tool' }>[] = []
 
-    const flushExplorationTools = () => {
-      if (pendingExplorationTools.length === 0) return
-      items.push({
-        kind: 'explored-group',
-        blocks: pendingExplorationTools,
-        key: pendingExplorationTools.map(block => block.id).join('-'),
-      })
-      pendingExplorationTools = []
+    const flushExplore = () => {
+      if (!explore.length) return
+      items.push({ kind: 'explored-group', blocks: explore, key: explore.map(b => b.id).join('-') })
+      explore = []
+    }
+    const flushResearch = () => {
+      if (!research.length) return
+      items.push({ kind: 'research-group', blocks: research, key: research.map(b => b.id).join('-') })
+      research = []
     }
 
-    const flushSubtasks = () => {
-      if (pendingSubtasks.length === 0) return
-      if (pendingSubtasks.length === 1) {
-        const block = pendingSubtasks[0]
-        items.push({ kind: 'block', block, key: block.id })
-      } else {
-        items.push({
-          kind: 'subtask-group',
-          blocks: pendingSubtasks,
-          key: pendingSubtasks.map(block => block.id).join('-'),
-        })
-      }
-      pendingSubtasks = []
-    }
-
-    for (const [index, block] of blocks.value.entries()) {
+    blocks.value.forEach((block, index) => {
       if (isExplorationTool(block)) {
-        flushSubtasks()
-        pendingExplorationTools.push(block)
-        continue
+        flushResearch()
+        explore.push(block)
+        return
       }
-
-      if (block.type === 'subtask') {
-        flushExplorationTools()
-        pendingSubtasks.push(block)
-        continue
+      if (isResearchTool(block)) {
+        flushExplore()
+        research.push(block)
+        return
       }
-
-      flushExplorationTools()
-      flushSubtasks()
+      flushExplore()
+      flushResearch()
       items.push({
         kind: 'block',
         block,
         key: ('id' in block && block.id) || `${props.message.id}-${block.type}-${index}`,
       })
-    }
-
-    flushExplorationTools()
-    flushSubtasks()
+    })
+    flushExplore()
+    flushResearch()
     return items
   })
+  const messageSubagents = computed(() => aiChatStore.getCurrentThreadSubagentsForMessage(props.message.id))
 
   const STREAMING_HINTS = [
     'Thinking...',
@@ -120,12 +104,36 @@
 
   const currentHint = computed(() => STREAMING_HINTS[hintIndex.value % STREAMING_HINTS.length])
   const isStreaming = computed(() => props.message.status === 'streaming')
+  const isSubagentThread = computed(() => workspaceStore.selectedThread?.parentThreadId != null)
+
+  // Find the index of the last text block for streaming fade-in
+  const lastTextBlockIndex = computed(() => {
+    if (!isStreaming.value) return -1
+    for (let i = renderItems.value.length - 1; i >= 0; i--) {
+      const item = renderItems.value[i]
+      if (item.kind === 'block' && item.block.type === 'text') return i
+    }
+    return -1
+  })
+  const hasActiveSubagents = computed(() =>
+    messageSubagents.value.some(subagent => subagent.status === 'running' || subagent.status === 'pending')
+  )
+  const shouldShowStreamingHint = computed(() => {
+    return (
+      isStreaming.value &&
+      aiChatStore.isCurrentThreadSending &&
+      !aiChatStore.retryStatus &&
+      !props.message.isSummary &&
+      !isSubagentThread.value &&
+      !hasActiveSubagents.value
+    )
+  })
 
   const resetHintDelay = () => {
     showHint.value = false
     hintIndex.value = Math.floor(Math.random() * STREAMING_HINTS.length)
     if (delayTimer) clearTimeout(delayTimer)
-    if (isStreaming.value) {
+    if (shouldShowStreamingHint.value) {
       delayTimer = setTimeout(() => {
         showHint.value = true
       }, HINT_DELAY_MS)
@@ -133,8 +141,8 @@
   }
 
   watch(() => blocks.value.length, resetHintDelay)
-  watch(isStreaming, streaming => {
-    if (streaming) {
+  watch(shouldShowStreamingHint, enabled => {
+    if (enabled) {
       resetHintDelay()
     } else {
       showHint.value = false
@@ -196,30 +204,25 @@
       <div v-else class="summary-divider" aria-hidden="true"></div>
     </div>
 
-    <template v-else-if="blocks.length > 0">
-      <div v-for="item in renderItems" :key="item.key" :class="{ 'block-fade-in': isStreaming }">
+    <template v-else-if="blocks.length > 0 || messageSubagents.length > 0">
+      <div
+        v-for="(item, idx) in renderItems"
+        :key="item.key"
+        class="block-item"
+        :class="{ 'block-fade-in': isStreaming }"
+        :style="{ '--i': idx }"
+      >
         <ExploredGroup v-if="item.kind === 'explored-group'" :blocks="item.blocks" />
-
-        <SubtaskGroup v-else-if="item.kind === 'subtask-group'" :blocks="item.blocks" />
-
+        <ResearchGroup v-else-if="item.kind === 'research-group'" :blocks="item.blocks" />
         <ThinkingBlock
           v-else-if="item.block.type === 'thinking'"
           :block="item.block"
           :disable-expand="disableToolExpand"
         />
 
-        <ToolBlock
-          v-else-if="item.block.type === 'tool' && item.block.name !== 'task'"
-          :block="item.block"
-          :disable-expand="disableToolExpand"
-        />
-
-        <!-- `task` is orchestration-only; don't render it as a normal tool block -->
-        <template v-else-if="item.block.type === 'tool' && item.block.name === 'task'"></template>
+        <ToolBlock v-else-if="item.block.type === 'tool'" :block="item.block" :disable-expand="disableToolExpand" />
 
         <AgentSwitchBlock v-else-if="item.block.type === 'agent_switch'" :block="item.block" />
-
-        <SubtaskBlock v-else-if="item.block.type === 'subtask'" :block="item.block" />
 
         <div v-else-if="item.block.type === 'user_text'" class="ai-message-text step-block" @click="handleMessageClick">
           <div v-html="renderMarkdown(item.block.content)"></div>
@@ -233,7 +236,12 @@
           />
         </div>
 
-        <div v-else-if="item.block.type === 'text'" class="ai-message-text step-block" @click="handleMessageClick">
+        <div
+          v-else-if="item.block.type === 'text'"
+          class="ai-message-text step-block"
+          :class="{ 'text-streaming': idx === lastTextBlockIndex }"
+          @click="handleMessageClick"
+        >
           <div v-html="renderMarkdown(item.block.content)"></div>
         </div>
 
@@ -244,13 +252,15 @@
         <div v-else class="unknown-step step-block">
           <div class="unknown-header">
             <span class="unknown-icon">❓</span>
-            <span class="unknown-label">Unknown block type: {{ item.block.type }}</span>
+            <span class="unknown-label">Unknown block</span>
           </div>
         </div>
       </div>
+
+      <SubagentGroup v-if="messageSubagents.length > 0" :subagents="messageSubagents" />
     </template>
 
-    <div v-if="isStreaming && showHint && !aiChatStore.retryStatus && !message.isSummary" class="streaming-hint">
+    <div v-if="shouldShowStreamingHint && showHint" class="streaming-hint">
       <span class="streaming-hint-text">{{ currentHint }}</span>
     </div>
 
@@ -299,14 +309,19 @@
     color: var(--text-500);
   }
 
+  .block-item + .block-item {
+    margin-top: 6px;
+  }
+
   .block-fade-in {
-    animation: block-enter 0.3s ease-out;
+    animation: block-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 40ms);
   }
 
   @keyframes block-enter {
     from {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(6px);
     }
     to {
       opacity: 1;
@@ -395,6 +410,48 @@
     word-wrap: break-word;
     word-break: break-word;
     overflow-wrap: break-word;
+  }
+
+  /* Streaming fade-in: each new paragraph/block animates in as it appears */
+  .text-streaming :deep(p:last-child),
+  .text-streaming :deep(li:last-child),
+  .text-streaming :deep(h1:last-child),
+  .text-streaming :deep(h2:last-child),
+  .text-streaming :deep(h3:last-child),
+  .text-streaming :deep(pre:last-child),
+  .text-streaming :deep(blockquote:last-child) {
+    animation: stream-in 0.35s ease both;
+  }
+
+  @keyframes stream-in {
+    from {
+      opacity: 0.2;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Blinking cursor at the end of streaming text */
+  .text-streaming > div::after {
+    content: '▋';
+    display: inline;
+    font-size: 0.85em;
+    color: var(--color-primary);
+    opacity: 0.8;
+    animation: blink-cursor 0.9s step-end infinite;
+    margin-left: 1px;
+    vertical-align: baseline;
+  }
+
+  @keyframes blink-cursor {
+    0%,
+    100% {
+      opacity: 0.8;
+    }
+    50% {
+      opacity: 0;
+    }
   }
 
   .ai-message-text :deep(p) {

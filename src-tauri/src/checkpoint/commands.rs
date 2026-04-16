@@ -24,11 +24,11 @@ impl CheckpointState {
     }
 }
 
-/// Get checkpoint list for a session
+/// Get checkpoint list for a thread
 #[tauri::command]
 pub async fn checkpoint_list(
     state: State<'_, CheckpointState>,
-    session_id: i64,
+    thread_id: i64,
     workspace_path: String,
 ) -> TauriApiResult<Vec<CheckpointSummary>> {
     if workspace_path.trim().is_empty() {
@@ -37,7 +37,7 @@ pub async fn checkpoint_list(
 
     match state
         .service
-        .list_by_session(session_id, &workspace_path)
+        .list_by_thread(thread_id, &workspace_path)
         .await
     {
         Ok(checkpoints) => Ok(api_success!(checkpoints)),
@@ -81,15 +81,15 @@ pub async fn checkpoint_rollback(
     // Clean up message history (using message_id stored in checkpoint)
     let workspace_service = WorkspaceService::new(Arc::clone(&database));
     if let Err(e) = workspace_service
-        .trim_session_messages(
+        .trim_thread_messages(
             &checkpoint.workspace_path,
-            checkpoint.session_id,
+            checkpoint.thread_id,
             checkpoint.message_id,
         )
         .await
     {
-        tracing::error!("Failed to trim session messages: {}", e);
-        return Ok(api_error!("workspace.trim_session_failed"));
+        tracing::error!("Failed to trim thread messages: {}", e);
+        return Ok(api_error!("workspace.trim_thread_failed"));
     }
 
     Ok(api_success!(result))

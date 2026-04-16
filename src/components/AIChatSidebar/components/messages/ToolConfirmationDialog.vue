@@ -5,9 +5,6 @@
 
   const store = useToolConfirmationDialogStore()
   const submitError = ref<string | null>(null)
-  const formatErrorMessage = (error: unknown): string => {
-    return error instanceof Error ? error.message : String(error)
-  }
 
   watch(
     () => store.visible,
@@ -24,8 +21,7 @@
     try {
       await agentApi.confirmTool(store.state.requestId, decision)
     } catch (error) {
-      console.error('[ToolConfirmationDialog] confirm failed:', error)
-      submitError.value = formatErrorMessage(error)
+      submitError.value = error instanceof Error ? error.message : String(error)
       return
     } finally {
       store.submitting = false
@@ -34,63 +30,56 @@
     store.close()
   }
 
-  const handleAllow = async () => {
-    await submit(store.remember ? 'allow_always' : 'allow_once')
-  }
-
-  const handleDeny = async () => {
-    await submit('deny')
-  }
-
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      handleDeny()
-    }
+    if (event.key === 'Escape') submit('deny')
   }
 
-  onMounted(() => {
-    document.addEventListener('keydown', handleKeydown)
-  })
-
-  onBeforeUnmount(() => {
-    document.removeEventListener('keydown', handleKeydown)
-  })
+  onMounted(() => document.addEventListener('keydown', handleKeydown))
+  onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
   <transition name="drawer">
     <div v-if="store.visible && store.state" class="tool-confirm-drawer">
-      <div class="left">
-        <div class="icon" :title="store.state.toolName" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M14.7 6.3a1 1 0 0 0-1.4 0l-7 7a1 1 0 0 0 0 1.4l3 3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.4l-3-3Z"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linejoin="round"
-            />
-            <path
-              d="M7 17l-1 3 3-1"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+      <div class="inner">
+        <!-- Left: icon + text -->
+        <div class="left">
+          <div class="icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M14.7 6.3a1 1 0 0 0-1.4 0l-7 7a1 1 0 0 0 0 1.4l3 3a1 1 0 0 0 1.4 0l7-7a1 1 0 0 0 0-1.4l-3-3Z"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M7 17l-1 3 3-1"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="info">
+            <span class="label">{{ store.state.toolName }}</span>
+            <span class="summary" :title="store.state.summary">{{ store.state.summary }}</span>
+          </div>
         </div>
-        <div class="info">
-          <div class="title">Action requires confirmation</div>
-          <div class="summary" :title="store.state.summary">{{ store.state.summary }}</div>
-        </div>
-      </div>
 
-      <div class="right">
-        <label class="remember">
-          <input v-model="store.remember" type="checkbox" :disabled="store.submitting" />
-          <span>Remember</span>
-        </label>
-        <button class="btn btn-ghost" @click="handleDeny" :disabled="store.submitting">Deny</button>
-        <button class="btn btn-primary" @click="handleAllow" :disabled="store.submitting">Allow</button>
+        <!-- Right: action buttons -->
+        <div class="actions">
+          <button class="btn btn-deny" @click="submit('deny')" :disabled="store.submitting">Deny</button>
+          <button class="btn btn-once" @click="submit('allow_once')" :disabled="store.submitting">Allow Once</button>
+          <button
+            class="btn btn-always"
+            @click="submit('allow_always')"
+            :disabled="store.submitting"
+            title="Save to .orbitx/settings.local.json"
+          >
+            Allow in Workspace
+          </button>
+        </div>
       </div>
 
       <div v-if="submitError" class="error" :title="submitError">{{ submitError }}</div>
@@ -99,117 +88,146 @@
 </template>
 
 <style scoped>
+  /* ── Wrapper: same width & centering as ChatInput ── */
   .tool-confirm-drawer {
-    margin: 0 12px 8px;
-    padding: 8px 10px;
+    width: 75%;
+    margin: 0 auto 8px;
+    padding: 8px 12px;
     border-radius: var(--border-radius-xl);
     border: 1px solid var(--border-200);
     background: var(--bg-50);
     box-shadow: var(--shadow-lg);
+  }
+
+  .inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    min-height: 32px;
   }
 
+  /* ── Left ── */
   .left {
     min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1;
   }
 
   .icon {
-    width: 28px;
-    height: 28px;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: var(--border-radius-lg);
     border: 1px solid var(--border-200);
     background: var(--bg-100);
-    color: var(--text-200);
-    flex: 0 0 auto;
+    color: var(--text-300);
   }
 
   .info {
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: baseline;
+    gap: 6px;
+    overflow: hidden;
   }
 
-  .title {
+  .label {
     font-size: 12px;
+    font-weight: 500;
     color: var(--text-100);
-    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .summary {
     font-size: 12px;
-    color: var(--text-200);
-    max-width: 720px;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.3;
-  }
-
-  .remember {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
     color: var(--text-300);
-    font-size: 12px;
-    user-select: none;
-    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .right {
+  /* ── Actions ── */
+  .actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex: 0 0 auto;
   }
 
-  .error {
-    font-size: 12px;
-    color: var(--color-error);
-    background: color-mix(in srgb, var(--color-error) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
-    border-radius: var(--border-radius-xl);
-    padding: 6px 10px;
-    max-width: 520px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .btn {
-    padding: 7px 10px;
-    border-radius: var(--border-radius-xl);
+    padding: 5px 10px;
+    border-radius: var(--border-radius-lg);
     font-size: 12px;
     border: 1px solid var(--border-200);
     cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease,
+      opacity 0.12s ease;
   }
 
   .btn:disabled {
-    opacity: 0.65;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .btn-ghost {
+  /* Deny */
+  .btn-deny {
     background: transparent;
-    color: var(--text-200);
+    color: var(--text-300);
   }
 
-  .btn-primary {
+  .btn-deny:hover:not(:disabled) {
+    background: var(--bg-200);
+    color: var(--text-100);
+  }
+
+  /* Allow Once */
+  .btn-once {
+    background: var(--bg-100);
+    color: var(--text-200);
+    border-color: var(--border-300);
+  }
+
+  .btn-once:hover:not(:disabled) {
+    background: var(--bg-200);
+    color: var(--text-100);
+  }
+
+  /* Allow in Workspace — primary */
+  .btn-always {
     background: var(--text-100);
     border-color: var(--text-100);
     color: var(--bg-100);
   }
 
+  .btn-always:hover:not(:disabled) {
+    opacity: 0.85;
+  }
+
+  /* ── Error ── */
+  .error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+    border-radius: var(--border-radius-lg);
+    padding: 5px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Slide-up animation ── */
   .drawer-enter-active,
   .drawer-leave-active {
     transition:

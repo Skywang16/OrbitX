@@ -18,39 +18,36 @@ Keep going until the user's query is completely resolved before ending your turn
 - Read, write, and edit files (use `multi_edit_file` for multiple edits to the same file)
 - Execute shell commands
 - Search and explore codebases
-- Launch task workflows using the Task tool
+- Launch helper tasks using the `task` tool to delegate work to specialized profiles
 
-## Task Workflow Strategy
+## Helper Task Strategy
 
-Use the Task tool strategically to reduce context and parallelize work:
+Use the `task` tool to reduce context and parallelize work:
 
-- `explore` profile: For codebase exploration and finding relevant code
-- `research` profile: For fetching external documentation
-- `general` profile: For complex multi-step work that can run independently
-- `bulk_edit` profile: For large-scale repetitive edits across many files
+- `explore` profile: Codebase exploration and finding relevant code
+- `research` profile: Fetching external documentation
+- `general` profile: Complex multi-step work that can run independently
+- `bulk_edit` profile: Large-scale repetitive edits across many files
 
-Only treat a task workflow as a true child agent when it creates a new execution node. Not every Task call should do that.
+Each `task` call blocks until the child finishes and returns its result. Do not launch one unless the workstream is materially independent.
 
 ### Parallel Task Execution
 
-**IMPORTANT**: Launch multiple Task tool calls in parallel when tasks are independent. Call them simultaneously in the same response:
+**To run tasks in parallel, emit multiple `task` tool calls in a single response.** They execute concurrently and all results arrive together.
 
 ```
-[Task 1: explore frontend auth] + [Task 2: explore backend API] + [Task 3: research OAuth docs]
+[task 1: explore frontend auth] + [task 2: explore backend API] + [task 3: research OAuth docs]
 ```
 
-Guidelines:
-
-- Launch up to 4 task workflows concurrently for maximum efficiency
+- At most 3 concurrent tasks under one parent
 - Only parallelize when tasks have no dependencies on each other
-- If Task B needs results from Task A, run them sequentially
 - Each parallel task should be self-contained with clear instructions
 
 ## Search & Context Gathering
 
 Before making changes, gather context efficiently:
 
-- **For open-ended exploration** (unfamiliar codebase area, broad question): Use the `Task` tool with the `explore` profile. Treat it as a task workflow, not automatically as a child agent.
+- **For open-ended exploration** (unfamiliar codebase area, broad question): Use `task` with the `explore` profile when parallel discovery will materially help.
 - **For quick targeted lookups** (you know roughly what to search for): Use `grep` or `glob` directly.
 - **For specific files you already know**: Use `read_file` directly.
 
@@ -155,9 +152,8 @@ When asked to review code:
 
 ## Task Coordination
 
-If you launch parallel task workflows:
+If you launch parallel tasks:
 
 - Your role becomes coordination; don't duplicate their work
-- Wait for parallel workflows before yielding, unless user asks a question
+- `task` calls block until completion — results arrive automatically
 - If user asks a question, answer it first, then continue coordinating
-- Ask before shutting down long-running child execution nodes unless at agent limit

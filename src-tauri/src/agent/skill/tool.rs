@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     RunnableTool, ToolDescriptionContext, ToolMetadata, ToolResult, ToolResultContent,
@@ -94,7 +94,7 @@ impl RunnableTool for SkillTool {
         }
     }
 
-    async fn run(&self, _context: &TaskContext, args: Value) -> ToolExecutorResult<ToolResult> {
+    async fn run(&self, _context: &AgentRunContext, args: Value) -> ToolExecutorResult<ToolResult> {
         let start_time = std::time::Instant::now();
 
         // Parse parameters
@@ -193,10 +193,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let workspace = temp_dir.path();
 
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
 
-        let skill_dir = opencodex_skills.join("test-skill");
+        let skill_dir = orbitx_skills.join("test-skill");
         create_test_skill(&skill_dir, "test-skill").unwrap();
 
         let manager = Arc::new(SkillManager::new());

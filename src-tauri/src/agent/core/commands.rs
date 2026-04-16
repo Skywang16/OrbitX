@@ -1,14 +1,14 @@
 /*!
- * TaskExecutor Tauri command interface
+ * AgentRunExecutor Tauri command interface
  */
 
 use crate::agent::agents::AgentConfigLoader;
 use crate::agent::command_system::{CommandConfigLoader, CommandRenderResult, CommandSummary};
-use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor, TaskSummary};
+use crate::agent::core::executor::{AgentRunExecutor, AgentRunSummary, ExecuteRunParams};
 use crate::agent::persistence::repositories::CreateMessageParams;
 use crate::agent::skill::SkillSummary;
 use crate::agent::tools::registry::ToolConfirmationDecision;
-use crate::agent::types::{AgentSwitchBlock, Block, MessageRole, MessageStatus, TaskEvent};
+use crate::agent::types::{AgentRunEvent, AgentSwitchBlock, Block, MessageRole, MessageStatus};
 use crate::agent::workspace_changes::{ChangeKind, PendingChange, WorkspaceChangeJournal};
 use crate::utils::{EmptyData, TauriApiResult};
 use crate::{api_error, api_success};
@@ -16,24 +16,24 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
 
-/// TaskExecutor state management
-pub struct TaskExecutorState {
-    pub executor: Arc<TaskExecutor>,
+/// Agent run executor state management
+pub struct AgentRunExecutorState {
+    pub executor: Arc<AgentRunExecutor>,
 }
 
-impl TaskExecutorState {
-    pub fn new(executor: Arc<TaskExecutor>) -> Self {
+impl AgentRunExecutorState {
+    pub fn new(executor: Arc<AgentRunExecutor>) -> Self {
         Self { executor }
     }
 }
 
-/// Execute Agent task
+/// Execute agent run
 #[tauri::command]
-pub async fn agent_execute_task(
-    state: State<'_, TaskExecutorState>,
+pub async fn agent_execute_run(
+    state: State<'_, AgentRunExecutorState>,
     changes: State<'_, Arc<WorkspaceChangeJournal>>,
-    params: ExecuteTaskParams,
-    channel: Channel<TaskEvent>,
+    params: ExecuteRunParams,
+    channel: Channel<AgentRunEvent>,
 ) -> TauriApiResult<EmptyData> {
     let mut params = params;
 
@@ -57,12 +57,12 @@ pub async fn agent_execute_task(
         }
     }
 
-    match state.executor.execute_task(params, channel).await {
+    match state.executor.execute_run(params, channel).await {
         Ok(_context) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("❌ Task execution failed: {}", e);
+            tracing::error!("❌ Agent run execution failed: {}", e);
             match e {
-                crate::agent::error::TaskExecutorError::TooManyActiveTasksGlobal { .. } => {
+                crate::agent::error::AgentRunError::TooManyActiveTasksGlobal { .. } => {
                     Ok(api_error!("agent.too_many_active_tasks_global"))
                 }
                 _ => Ok(api_error!("agent.execute_failed")),
@@ -169,17 +169,17 @@ fn format_age(age_ms: u64) -> String {
     format!("{days}d")
 }
 
-/// Cancel task
+/// Cancel agent run
 #[tauri::command]
-pub async fn agent_cancel_task(
-    state: State<'_, TaskExecutorState>,
-    task_id: String,
+pub async fn agent_cancel_run(
+    state: State<'_, AgentRunExecutorState>,
+    run_id: String,
     reason: Option<String>,
 ) -> TauriApiResult<EmptyData> {
-    match state.executor.cancel_task(&task_id, reason).await {
+    match state.executor.cancel_run(&run_id, reason).await {
         Ok(_) => Ok(api_success!()),
         Err(e) => {
-            tracing::error!("❌ Cancel task failed: {}", e);
+            tracing::error!("❌ Cancel agent run failed: {}", e);
             Ok(api_error!("agent.cancel_failed"))
         }
     }
@@ -195,30 +195,59 @@ pub struct ToolConfirmationParams {
 /// Return tool confirmation result
 #[tauri::command]
 pub async fn agent_tool_confirm(
-    state: State<'_, TaskExecutorState>,
+    state: State<'_, AgentRunExecutorState>,
     params: ToolConfirmationParams,
 ) -> TauriApiResult<EmptyData> {
-    let task_id = state
+    tracing::info!(
+        "🔐 [cmd] agent_tool_confirm called: request_id={} decision={:?}",
+        params.request_id,
+        params.decision
+    );
+    let run_id = state
         .executor
         .tool_confirmations()
         .lookup_task_id(&params.request_id);
-    let ctx = task_id.and_then(|task_id| {
-        state
+    tracing::info!(
+        "🔐 [cmd] lookup_task_id result: request_id={} -> run_id={:?}",
+        params.request_id,
+        run_id
+    );
+    let ctx = run_id.and_then(|run_id| {
+        let found = state
             .executor
-            .active_tasks()
-            .get(&task_id)
-            .map(|entry| Arc::clone(entry.value()))
+            .active_runs()
+            .get(&run_id)
+            .map(|entry| Arc::clone(entry.value()));
+        tracing::info!(
+            "🔐 [cmd] active_runs.get({}): found={}",
+            run_id,
+            found.is_some()
+        );
+        found
     });
 
     let ctx = match ctx {
         Some(ctx) => ctx,
-        None => return Ok(api_error!("agent.tool_confirm_not_found")),
+        None => {
+            tracing::warn!(
+                "🔐 [cmd] confirm NOT FOUND: request_id={}, active_runs_count={}",
+                params.request_id,
+                state.executor.active_runs().len()
+            );
+            return Ok(api_error!("agent.tool_confirm_not_found"));
+        }
     };
 
     let ok = ctx
         .tool_registry()
         .resolve_confirmation(&ctx, &params.request_id, params.decision)
         .await;
+
+    tracing::info!(
+        "🔐 [cmd] resolve_confirmation result: request_id={} ok={}",
+        params.request_id,
+        ok
+    );
 
     if ok {
         Ok(api_success!())
@@ -227,17 +256,17 @@ pub async fn agent_tool_confirm(
     }
 }
 
-/// List tasks
+/// List active agent runs
 #[tauri::command]
-pub async fn agent_list_tasks(
-    state: State<'_, TaskExecutorState>,
-    session_id: Option<i64>,
+pub async fn agent_list_runs(
+    state: State<'_, AgentRunExecutorState>,
+    thread_id: Option<i64>,
     status_filter: Option<String>,
-) -> TauriApiResult<Vec<TaskSummary>> {
-    match state.executor.list_tasks(session_id, status_filter).await {
+) -> TauriApiResult<Vec<AgentRunSummary>> {
+    match state.executor.list_runs(thread_id, status_filter).await {
         Ok(tasks) => Ok(api_success!(tasks)),
         Err(e) => {
-            tracing::error!("❌ List tasks failed: {}", e);
+            tracing::error!("❌ List agent runs failed: {}", e);
             Ok(api_error!("agent.list_failed"))
         }
     }
@@ -252,7 +281,7 @@ pub struct ListCommandsParams {
 /// List built-in commands
 #[tauri::command]
 pub async fn agent_list_commands(
-    _state: State<'_, TaskExecutorState>,
+    _state: State<'_, AgentRunExecutorState>,
     _params: ListCommandsParams,
 ) -> TauriApiResult<Vec<CommandSummary>> {
     let mut out = CommandConfigLoader::all()
@@ -274,7 +303,7 @@ pub struct RenderCommandParams {
 /// Render built-in command template (only does `{{input}}` replacement)
 #[tauri::command]
 pub async fn agent_render_command(
-    _state: State<'_, TaskExecutorState>,
+    _state: State<'_, AgentRunExecutorState>,
     params: RenderCommandParams,
 ) -> TauriApiResult<CommandRenderResult> {
     let Some(cfg) = CommandConfigLoader::get(&params.name) else {
@@ -296,7 +325,7 @@ pub struct ListSkillsParams {
 /// List global + workspace skills (workspace has higher priority)
 #[tauri::command]
 pub async fn agent_list_skills(
-    _state: State<'_, TaskExecutorState>,
+    _state: State<'_, AgentRunExecutorState>,
     config_paths: State<'_, crate::config::paths::ConfigPaths>,
     params: ListSkillsParams,
 ) -> TauriApiResult<Vec<SkillSummary>> {
@@ -327,7 +356,7 @@ pub async fn agent_list_skills(
 /// Validate Skill format
 #[tauri::command]
 pub async fn agent_validate_skill(
-    _state: State<'_, TaskExecutorState>,
+    _state: State<'_, AgentRunExecutorState>,
     skill_path: String,
 ) -> TauriApiResult<crate::agent::skill::ValidationResult> {
     let skill_dir = std::path::PathBuf::from(skill_path);
@@ -344,7 +373,7 @@ pub async fn agent_validate_skill(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SwitchSessionAgentParams {
-    pub session_id: i64,
+    pub thread_id: i64,
     pub agent_type: String,
     pub reason: Option<String>,
 }
@@ -352,20 +381,20 @@ pub struct SwitchSessionAgentParams {
 /// Switch session's current Agent (no backward compatibility)
 #[tauri::command]
 pub async fn agent_switch_session_agent(
-    state: State<'_, TaskExecutorState>,
+    state: State<'_, AgentRunExecutorState>,
     params: SwitchSessionAgentParams,
 ) -> TauriApiResult<EmptyData> {
     let persistence = state.executor.agent_persistence();
-    let session = match persistence.sessions().get(params.session_id).await {
-        Ok(Some(session)) => session,
-        Ok(None) => return Ok(api_error!("workspace.session_not_found")),
+    let thread = match persistence.threads().get(params.thread_id).await {
+        Ok(Some(thread)) => thread,
+        Ok(None) => return Ok(api_error!("workspace.thread_not_found")),
         Err(err) => {
-            tracing::error!("❌ Load session failed during agent switch: {}", err);
+            tracing::error!("❌ Load thread failed during agent switch: {}", err);
             return Ok(api_error!("agent.switch_failed"));
         }
     };
 
-    let workspace_root = std::path::PathBuf::from(session.workspace_path.clone());
+    let workspace_root = std::path::PathBuf::from(thread.workspace_path.clone());
     let agent_configs = match AgentConfigLoader::load_for_workspace(&workspace_root).await {
         Ok(agent_configs) => agent_configs,
         Err(err) => {
@@ -377,14 +406,14 @@ pub async fn agent_switch_session_agent(
         return Ok(api_error!("agent.unknown_agent_type"));
     }
 
-    let from_agent = session.agent_type.clone();
+    let from_agent = thread.agent_type.clone();
     if from_agent == params.agent_type {
         return Ok(api_success!());
     }
 
     if let Err(err) = persistence
-        .sessions()
-        .update_agent_type(params.session_id, &params.agent_type)
+        .threads()
+        .update_agent_type(params.thread_id, &params.agent_type)
         .await
     {
         tracing::error!("❌ Switch agent failed: {}", err);
@@ -394,7 +423,7 @@ pub async fn agent_switch_session_agent(
     let mut message = match persistence
         .messages()
         .create(CreateMessageParams {
-            session_id: params.session_id,
+            thread_id: params.thread_id,
             role: MessageRole::Assistant,
             status: MessageStatus::Completed,
             blocks: vec![Block::AgentSwitch(AgentSwitchBlock {

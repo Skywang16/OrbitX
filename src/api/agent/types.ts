@@ -1,19 +1,19 @@
 /**
  * Agent API type definitions
  *
- * Defines all interface types for Agent system, consistent with backend TaskExecutor
+ * Defines all interface types for the agent runtime.
  */
 
-import type { TaskEvent } from '@/types'
+import type { AgentRunEvent as DomainAgentRunEvent } from '@/types'
 
 /**
- * Task execution parameters
+ * Agent run execution parameters
  */
-export interface ExecuteTaskParams {
+export interface ExecuteRunParams {
   /** Workspace path */
   workspacePath: string
-  /** Session ID */
-  sessionId: number
+  /** Thread ID */
+  threadId: number
   /** User prompt */
   userPrompt: string
   /** Model ID - required! */
@@ -27,15 +27,15 @@ export interface ExecuteTaskParams {
 }
 
 /**
- * Task summary information
+ * Agent run summary information
  */
-export interface TaskSummary {
+export interface AgentRunSummary {
   /** Task ID */
-  taskId: string
-  /** Session ID */
-  sessionId: number
+  runId: string
+  /** Thread ID */
+  threadId: number
   /** Task status */
-  status: TaskStatus
+  status: AgentRunStatus
   /** Current iteration count */
   currentIteration: number
   /** Error count */
@@ -53,7 +53,7 @@ export interface TaskSummary {
 /**
  * Task status
  */
-export type TaskStatus =
+export type AgentRunStatus =
   | 'created' // Created
   | 'running' // Running
   | 'paused' // Paused
@@ -62,9 +62,9 @@ export type TaskStatus =
   | 'cancelled' // Cancelled
 
 /**
- * Task progress event payload (consistent with Rust TaskProgressPayload)
+ * Agent run event payload
  */
-export type TaskProgressPayload = TaskEvent
+export type AgentRunEvent = DomainAgentRunEvent
 
 // ===== Streaming interface types =====
 
@@ -73,27 +73,27 @@ export type TaskProgressPayload = TaskEvent
  *
  * Provides chainable event listening API
  */
-export interface TaskProgressStream {
+export interface AgentRunStream {
   /**
    * Listen to progress events
    * @param callback Progress callback function
    * @returns Stream object (supports chaining)
    */
-  onProgress(callback: (event: TaskProgressPayload) => void): TaskProgressStream
+  onProgress(callback: (event: AgentRunEvent) => void): AgentRunStream
 
   /**
    * Listen to error events
    * @param callback Error callback function
    * @returns Stream object (supports chaining)
    */
-  onError(callback: (error: Error) => void): TaskProgressStream
+  onError(callback: (error: Error) => void): AgentRunStream
 
   /**
    * Listen to stream close event
    * @param callback Close callback function
    * @returns Stream object (supports chaining)
    */
-  onClose(callback: () => void): TaskProgressStream
+  onClose(callback: () => void): AgentRunStream
 
   /**
    * Manually close stream
@@ -111,7 +111,7 @@ export interface TaskProgressStream {
 /**
  * Task control command
  */
-export type TaskControlCommand = CancelCommand
+export type RunControlCommand = CancelCommand
 
 /**
  * Cancel command
@@ -124,13 +124,13 @@ export interface CancelCommand {
 // ===== Query filter types =====
 
 /**
- * Task list filter conditions
+ * Agent run list filter conditions
  */
-export interface TaskListFilter {
-  /** Session ID filter */
-  sessionId?: number
+export interface RunListFilter {
+  /** Thread ID filter */
+  threadId?: number
   /** Status filter */
-  status?: TaskStatus | string
+  status?: AgentRunStatus | string
   /** Pagination offset */
   offset?: number
   /** Pagination limit */
@@ -144,14 +144,14 @@ export interface CommandSummary {
   description?: string
   agent?: string
   model?: string
-  subtask: boolean
+  delegated: boolean
 }
 
 export interface CommandRenderResult {
   name: string
   agent?: string
   model?: string
-  subtask: boolean
+  delegated: boolean
   prompt: string
 }
 
@@ -181,7 +181,7 @@ export interface SkillValidationResult {
 /**
  * Event type guard function
  */
-export const isTaskProgressEvent = (event: unknown): event is TaskProgressPayload => {
+export const isAgentRunEvent = (event: unknown): event is AgentRunEvent => {
   if (!event || typeof event !== 'object') {
     return false
   }
@@ -193,22 +193,24 @@ export const isTaskProgressEvent = (event: unknown): event is TaskProgressPayloa
 /**
  * Determine if it is a terminal event
  */
-export const isTerminalEvent = (event: TaskProgressPayload): boolean => {
-  return event.type === 'task_completed' || event.type === 'task_cancelled' || event.type === 'task_error'
+export const isTerminalEvent = (event: AgentRunEvent): boolean => {
+  return (
+    event.type === 'agent_run_completed' || event.type === 'agent_run_cancelled' || event.type === 'agent_run_error'
+  )
 }
 
 /**
- * Get task ID of event
+ * Get run ID of event
  */
-export const getEventTaskId = (event: TaskProgressPayload): string => {
-  return 'taskId' in event && typeof event.taskId === 'string' ? event.taskId : ''
+export const getEventTaskId = (event: AgentRunEvent): string => {
+  return 'runId' in event && typeof event.runId === 'string' ? event.runId : ''
 }
 
 /**
  * Determine if it is an error event
  */
-export const isErrorEvent = (event: TaskProgressPayload): boolean => {
-  return event.type === 'task_error'
+export const isErrorEvent = (event: AgentRunEvent): boolean => {
+  return event.type === 'agent_run_error'
 }
 
 /**

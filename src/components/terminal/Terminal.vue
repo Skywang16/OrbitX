@@ -57,6 +57,7 @@
   interface Props {
     terminalId: number // Terminal unique identifier (matches backend pane_id)
     isActive: boolean // Whether this is the active terminal
+    disableStdin?: boolean // Disable user input
   }
 
   const props = defineProps<Props>()
@@ -308,6 +309,7 @@
         fontWeight: 400,
         fontWeightBold: 700,
         theme: xtermTheme,
+        disableStdin: props.disableStdin ?? false,
       })
 
       // Handle Unicode wide characters and ligature width (e.g., CJK, emoji, Nerd Font icons)
@@ -372,6 +374,7 @@
 
       trackDisposable(
         terminal.value.onData(data => {
+          if (props.disableStdin) return
           terminalStore.writeToTerminal(props.terminalId, data).catch(error => {
             console.warn(`Failed to write terminal input to pane ${props.terminalId}:`, error)
           })
@@ -449,6 +452,15 @@
       updateTerminalTheme(newTheme)
     },
     { immediate: true }
+  )
+
+  watch(
+    () => props.disableStdin,
+    newVal => {
+      if (terminal.value) {
+        terminal.value.options.disableStdin = !!newVal
+      }
+    }
   )
 
   // === Event Handlers ===

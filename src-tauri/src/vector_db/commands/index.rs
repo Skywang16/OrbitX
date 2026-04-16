@@ -13,7 +13,7 @@ pub async fn get_index_status(
 ) -> TauriApiResult<crate::vector_db::storage::IndexStatus> {
     let workspace_path = PathBuf::from(&path);
 
-    if !workspace_path.join(".opencodex").join("index").exists() {
+    if !workspace_path.join(".orbitx").join("index").exists() {
         return Ok(api_success!(crate::vector_db::storage::IndexStatus {
             total_files: 0,
             total_chunks: 0,
@@ -43,7 +43,7 @@ pub async fn delete_workspace_index(
     state: State<'_, VectorDbState>,
 ) -> TauriApiResult<EmptyData> {
     let root = PathBuf::from(&path);
-    let index_dir = root.join(".opencodex").join("index");
+    let index_dir = root.join(".orbitx").join("index");
 
     if let Some(engine) = state.current_search_engine() {
         engine.invalidate_workspace_index(&root);

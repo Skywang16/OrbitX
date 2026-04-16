@@ -4,9 +4,9 @@
 //! ## Usage Examples
 //!
 //! ```rust
-//! use opencodex::llm::anthropic_types::*;
-//! use opencodex::llm::providers::AnthropicProvider;
-//! use opencodex::llm::types::LLMProviderConfig;
+//! use orbitx::llm::anthropic_types::*;
+//! use orbitx::llm::providers::AnthropicProvider;
+//! use orbitx::llm::types::LLMProviderConfig;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = LLMProviderConfig {

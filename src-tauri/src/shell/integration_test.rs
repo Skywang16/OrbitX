@@ -14,6 +14,13 @@ mod tests {
     use std::time::Duration;
     use tokio::time::sleep;
 
+    fn expected_fallback_cwd() -> String {
+        dirs::home_dir()
+            .or_else(|| std::env::current_dir().ok())
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "~".to_string())
+    }
+
     #[tokio::test]
     async fn test_complete_integration_flow() {
         let registry = Arc::new(ActiveTerminalContextRegistry::new());
@@ -45,7 +52,10 @@ mod tests {
         assert!(result.is_ok());
 
         let context = result.unwrap();
-        assert_eq!(context.current_working_directory, Some("~".to_string())); // Default value
+        assert_eq!(
+            context.current_working_directory,
+            Some(expected_fallback_cwd())
+        );
         assert!(matches!(
             context.shell_type,
             Some(crate::terminal::types::ShellType::Bash)

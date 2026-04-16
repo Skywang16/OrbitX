@@ -5,28 +5,54 @@ use tracing::warn;
 
 use crate::agent::error::AgentResult;
 use crate::agent::persistence::AgentPersistence;
+use crate::agent::rollout::replay_rollout;
 use crate::agent::types::{Block, MessageRole, MessageStatus, ToolStatus};
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, ToolResultContent,
 };
 
-pub struct SessionMessageLoader {
+pub struct ThreadMessageLoader {
     persistence: Arc<AgentPersistence>,
 }
 
-impl SessionMessageLoader {
+impl ThreadMessageLoader {
     pub fn new(persistence: Arc<AgentPersistence>) -> Self {
         Self { persistence }
     }
 
     /// Load persisted messages into Anthropic `MessageParam` format.
     /// Guarantees strict User/Assistant alternation with User first.
-    pub async fn load_for_llm(&self, session_id: i64) -> AgentResult<Vec<MessageParam>> {
-        let messages = self
-            .persistence
-            .messages()
-            .list_by_session(session_id)
-            .await?;
+    pub async fn load_for_llm(&self, thread_id: i64) -> AgentResult<Vec<MessageParam>> {
+        let messages = if let Some(thread) = self.persistence.threads().get(thread_id).await? {
+            match replay_rollout(std::path::Path::new(&thread.rollout_path)).await {
+                Ok(replayed) if !replayed.messages.is_empty() => replayed.messages,
+                Ok(_) => {
+                    self.persistence
+                        .messages()
+                        .list_by_thread(thread_id)
+                        .await?
+                }
+                Err(err) => {
+                    warn!(
+                        "Failed to replay rollout for thread {} at {}: {}",
+                        thread_id, thread.rollout_path, err
+                    );
+                    self.persistence
+                        .messages()
+                        .list_by_thread(thread_id)
+                        .await?
+                }
+            }
+        } else {
+            self.persistence
+                .messages()
+                .list_by_thread(thread_id)
+                .await?
+        };
+        Ok(Self::messages_to_llm(messages))
+    }
+
+    pub fn messages_to_llm(messages: Vec<crate::agent::types::Message>) -> Vec<MessageParam> {
         let mut out: Vec<MessageParam> = Vec::new();
 
         let start_idx = messages
@@ -83,7 +109,7 @@ impl SessionMessageLoader {
             );
         }
 
-        Ok(out)
+        out
     }
 }
 
@@ -200,16 +226,6 @@ fn build_assistant_blocks(blocks: &[Block]) -> (Vec<ContentBlock>, Vec<ContentBl
                     });
                 }
             }
-            Block::Subtask(b) => {
-                if let Some(summary) = &b.summary {
-                    if !summary.trim().is_empty() {
-                        assistant_blocks.push(ContentBlock::Text {
-                            text: summary.trim().to_string(),
-                            cache_control: None,
-                        });
-                    }
-                }
-            }
             _ => {}
         }
     }
@@ -247,10 +263,5 @@ fn tool_output_text(block: &crate::agent::types::ToolBlock) -> String {
         return "(empty result)".to_string();
     }
 
-    const MAX: usize = 10000;
-    if rendered.len() > MAX {
-        format!("{}...\n[content truncated]", &rendered[..MAX])
-    } else {
-        rendered
-    }
+    rendered
 }

@@ -6,7 +6,7 @@ use serde_json::json;
 
 use super::file_utils::lenient;
 use crate::agent::common::TruncationPolicy;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::terminal::{AgentTerminalManager, TerminalExecutionMode, TerminalStatus};
 use crate::agent::tools::{
@@ -151,7 +151,7 @@ Git safety: Never commit/push/amend without explicit user request."#
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ShellArgs = serde_json::from_value(args)?;
@@ -206,7 +206,7 @@ Git safety: Never commit/push/amend without explicit user request."#
             .create_terminal(
                 args.command.clone(),
                 mode.clone(),
-                context.session_id,
+                context.thread_id,
                 terminal_cwd,
                 None,
             )

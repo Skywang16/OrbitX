@@ -4,8 +4,10 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 
 const GLOBAL_SETTINGS_FILE_NAME: &str = "settings.json";
-const WORKSPACE_SETTINGS_REL_PATH: &str = ".opencodex/settings.json";
-const SETTINGS_SCHEMA_URL: &str = "https://opencodex.app/schemas/settings.json";
+const WORKSPACE_SETTINGS_REL_PATH: &str = ".orbitx/settings.json";
+/// Personal runtime overrides, not committed to git (equivalent to Claude Code's settings.local.json).
+const WORKSPACE_LOCAL_SETTINGS_REL_PATH: &str = ".orbitx/settings.local.json";
+const SETTINGS_SCHEMA_URL: &str = "https://orbitx.app/schemas/settings.json";
 
 #[derive(Debug, Clone)]
 pub struct SettingsManager {
@@ -87,17 +89,62 @@ impl SettingsManager {
         self.write_json(&path, settings).await
     }
 
+    /// Returns the path for `.orbitx/settings.local.json` (git-ignored, personal runtime rules).
+    pub fn workspace_local_settings_path(workspace_root: impl AsRef<Path>) -> PathBuf {
+        workspace_root
+            .as_ref()
+            .join(WORKSPACE_LOCAL_SETTINGS_REL_PATH)
+    }
+
+    /// Reads `.orbitx/settings.local.json`; returns `None` if it doesn't exist yet.
+    pub async fn get_workspace_local_settings(
+        &self,
+        workspace_root: impl AsRef<Path>,
+    ) -> SettingsResult<Option<Settings>> {
+        let path = Self::workspace_local_settings_path(workspace_root);
+        if !path.exists() {
+            return Ok(None);
+        }
+        self.read_json(&path).await.map(Some)
+    }
+
+    /// Persists `.orbitx/settings.local.json` (creating the `.orbitx/` dir if needed).
+    pub async fn update_workspace_local_settings(
+        &self,
+        workspace_root: impl AsRef<Path>,
+        settings: &Settings,
+    ) -> SettingsResult<()> {
+        let path = Self::workspace_local_settings_path(workspace_root);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|source| SettingsError::CreateDir {
+                    path: parent.to_path_buf(),
+                    source,
+                })?;
+        }
+        self.write_json(&path, settings).await
+    }
+
     pub async fn get_effective_settings(
         &self,
         workspace_root: Option<PathBuf>,
     ) -> SettingsResult<EffectiveSettings> {
         let global = self.get_global_settings().await?;
-        let workspace = match workspace_root {
-            Some(root) => self.get_workspace_settings(root).await?,
-            None => None,
+        let (workspace, local) = match workspace_root {
+            Some(ref root) => {
+                let ws = self.get_workspace_settings(root).await?;
+                let lc = self.get_workspace_local_settings(root).await?;
+                (ws, lc)
+            }
+            None => (None, None),
         };
 
-        Ok(EffectiveSettings::merge(&global, workspace.as_ref()))
+        Ok(EffectiveSettings::merge(
+            &global,
+            workspace.as_ref(),
+            local.as_ref(),
+        ))
     }
 
     async fn read_json<T: serde::de::DeserializeOwned>(&self, path: &Path) -> SettingsResult<T> {
@@ -174,11 +221,11 @@ impl SettingsManager {
     }
 
     fn resolve_app_dir() -> SettingsResult<PathBuf> {
-        match std::env::var("OPENCODEX_DATA_DIR") {
+        match std::env::var("ORBITX_DATA_DIR") {
             Ok(dir) => return Ok(PathBuf::from(dir)),
             Err(std::env::VarError::NotPresent) => {}
             Err(err) => {
-                tracing::warn!("Failed to read OPENCODEX_DATA_DIR: {}", err);
+                tracing::warn!("Failed to read ORBITX_DATA_DIR: {}", err);
             }
         }
 
@@ -186,6 +233,6 @@ impl SettingsManager {
             return Err(SettingsError::AppDirUnavailable);
         };
 
-        Ok(data_dir.join("OpenCodex"))
+        Ok(data_dir.join("OrbitX"))
     }
 }

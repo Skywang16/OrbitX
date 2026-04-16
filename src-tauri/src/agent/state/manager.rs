@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TaskStatus {
+pub enum AgentRunStatus {
     Init,
     Running,
     Paused,
@@ -14,8 +14,8 @@ pub enum TaskStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskState {
-    pub task_id: String,
-    pub task_status: TaskStatus,
+    pub run_id: String,
+    pub task_status: AgentRunStatus,
     pub paused: bool,
     pub pause_reason: Option<String>,
     pub consecutive_errors: u32,
@@ -27,10 +27,10 @@ pub struct TaskState {
 }
 
 impl TaskState {
-    pub fn new(task_id: impl Into<String>, config: TaskThresholds) -> Self {
+    pub fn new(run_id: impl Into<String>, config: TaskThresholds) -> Self {
         Self {
-            task_id: task_id.into(),
-            task_status: TaskStatus::Init,
+            run_id: run_id.into(),
+            task_status: AgentRunStatus::Init,
             paused: false,
             pause_reason: None,
             consecutive_errors: 0,
@@ -64,11 +64,11 @@ impl StateManager {
         self.state.read().await.clone()
     }
 
-    pub async fn task_status(&self) -> TaskStatus {
+    pub async fn task_status(&self) -> AgentRunStatus {
         self.state.read().await.task_status
     }
 
-    pub async fn update_task_status(&self, status: TaskStatus, reason: Option<String>) {
+    pub async fn update_task_status(&self, status: AgentRunStatus, reason: Option<String>) {
         let timestamp = Utc::now().timestamp_millis();
         let mut state = self.state.write().await;
         state.task_status = status;

@@ -10,29 +10,28 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::agent::common::truncate_chars;
-use crate::agent::core::context::TaskContext;
-use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
+use crate::agent::core::context::AgentRunContext;
+use crate::agent::core::executor::{AgentRunExecutor, ExecuteRunParams};
 use crate::agent::core::status::AgentTaskStatus;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{AgentRunError, AgentRunResult};
 use crate::agent::persistence::repositories::CreateMessageParams;
 use crate::agent::tools::RunnableTool;
 use crate::agent::tools::ToolAvailabilityContext;
 use crate::agent::tools::{ToolResultContent, ToolResultStatus};
 use crate::agent::types::{
-    AgentSwitchBlock, Block, ErrorBlock, Message, MessageRole, MessageStatus, SubtaskBlock,
-    SubtaskStatus, TaskEvent, ToolBlock, ToolOutput, ToolStatus,
+    AgentRunEvent, AgentSwitchBlock, Block, ErrorBlock, MessageRole, MessageStatus, ToolBlock,
+    ToolOutput, ToolStatus,
 };
 use crate::workspace::WorkspaceService;
-use crate::{agent::common::llm_text::extract_text_from_llm_message, llm::service::LLMService};
 
 struct RunTaskLoopDropGuard {
-    executor: TaskExecutor,
-    ctx: Arc<TaskContext>,
+    executor: AgentRunExecutor,
+    ctx: Arc<AgentRunContext>,
     armed: bool,
 }
 
 impl RunTaskLoopDropGuard {
-    fn new(executor: TaskExecutor, ctx: Arc<TaskContext>) -> Self {
+    fn new(executor: AgentRunExecutor, ctx: Arc<AgentRunContext>) -> Self {
         Self {
             executor,
             ctx,
@@ -75,20 +74,20 @@ impl Drop for RunTaskLoopDropGuard {
             }
 
             ctx.tool_registry()
-                .cancel_pending_confirmations_for_task(&ctx, ctx.task_id.as_ref())
+                .cancel_pending_confirmations_for_task(&ctx, ctx.run_id.as_ref())
                 .await;
 
-            executor.active_tasks().remove(ctx.task_id.as_ref());
+            executor.active_runs().remove(ctx.run_id.as_ref());
         });
     }
 }
 
-impl TaskExecutor {
-    pub async fn execute_task(
+impl AgentRunExecutor {
+    pub async fn execute_run(
         &self,
-        params: ExecuteTaskParams,
-        progress_channel: Channel<TaskEvent>,
-    ) -> TaskExecutorResult<Arc<TaskContext>> {
+        params: ExecuteRunParams,
+        progress_channel: Channel<AgentRunEvent>,
+    ) -> AgentRunResult<Arc<AgentRunContext>> {
         // Normalize parameters: validate workspace is set and create session if needed
         let params = self.normalize_task_params(params).await?;
 
@@ -99,9 +98,9 @@ impl TaskExecutor {
         // Clear the agent edit set from the previous task to avoid "diagnosing old files" behavior.
         ctx.file_tracker().take_recent_agent_edits().await;
 
-        ctx.emit_event(TaskEvent::TaskCreated {
-            task_id: ctx.task_id.to_string(),
-            session_id: ctx.session_id,
+        ctx.emit_event(AgentRunEvent::AgentRunCreated {
+            run_id: ctx.run_id.to_string(),
+            thread_id: ctx.thread_id,
             workspace_path: ctx.cwd.to_string(),
         })
         .await?;
@@ -116,13 +115,13 @@ impl TaskExecutor {
             .initialize_message_track(&display_user_prompt, params.images.as_deref(), false)
             .await?;
 
-        // Persist model_id on the session so subtasks (Task tool) can inherit it reliably.
+        // Persist model_id on the session so subagents (Task tool) can inherit it reliably.
         // Otherwise older sessions created without model selection will fail with:
-        // "No model_id set on session; cannot run subtask".
+        // "No model_id set on session; cannot run subagent".
         if let Err(err) = ctx
             .agent_persistence()
-            .sessions()
-            .update_model_id(ctx.session_id, &params.model_id)
+            .threads()
+            .update_model_id(ctx.thread_id, &params.model_id)
             .await
         {
             warn!("Failed to persist session model id: {}", err);
@@ -181,15 +180,6 @@ impl TaskExecutor {
                 warn!("Failed to initialize MCP workspace servers: {}", err);
             }
 
-            // If prior subtasks were cancelled mid-flight, do NOT dump partial output into the
-            // parent prompt. Backfill *real* summaries once per block using the LLM.
-            if let Err(e) = executor
-                .backfill_missing_subtask_summaries(&ctx_for_spawn, &model_id)
-                .await
-            {
-                error!("Failed to backfill subtask summaries: {}", e);
-            }
-
             // Restore history after backfilling summaries so the current turn's prompt sees them.
             if let Err(err) = ctx_for_spawn.reset_message_state().await {
                 warn!(
@@ -198,9 +188,9 @@ impl TaskExecutor {
                 );
             }
             if let Err(e) = executor
-                .restore_session_history(
+                .restore_thread_history(
                     &ctx_for_spawn,
-                    ctx_for_spawn.session_id,
+                    ctx_for_spawn.thread_id,
                     Some(user_message_id),
                 )
                 .await
@@ -234,8 +224,8 @@ impl TaskExecutor {
             let prompts = match executor
                 .prompt_orchestrator()
                 .build_task_prompts(
-                    ctx_for_spawn.session_id,
-                    ctx_for_spawn.task_id.to_string(),
+                    ctx_for_spawn.thread_id,
+                    ctx_for_spawn.run_id.to_string(),
                     &llm_user_prompt,
                     ctx_for_spawn.agent_type.as_ref(),
                     &ctx_for_spawn.cwd,
@@ -269,8 +259,8 @@ impl TaskExecutor {
                     }
                     if ctx_for_spawn.emits_task_events() {
                         if let Err(err) = ctx_for_spawn
-                            .emit_event(TaskEvent::TaskError {
-                                task_id: ctx_for_spawn.task_id.to_string(),
+                            .emit_event(AgentRunEvent::AgentRunError {
+                                run_id: ctx_for_spawn.run_id.to_string(),
                                 error: error_block,
                             })
                             .await
@@ -279,9 +269,7 @@ impl TaskExecutor {
                         }
                     }
 
-                    executor
-                        .active_tasks()
-                        .remove(ctx_for_spawn.task_id.as_ref());
+                    executor.active_runs().remove(ctx_for_spawn.run_id.as_ref());
                     return;
                 }
             };
@@ -319,9 +307,9 @@ impl TaskExecutor {
 
     pub(super) async fn run_task_loop(
         &self,
-        ctx: Arc<TaskContext>,
+        ctx: Arc<AgentRunContext>,
         model_id: String,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         const MAX_SYNTAX_REPAIR_ROUNDS: usize = 2;
 
         let mut drop_guard = RunTaskLoopDropGuard::new(self.clone(), Arc::clone(&ctx));
@@ -329,7 +317,7 @@ impl TaskExecutor {
 
         loop {
             // Directly call ReactOrchestrator, passing self as ReactHandler
-            // Compiler will generate specialized code for TaskExecutor, fully inlined
+            // Compiler will generate specialized code for AgentRunExecutor, fully inlined
             let result = self
                 .react_orchestrator()
                 .run_react_loop(&ctx, &model_id, self)
@@ -365,15 +353,15 @@ impl TaskExecutor {
                         }
 
                         if ctx.emits_task_events() {
-                            ctx.emit_event(TaskEvent::TaskCompleted {
-                                task_id: ctx.task_id.to_string(),
+                            ctx.emit_event(AgentRunEvent::AgentRunCompleted {
+                                run_id: ctx.run_id.to_string(),
                             })
                             .await?;
                         }
 
                         // Refresh session metadata (including title)
                         let ws_service = WorkspaceService::new(self.database());
-                        if let Err(e) = ws_service.refresh_session_title(ctx.session_id).await {
+                        if let Err(e) = ws_service.refresh_thread_title(ctx.thread_id).await {
                             warn!("Failed to refresh session title: {}", e);
                         }
 
@@ -400,8 +388,8 @@ impl TaskExecutor {
                         }
                         if ctx.emits_task_events() {
                             if let Err(err) = ctx
-                                .emit_event(TaskEvent::TaskError {
-                                    task_id: ctx.task_id.to_string(),
+                                .emit_event(AgentRunEvent::AgentRunError {
+                                    run_id: ctx.run_id.to_string(),
                                     error: error_block,
                                 })
                                 .await
@@ -419,7 +407,7 @@ impl TaskExecutor {
                     // Cancellation/interruption is not an "error". Treat it as a graceful stop so
                     // the UI doesn't see "Task execution interrupted" when the user cancels or
                     // when a new user message supersedes the current run.
-                    if matches!(e, TaskExecutorError::TaskInterrupted) {
+                    if matches!(e, AgentRunError::TaskInterrupted) {
                         let status = ctx.status().await;
                         if !matches!(status, AgentTaskStatus::Cancelled) {
                             if let Err(err) = ctx.set_status(AgentTaskStatus::Cancelled).await {
@@ -433,8 +421,8 @@ impl TaskExecutor {
                             }
                             if ctx.emits_task_events() {
                                 if let Err(err) = ctx
-                                    .emit_event(TaskEvent::TaskCancelled {
-                                        task_id: ctx.task_id.to_string(),
+                                    .emit_event(AgentRunEvent::AgentRunCancelled {
+                                        run_id: ctx.run_id.to_string(),
                                     })
                                     .await
                                 {
@@ -462,8 +450,8 @@ impl TaskExecutor {
                     }
                     if ctx.emits_task_events() {
                         if let Err(err) = ctx
-                            .emit_event(TaskEvent::TaskError {
-                                task_id: ctx.task_id.to_string(),
+                            .emit_event(AgentRunEvent::AgentRunError {
+                                run_id: ctx.run_id.to_string(),
                                 error: error_block,
                             })
                             .await
@@ -478,11 +466,11 @@ impl TaskExecutor {
 
         ctx.abort();
         ctx.tool_registry()
-            .cancel_pending_confirmations_for_task(&ctx, ctx.task_id.as_ref())
+            .cancel_pending_confirmations_for_task(&ctx, ctx.run_id.as_ref())
             .await;
 
         // Remove from active_tasks immediately after task completion to avoid memory/confirmation state leaks
-        self.active_tasks().remove(ctx.task_id.as_ref());
+        self.active_runs().remove(ctx.run_id.as_ref());
         drop_guard.disarm();
 
         Ok(())
@@ -490,9 +478,9 @@ impl TaskExecutor {
 
     async fn run_syntax_diagnostics_and_maybe_request_fix(
         &self,
-        ctx: &TaskContext,
+        ctx: &AgentRunContext,
         repair_round: usize,
-    ) -> TaskExecutorResult<bool> {
+    ) -> AgentRunResult<bool> {
         let edited = ctx.file_tracker().take_recent_agent_edits().await;
         if edited.is_empty() {
             return Ok(true);
@@ -573,7 +561,7 @@ impl TaskExecutor {
             .and_then(|v| v.get("errorCount"))
             .and_then(|v| v.as_u64())
             .ok_or_else(|| {
-                TaskExecutorError::InternalError(
+                AgentRunError::InternalError(
                     "syntax_diagnostics result missing numeric errorCount".to_string(),
                 )
             })?;
@@ -590,16 +578,12 @@ impl TaskExecutor {
         Ok(false)
     }
 
-    pub async fn cancel_task(
-        &self,
-        task_id: &str,
-        _reason: Option<String>,
-    ) -> TaskExecutorResult<()> {
+    pub async fn cancel_run(&self, run_id: &str, _reason: Option<String>) -> AgentRunResult<()> {
         let ctx = self
-            .active_tasks()
-            .get(task_id)
+            .active_runs()
+            .get(run_id)
             .map(|entry| Arc::clone(entry.value()))
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
+            .ok_or_else(|| AgentRunError::TaskNotFound(run_id.to_string()))?;
 
         ctx.abort();
         ctx.set_status(AgentTaskStatus::Cancelled).await?;
@@ -612,8 +596,8 @@ impl TaskExecutor {
         }
         if ctx.emits_task_events() {
             if let Err(err) = ctx
-                .emit_event(TaskEvent::TaskCancelled {
-                    task_id: task_id.to_string(),
+                .emit_event(AgentRunEvent::AgentRunCancelled {
+                    run_id: run_id.to_string(),
                 })
                 .await
             {
@@ -621,24 +605,24 @@ impl TaskExecutor {
             }
         }
 
-        self.active_tasks().remove(task_id);
+        self.active_runs().remove(run_id);
 
         Ok(())
     }
 
-    pub(super) async fn restore_session_history(
+    pub(super) async fn restore_thread_history(
         &self,
-        ctx: &TaskContext,
-        session_id: i64,
+        ctx: &AgentRunContext,
+        thread_id: i64,
         _exclude_message_id: Option<i64>,
-    ) -> TaskExecutorResult<()> {
-        use crate::agent::compaction::SessionMessageLoader;
+    ) -> AgentRunResult<()> {
+        use crate::agent::compaction::ThreadMessageLoader;
 
-        let loader = SessionMessageLoader::new(self.agent_persistence());
+        let loader = ThreadMessageLoader::new(self.agent_persistence());
         let restored = loader
-            .load_for_llm(session_id)
+            .load_for_llm(thread_id)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         if !restored.is_empty() {
             ctx.restore_messages(restored).await?;
@@ -649,14 +633,15 @@ impl TaskExecutor {
 
     /// Normalize task parameters:
     /// - Validate workspace_path is not empty (required)
-    /// - Create new session when session_id = 0
+    /// - Reuse the workspace active thread when thread_id = 0
+    /// - Create a new thread only when the workspace has no active thread yet
     async fn normalize_task_params(
         &self,
-        mut params: ExecuteTaskParams,
-    ) -> TaskExecutorResult<ExecuteTaskParams> {
+        mut params: ExecuteRunParams,
+    ) -> AgentRunResult<ExecuteRunParams> {
         // Workspace path is now required
         if params.workspace_path.is_empty() || params.workspace_path.trim().is_empty() {
-            return Err(TaskExecutorError::ConfigurationError(
+            return Err(AgentRunError::ConfigurationError(
                 "workspace_path is required. Please open a workspace folder first.".to_string(),
             ));
         }
@@ -669,47 +654,56 @@ impl TaskExecutor {
         service
             .get_or_create_workspace(&params.workspace_path)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-        if params.session_id <= 0 {
-            // session_id = 0: create new session
-            let session = service
-                .create_session(&params.workspace_path, Some(&title))
+        if params.thread_id <= 0 {
+            let thread = service
+                .ensure_active_thread_with_title(&params.workspace_path, &title)
                 .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-            // Set as active session
             service
-                .set_active_session(&params.workspace_path, Some(session.id))
+                .set_active_thread(&params.workspace_path, Some(thread.id))
                 .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-            params.session_id = session.id;
+            params.thread_id = thread.id;
+        } else if !title.trim().is_empty() {
+            // For an existing thread, eagerly write the user prompt as the title if it's still
+            // empty. This ensures the sidebar title updates immediately when the frontend
+            // processes agent_run_created (which triggers a selectThreadById / listThreadViews),
+            // rather than waiting for the full agent_run_completed event.
+            if let Ok(Some(thread)) = service.get_thread(params.thread_id).await {
+                if thread.title.trim().is_empty() {
+                    if let Err(e) = service.update_thread_title(thread.id, &title).await {
+                        warn!("Failed to eagerly set thread title before run: {}", e);
+                    }
+                }
+            }
         }
-        // session_id > 0: use specified session, no processing needed
 
         Ok(params)
     }
 
     async fn switch_session_agent_with_ctx(
         &self,
-        ctx: &TaskContext,
+        ctx: &AgentRunContext,
         to_agent: &str,
         reason: Option<String>,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         let from_agent = ctx.agent_type.as_ref().to_string();
 
         ctx.agent_persistence()
-            .sessions()
-            .update_agent_type(ctx.session_id, to_agent)
+            .threads()
+            .update_agent_type(ctx.thread_id, to_agent)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         let mut message = ctx
             .agent_persistence()
             .messages()
             .create(CreateMessageParams {
-                session_id: ctx.session_id,
+                thread_id: ctx.thread_id,
                 role: MessageRole::Assistant,
                 status: MessageStatus::Completed,
                 blocks: vec![Block::AgentSwitch(AgentSwitchBlock {
@@ -725,7 +719,7 @@ impl TaskExecutor {
                 provider_id: None,
             })
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         let now = chrono::Utc::now();
         message.finished_at = Some(now);
@@ -734,16 +728,16 @@ impl TaskExecutor {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-        ctx.emit_event(TaskEvent::MessageCreated {
-            task_id: ctx.task_id.to_string(),
+        ctx.emit_event(AgentRunEvent::MessageCreated {
+            run_id: ctx.run_id.to_string(),
             message: message.clone(),
         })
         .await?;
 
-        ctx.emit_event(TaskEvent::MessageFinished {
-            task_id: ctx.task_id.to_string(),
+        ctx.emit_event(AgentRunEvent::MessageFinished {
+            run_id: ctx.run_id.to_string(),
             message_id: message.id,
             status: MessageStatus::Completed,
             finished_at: now,
@@ -757,156 +751,7 @@ impl TaskExecutor {
     }
 }
 
-impl TaskExecutor {
-    async fn backfill_missing_subtask_summaries(
-        &self,
-        ctx: &TaskContext,
-        model_id: &str,
-    ) -> TaskExecutorResult<()> {
-        // Good taste: keep this bounded. Backfill a few per turn to avoid runaway cost.
-        const MAX_BACKFILLS_PER_TURN: usize = 3;
-        const MAX_TRANSCRIPT_CHARS: usize = 6000;
-        const MAX_SUMMARY_CHARS: usize = 1200;
-
-        let stored = ctx
-            .agent_persistence()
-            .messages()
-            .list_by_session(ctx.session_id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let mut targets: Vec<(Message, SubtaskBlock)> = Vec::new();
-        for msg in stored {
-            if !matches!(msg.role, MessageRole::Assistant) {
-                continue;
-            }
-            for block in &msg.blocks {
-                let Block::Subtask(b) = block else { continue };
-                if b.summary.is_some() {
-                    continue;
-                }
-                if !matches!(b.status, SubtaskStatus::Cancelled | SubtaskStatus::Error) {
-                    continue;
-                }
-                targets.push((msg.clone(), b.clone()));
-                if targets.len() >= MAX_BACKFILLS_PER_TURN {
-                    break;
-                }
-            }
-            if targets.len() >= MAX_BACKFILLS_PER_TURN {
-                break;
-            }
-        }
-
-        if targets.is_empty() {
-            return Ok(());
-        }
-
-        let llm = LLMService::new(self.database());
-        for (mut parent_msg, subtask) in targets {
-            let child_messages = ctx
-                .agent_persistence()
-                .messages()
-                .list_by_session(subtask.child_session_id)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-            let transcript = build_subtask_transcript(&child_messages);
-            let transcript = truncate_transcript(transcript, MAX_TRANSCRIPT_CHARS);
-            if transcript.trim().is_empty() {
-                continue;
-            }
-
-            let system = crate::llm::anthropic_types::SystemPrompt::Text(
-                crate::agent::prompt::BuiltinPrompts::system_compaction().to_string(),
-            );
-            let prompt = crate::agent::prompt::BuiltinPrompts::system_subtask_summary_user()
-                .replace("{{transcript}}", &transcript);
-
-            let request = crate::llm::anthropic_types::CreateMessageRequest {
-                model: model_id.to_string(),
-                max_tokens: 512,
-                system: Some(system),
-                developer_context: None,
-                messages: vec![crate::llm::anthropic_types::MessageParam {
-                    role: crate::llm::anthropic_types::MessageRole::User,
-                    content: crate::llm::anthropic_types::MessageContent::Text(prompt),
-                }],
-                tools: None,
-                stream: false,
-                temperature: Some(0.2),
-                top_p: None,
-                top_k: None,
-                metadata: None,
-                stop_sequences: None,
-                thinking: None,
-            };
-
-            let resp = llm
-                .call(request)
-                .await
-                .map_err(|e| TaskExecutorError::LLMCallFailed(e.to_string()))?;
-            let mut summary = extract_text_from_llm_message(&resp);
-            summary = summary.trim().to_string();
-            if summary.is_empty() {
-                continue;
-            }
-            summary = truncate_chars(&summary, MAX_SUMMARY_CHARS);
-
-            let Some(idx) = parent_msg
-                .blocks
-                .iter()
-                .position(|b| matches!(b, Block::Subtask(s) if s.id == subtask.id))
-            else {
-                continue;
-            };
-
-            let mut updated = subtask.clone();
-            updated.summary = Some(summary);
-            parent_msg.blocks[idx] = Block::Subtask(updated.clone());
-
-            ctx.agent_persistence()
-                .messages()
-                .update(&parent_msg)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-            if let Err(err) = ctx
-                .emit_event(TaskEvent::BlockUpdated {
-                    task_id: ctx.task_id.to_string(),
-                    message_id: parent_msg.id,
-                    block_id: updated.id.clone(),
-                    block: Block::Subtask(updated),
-                })
-                .await
-            {
-                warn!("Failed to emit subtask block update event: {}", err);
-            }
-        }
-
-        Ok(())
-    }
-}
-
-fn build_subtask_transcript(messages: &[Message]) -> String {
-    let mut out = Vec::new();
-    for msg in messages {
-        let role = match msg.role {
-            MessageRole::User => "USER",
-            MessageRole::Assistant => "ASSISTANT",
-        };
-        let Some(text) = extract_prompt_text(&msg.blocks, &msg.role) else {
-            continue;
-        };
-        let text = text.trim();
-        if text.is_empty() {
-            continue;
-        }
-        out.push(format!("{role}:\n{text}"));
-    }
-    out.join("\n\n").trim().to_string()
-}
-
+#[allow(dead_code)]
 fn truncate_transcript(transcript: String, max_chars: usize) -> String {
     if transcript.len() <= max_chars {
         return transcript;
@@ -935,6 +780,7 @@ fn tool_result_preview_text(result: &crate::agent::tools::ToolResult) -> String 
         .join("\n")
 }
 
+#[allow(dead_code)]
 fn extract_prompt_text(
     blocks: &[Block],
     role: &crate::agent::types::MessageRole,
@@ -957,13 +803,6 @@ fn extract_prompt_text(
                     Block::Text(b) => {
                         if !b.content.trim().is_empty() {
                             parts.push(b.content.trim().to_string());
-                        }
-                    }
-                    Block::Subtask(b) => {
-                        if let Some(summary) = &b.summary {
-                            if !summary.trim().is_empty() {
-                                parts.push(summary.trim().to_string());
-                            }
                         }
                     }
                     _ => {}

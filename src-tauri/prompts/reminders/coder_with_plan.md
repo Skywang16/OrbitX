@@ -2,7 +2,7 @@
 
 Your operational mode has changed from plan to build. You are no longer in read-only mode. You are permitted to make file changes, run shell commands, and use your full arsenal of tools.
 
-A plan exists for this task in `.opencodex/plan/`.
+A plan exists for this task in `.orbitx/plan/`.
 
 ## Your Job
 

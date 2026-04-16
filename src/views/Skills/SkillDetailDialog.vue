@@ -134,7 +134,7 @@
     installing.value = true
     try {
       const baseDir =
-        target === 'global' ? `${await appDataDir()}skills` : `${workspaceStore.currentWorkspacePath}/.opencodex/skills`
+        target === 'global' ? `${await appDataDir()}skills` : `${workspaceStore.currentWorkspacePath}/.orbitx/skills`
       const dir = `${baseDir}/${skill.name}`
       await mkdir(dir, { recursive: true })
       const fm = `---\nname: ${skill.name}\ndescription: ${skill.description}\n---`

@@ -2,7 +2,7 @@
   import { agentApi, type SkillSummary } from '@/api/agent'
   import { useWorkspaceStore } from '@/stores/workspace'
   import { getCurrentWindow } from '@tauri-apps/api/window'
-  import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+  import { invoke } from '@tauri-apps/api/core'
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import SkillCard from './SkillCard.vue'
@@ -10,8 +10,6 @@
 
   const { t } = useI18n()
   const workspaceStore = useWorkspaceStore()
-
-  const REGISTRY_API = 'https://skillregistry.io/api/skills'
 
   interface DiscoverSkill {
     name: string
@@ -96,9 +94,9 @@
   const loadDiscoverSkills = async () => {
     discoverLoading.value = true
     try {
-      const resp = await tauriFetch(REGISTRY_API)
-      if (!resp.ok) throw new Error(`SkillRegistry API ${resp.status}`)
-      const data: DiscoverSkill[] = await resp.json()
+      const resp: any = await invoke('fetch_registry_skills')
+      if (!resp || resp.code !== 200 || !resp.data) throw new Error(resp?.message || 'Fetch failed')
+      const data: DiscoverSkill[] = JSON.parse(resp.data)
       discoverSkills.value = data.map(s => ({
         name: s.name,
         description: s.description || '',

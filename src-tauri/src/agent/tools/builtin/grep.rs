@@ -13,7 +13,7 @@ use serde_json::json;
 use super::file_utils::{ensure_absolute, lenient, normalize_path};
 use crate::agent::context::FileOperationRecord;
 use crate::agent::context::FileRecordSource;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
@@ -498,7 +498,7 @@ When to use grep vs other tools:
 - When doing an open-ended search that may require multiple rounds of grepping, use the Task tool with the explore agent instead
 
 Examples:
-- Find which files use a symbol: {"pattern": "TaskExecutor", "outputMode": "files_with_matches"}
+- Find which files use a symbol: {"pattern": "AgentRunExecutor", "outputMode": "files_with_matches"}
 - Find function definitions: {"pattern": "fn main", "path": "/project/src"}
 - Count matches: {"pattern": "TODO|FIXME", "outputMode": "count"}
 - Find imports: {"pattern": "^import.*react", "ignore_case": true}
@@ -558,7 +558,7 @@ Examples:
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: GrepArgs = serde_json::from_value(args)?;

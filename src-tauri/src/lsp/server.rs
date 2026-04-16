@@ -210,19 +210,93 @@ fn candidate_dirs(root: &Path) -> Vec<PathBuf> {
 }
 
 fn which(command: &str) -> Option<String> {
-    let path_var = env::var_os("PATH")?;
-    for dir in env::split_paths(&path_var) {
-        let candidate = dir.join(command);
-        if candidate.exists() {
-            return Some(candidate.to_string_lossy().to_string());
-        }
-        #[cfg(windows)]
-        {
-            let exe = dir.join(format!("{command}.exe"));
-            if exe.exists() {
-                return Some(exe.to_string_lossy().to_string());
+    // First, search in the process's PATH (may be limited in GUI apps on macOS).
+    if let Some(path_var) = env::var_os("PATH") {
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(command);
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+            #[cfg(windows)]
+            {
+                let exe = dir.join(format!("{command}.exe"));
+                if exe.exists() {
+                    return Some(exe.to_string_lossy().to_string());
+                }
             }
         }
     }
+
+    // On macOS, GUI apps launched from Finder/Dock do not inherit the shell PATH,
+    // so tools installed via nvm, Homebrew, cargo, etc. are invisible to `env::var("PATH")`.
+    // Fall back to probing the well-known installation prefixes.
+    #[cfg(target_os = "macos")]
+    {
+        let extra_dirs = extra_search_dirs_macos();
+        for dir in extra_dirs {
+            let candidate = dir.join(command);
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+
     None
+}
+
+/// Returns additional directories to search for binaries on macOS when the process
+/// was launched as a GUI app and did not inherit the user's full shell PATH.
+#[cfg(target_os = "macos")]
+fn extra_search_dirs_macos() -> Vec<std::path::PathBuf> {
+    use std::path::PathBuf;
+
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    let home = match env::var("HOME") {
+        Ok(h) => PathBuf::from(h),
+        Err(_) => return dirs,
+    };
+
+    // --- nvm: scan all installed Node versions, newest first ---
+    let nvm_versions = home.join(".nvm").join("versions").join("node");
+    if let Ok(entries) = std::fs::read_dir(&nvm_versions) {
+        let mut versions: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect();
+        // Sort descending so the newest version is probed first.
+        versions.sort_by(|a, b| b.cmp(a));
+        for v in versions {
+            dirs.push(v.join("bin"));
+        }
+    }
+
+    // --- fnm (Fast Node Manager) ---
+    let fnm_dir = home.join(".fnm").join("node-versions");
+    if let Ok(entries) = std::fs::read_dir(&fnm_dir) {
+        let mut versions: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path().join("installation").join("bin"))
+            .filter(|p| p.is_dir())
+            .collect();
+        versions.sort_by(|a, b| b.cmp(a));
+        dirs.extend(versions);
+    }
+
+    // --- Homebrew (Apple Silicon + Intel) ---
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+
+    // --- Cargo (Rust) ---
+    dirs.push(home.join(".cargo").join("bin"));
+
+    // --- Global npm prefix (non-nvm installs) ---
+    dirs.push(PathBuf::from("/usr/local/lib/node_modules/.bin"));
+    dirs.push(home.join(".npm-global").join("bin"));
+
+    // --- Bun ---
+    dirs.push(home.join(".bun").join("bin"));
+
+    dirs
 }

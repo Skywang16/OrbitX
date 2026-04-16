@@ -20,25 +20,28 @@
   interface Props {
     messages: Message[]
     isLoading?: boolean
-    sessionId?: number | null
+    threadId?: number | null
     workspacePath?: string
     domId?: string
   }
 
   const props = defineProps<Props>()
 
-  // Get the last 3 historical sessions for the current workspace (excluding the current session)
-  const recentSessions = computed(() => {
+  // Get the last 3 historical threads for the current workspace (excluding the current thread)
+  const recentThreads = computed(() => {
     const path = props.workspacePath || workspaceStore.currentWorkspacePath
-    return workspaceStore.getTopLevelSessions(path).filter(s => s.id !== props.sessionId).slice(0, 3)
+    return workspaceStore
+      .getTopLevelThreads(path)
+      .filter(s => s.id !== props.threadId)
+      .slice(0, 3)
   })
 
   // Current workspace display name
   const currentWorkspaceName = computed(() => {
     const path = props.workspacePath || workspaceStore.currentWorkspacePath
-    if (!path) return 'OpenCodex'
+    if (!path) return 'OrbitX'
     const parts = path.split('/').filter(Boolean)
-    return parts[parts.length - 1] || 'OpenCodex'
+    return parts[parts.length - 1] || 'OrbitX'
   })
 
   // Workspace dropdown
@@ -58,7 +61,7 @@
           })
           if (selected && typeof selected === 'string') {
             await workspaceStore.loadTree()
-            await workspaceStore.loadSessionViews(selected)
+            await workspaceStore.loadThreadViews(selected)
           }
         },
       },
@@ -68,7 +71,7 @@
             ...workspaces.slice(0, 8).map(ws => ({
               label: ws.displayName || ws.path.split('/').pop() || ws.path,
               onClick: async () => {
-                await workspaceStore.loadSessionViews(ws.path)
+                await workspaceStore.loadThreadViews(ws.path)
               },
             })),
           ]
@@ -78,8 +81,8 @@
     await showPopoverAt(rect.left, rect.bottom + 4, items)
   }
 
-  const handleSelectSession = (sessionId: number) => {
-    aiChatStore.switchSession(sessionId)
+  const handleSelectThread = (threadId: number) => {
+    aiChatStore.switchThread(threadId)
   }
 
   const messageListRef = ref<HTMLElement | null>(null)
@@ -88,7 +91,10 @@
   const scrollToBottom = async () => {
     await nextTick()
     if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+      messageListRef.value.scrollTo({
+        top: messageListRef.value.scrollHeight,
+        behavior: 'smooth',
+      })
     }
   }
 
@@ -112,8 +118,8 @@
 
   // Get checkpoint for the message (using message.id to find)
   const getCheckpoint = (message: Message) => {
-    if (!props.sessionId || !props.workspacePath || message.role !== 'user') return null
-    return getCheckpointByMessageId(props.sessionId, props.workspacePath, message.id)
+    if (!props.threadId || !props.workspacePath || message.role !== 'user') return null
+    return getCheckpointByMessageId(props.threadId, props.workspacePath, message.id)
   }
 
   // New messages appended at bottom → scroll to bottom
@@ -124,15 +130,15 @@
       await scrollToBottom()
 
       const last = props.messages[newLength - 1]
-      if (last?.role === 'user' && props.sessionId && props.sessionId > 0 && props.workspacePath) {
-        await loadCheckpoints(props.sessionId, props.workspacePath)
+      if (last?.role === 'user' && props.threadId && props.threadId > 0 && props.workspacePath) {
+        await loadCheckpoints(props.threadId, props.workspacePath)
       }
     }
   )
 
   // Session switch → reload checkpoints + scroll to bottom
   watch(
-    () => [props.sessionId, props.workspacePath] as const,
+    () => [props.threadId, props.workspacePath] as const,
     async ([newId, workspacePath]) => {
       if (newId && newId > 0 && workspacePath) {
         await loadCheckpoints(newId, workspacePath)
@@ -198,15 +204,15 @@
         </button>
 
         <!-- Recent sessions as quick cards -->
-        <div v-if="recentSessions.length > 0" class="quick-cards">
+        <div v-if="recentThreads.length > 0" class="quick-cards">
           <div
-            v-for="session in recentSessions"
-            :key="session.id"
+            v-for="thread in recentThreads"
+            :key="thread.id"
             class="quick-card"
-            @click="handleSelectSession(session.id)"
+            @click="handleSelectThread(thread.id)"
           >
-            <span class="quick-card-title">{{ session.title }}</span>
-            <span class="quick-card-time">{{ formatRelativeTime(session.updatedAt * 1000) }}</span>
+            <span class="quick-card-title">{{ thread.title }}</span>
+            <span class="quick-card-time">{{ formatRelativeTime(thread.updatedAt * 1000) }}</span>
           </div>
         </div>
       </div>
@@ -403,6 +409,18 @@
 
   .message-container > :deep(*) {
     border-bottom: none;
+    animation: message-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes message-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .loading-more {

@@ -1,25 +1,13 @@
 import { agentApi } from '@/api/agent'
-import type { TaskProgressPayload, TaskProgressStream } from '@/api/agent/types'
-import type { ExecutionNodeRecord } from '@/api/workspace'
+import type { AgentRunEvent, AgentRunStream } from '@/api/agent/types'
 import { useAISettingsStore } from '@/components/settings/components/AI'
 import type { ImageAttachment } from '@/stores/imageLightbox'
 import { useLayoutStore } from '@/stores/layout'
 import { useToolConfirmationDialogStore } from '@/stores/toolConfirmationDialog'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { RetryStatus } from '@/types'
-import type { Block } from '@/types/domain/aiMessage'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-
-type TaskBlock = Extract<Block, { type: 'subtask' }>
-
-interface ActiveExecutionNode {
-  nodeId: number
-  backingSessionId: number
-  title: string
-  profile: string
-  status: 'queued' | 'running' | 'completed' | 'error' | 'cancelled'
-}
 
 export interface QueuedMessage {
   id: string
@@ -49,25 +37,25 @@ export const useAIChatStore = defineStore('ai-chat', () => {
   const retryStatus = ref<RetryStatus | null>(null)
   const pendingCommandId = ref<string | null>(null)
 
-  // Message queue: per-session, memory-only (no persistence)
+  // Message queue: per-thread, memory-only (no persistence)
   const messageQueueMap = ref<Map<number, QueuedMessage[]>>(new Map())
   const userCancelled = ref(false)
 
-  // Pure read: returns current session queue or empty array (no side effects)
-  const currentSessionQueue = computed<QueuedMessage[]>(() => {
-    const sid = currentSession.value?.id
-    if (sid == null) return []
-    return messageQueueMap.value.get(sid) ?? []
+  // Pure read: returns current thread queue or empty array (no side effects)
+  const currentThreadQueue = computed<QueuedMessage[]>(() => {
+    const tid = currentThread.value?.id
+    if (tid == null) return []
+    return messageQueueMap.value.get(tid) ?? []
   })
 
-  // Write path: ensures queue array exists for current session
+  // Write path: ensures queue array exists for current thread
   const getOrCreateQueue = (): QueuedMessage[] | null => {
-    const sid = currentSession.value?.id
-    if (sid == null) return null
-    let q = messageQueueMap.value.get(sid)
+    const tid = currentThread.value?.id
+    if (tid == null) return null
+    let q = messageQueueMap.value.get(tid)
     if (!q) {
       q = []
-      messageQueueMap.value.set(sid, q)
+      messageQueueMap.value.set(tid, q)
     }
     return q
   }
@@ -114,84 +102,40 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     await sendMessage(next.content, next.images)
   }
 
-  // Task execution state — single source of truth
-  // idle: no task running
-  // pending: sendMessage called, waiting for task_created (session unknown yet)
-  // running: task_created received, we know both taskId and sessionId
-  type TaskExecState =
+  // Agent run state — single source of truth
+  // idle: no agent run active
+  // pending: sendMessage called, waiting for agent_run_created (thread unknown yet)
+  // running: agent_run_created received, we know both run id and thread id
+  type AgentRunState =
     | { status: 'idle' }
     | { status: 'pending' }
-    | { status: 'running'; taskId: string; sessionId: number }
+    | { status: 'running'; runId: string; threadId: number }
 
-  const taskState = ref<TaskExecState>({ status: 'idle' })
+  const runState = ref<AgentRunState>({ status: 'idle' })
 
-  const resetTaskState = () => {
-    taskState.value = { status: 'idle' }
+  const resetRunState = () => {
+    runState.value = { status: 'idle' }
   }
 
-  // All external queries derived from taskState
-  const isSending = computed(() => taskState.value.status !== 'idle')
-  const isCurrentSessionSending = computed(() => {
-    const s = taskState.value
+  // All external queries derived from runState
+  const isSending = computed(() => runState.value.status !== 'idle')
+  const isCurrentThreadSending = computed(() => {
+    const s = runState.value
     if (s.status === 'idle') return false
     if (s.status === 'pending') return true
-    return s.sessionId === currentSession.value?.id
+    return s.threadId === currentThread.value?.id
   })
-  const isSessionRunning = (sessionId: number): boolean => {
-    const s = taskState.value
-    return s.status === 'running' && s.sessionId === sessionId
+  const isThreadRunning = (threadId: number): boolean => {
+    const s = runState.value
+    return s.status === 'running' && s.threadId === threadId
   }
 
   // Derived
   const currentWorkspacePath = computed(() => workspaceStore.currentWorkspacePath)
   const hasWorkspace = computed(() => workspaceStore.hasWorkspace)
-  const currentSession = computed(() => workspaceStore.selectedSession)
+  const currentThread = computed(() => workspaceStore.selectedThread)
   const messageList = computed(() => workspaceStore.messages.filter(m => !m.isInternal))
   const canSendMessage = computed(() => !isSending.value && aiSettingsStore.hasModels && hasWorkspace.value)
-
-  const activeTaskBlocks = computed((): TaskBlock[] => {
-    const map = new Map<number, TaskBlock>()
-    for (const msg of workspaceStore.messages) {
-      for (const block of msg.blocks) {
-        if (block.type === 'subtask') {
-          map.set(block.childSessionId, block as TaskBlock)
-        }
-      }
-    }
-    return [...map.values()].filter(b => b.status === 'running' || b.status === 'pending')
-  })
-
-  const activeExecutionNodes = computed((): ActiveExecutionNode[] => {
-    const workspacePath = currentWorkspacePath.value
-    if (!workspacePath) return []
-
-    const workspaceNode = workspaceStore.getNode(workspacePath)
-    if (!workspaceNode) return []
-
-    const activeNodes: ActiveExecutionNode[] = []
-    const collect = (node: ExecutionNodeRecord) => {
-      if (
-        node.role !== 'root' &&
-        typeof node.backingSessionId === 'number' &&
-        (node.status === 'queued' || node.status === 'running')
-      ) {
-        activeNodes.push({
-          nodeId: node.id,
-          backingSessionId: node.backingSessionId,
-          title: node.title,
-          profile: node.profile,
-          status: node.status,
-        })
-      }
-      node.children.forEach(collect)
-    }
-
-    for (const sessionView of workspaceNode.sessionViews) {
-      sessionView.executionTree.forEach(collect)
-    }
-
-    return activeNodes
-  })
 
   const extractContextUsage = () => {
     const msgs = workspaceStore.messages
@@ -217,36 +161,42 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     layoutStore.setAiSidebarWidth(width)
   }
 
-  // Session operations
-  const isCreatingSession = ref(false)
+  // Thread operations
+  const isCreatingThread = ref(false)
 
   const startNewChat = async () => {
-    if (isCreatingSession.value) return
-    isCreatingSession.value = true
+    if (isCreatingThread.value) return
+    isCreatingThread.value = true
     try {
       const path = currentWorkspacePath.value
       if (path) {
-        await workspaceStore.createSession(path)
+        await workspaceStore.createThread(path)
       } else {
         workspaceStore.clearSelection()
       }
       contextUsage.value = null
     } finally {
-      isCreatingSession.value = false
+      isCreatingThread.value = false
     }
   }
 
-  const switchSession = async (sessionId: number) => {
+  const switchThread = async (threadId: number) => {
     const path = currentWorkspacePath.value
     if (!path) return
-    await workspaceStore.selectSessionById(sessionId, path)
+    await workspaceStore.selectThreadById(threadId, path)
     extractContextUsage()
   }
 
+  const getCurrentThreadSubagentsForMessage = (messageId: number) => {
+    const threadId = currentThread.value?.id
+    if (!threadId) return []
+    return workspaceStore.getSubagents(threadId).filter(subagent => subagent.parentMessageId === messageId)
+  }
+
   // Agent event handling
-  const handleAgentEvent = (event: TaskProgressPayload) => {
+  const handleAgentEvent = (event: AgentRunEvent) => {
     switch (event.type) {
-      case 'task_retrying':
+      case 'agent_run_retrying':
         retryStatus.value = {
           attempt: event.attempt,
           maxAttempts: event.maxAttempts,
@@ -258,21 +208,19 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         retryStatus.value = null
         workspaceStore.upsertMessage(event.message)
         if (event.message.role === 'user' && currentWorkspacePath.value) {
-          void workspaceStore.loadSessionViews(currentWorkspacePath.value)
+          void workspaceStore.loadThreadViews(currentWorkspacePath.value)
         }
+        break
+      case 'subagent_created':
+      case 'subagent_updated':
+        workspaceStore.upsertSubagent(event.subagent)
         break
       case 'block_appended':
         retryStatus.value = null
         workspaceStore.appendBlock(event.messageId, event.block)
-        if (event.block.type === 'subtask' && currentWorkspacePath.value) {
-          void workspaceStore.loadSessionViews(currentWorkspacePath.value)
-        }
         break
       case 'block_updated':
         workspaceStore.updateBlock(event.messageId, event.blockId, event.block)
-        if (event.block.type === 'subtask' && currentWorkspacePath.value) {
-          void workspaceStore.loadSessionViews(currentWorkspacePath.value)
-        }
         break
       case 'message_finished': {
         workspaceStore.finishMessage(event.messageId, {
@@ -285,10 +233,10 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         if (event.contextUsage) {
           contextUsage.value = event.contextUsage
         }
-        const s = taskState.value
+        const s = runState.value
         const msg = workspaceStore.messages.find(m => m.id === event.messageId)
-        if (s.status === 'running' && msg && msg.sessionId === s.sessionId && !msg.isSummary) {
-          resetTaskState()
+        if (s.status === 'running' && msg && msg.threadId === s.threadId && !msg.isSummary) {
+          resetRunState()
         }
         break
       }
@@ -300,50 +248,50 @@ export const useAIChatStore = defineStore('ai-chat', () => {
           summary: event.summary,
         })
         break
-      case 'task_completed':
+      case 'agent_run_completed':
         retryStatus.value = null
-        if (taskState.value.status !== 'running' || event.taskId === taskState.value.taskId) {
-          resetTaskState()
+        if (runState.value.status !== 'running' || event.runId === runState.value.runId) {
+          resetRunState()
           toolConfirmStore.close()
         }
-        // Reload sessions to get updated title
+        // Reload threads to get updated title
         if (currentWorkspacePath.value) {
-          void workspaceStore.loadSessionViews(currentWorkspacePath.value)
+          void workspaceStore.loadThreadViews(currentWorkspacePath.value)
         }
         break
-      case 'task_cancelled':
-      case 'task_error':
+      case 'agent_run_cancelled':
+      case 'agent_run_error':
         retryStatus.value = null
         if (currentWorkspacePath.value) {
-          void workspaceStore.loadSessionViews(currentWorkspacePath.value)
+          void workspaceStore.loadThreadViews(currentWorkspacePath.value)
         }
-        if (taskState.value.status !== 'running' || event.taskId === taskState.value.taskId) {
-          resetTaskState()
+        if (runState.value.status !== 'running' || event.runId === runState.value.runId) {
+          resetRunState()
           toolConfirmStore.close()
         }
         break
     }
   }
 
-  const attachStreamHandlers = (stream: TaskProgressStream) => {
+  const attachStreamHandlers = (stream: AgentRunStream) => {
     let cancelSent = false
     let processingPromise: Promise<void> | null = null
 
-    const processEvent = async (event: TaskProgressPayload) => {
-      if (event.type === 'task_created') {
-        taskState.value = { status: 'running', taskId: event.taskId, sessionId: event.sessionId }
-        await workspaceStore.selectSessionById(event.sessionId, event.workspacePath)
+    const processEvent = async (event: AgentRunEvent) => {
+      if (event.type === 'agent_run_created') {
+        runState.value = { status: 'running', runId: event.runId, threadId: event.threadId }
+        await workspaceStore.selectThreadById(event.threadId, event.workspacePath)
         return
       }
 
       if (event.type === 'message_created' && event.message.isSummary) {
-        await workspaceStore.fetchMessages(event.message.sessionId)
+        await workspaceStore.fetchMessages(event.message.threadId)
         return
       }
 
-      if (!cancelSent && cancelRequested.value && taskState.value.status === 'running') {
+      if (!cancelSent && cancelRequested.value && runState.value.status === 'running') {
         cancelSent = true
-        await agentApi.cancelTask(taskState.value.taskId)
+        await agentApi.cancelRun(runState.value.runId)
       }
 
       handleAgentEvent(event)
@@ -359,9 +307,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     })
 
     stream.onError((streamError: Error) => {
-      console.error('Agent task error:', streamError)
+      console.error('Agent run error:', streamError)
       error.value = formatErrorMessage(streamError)
-      resetTaskState()
+      resetRunState()
       retryStatus.value = null
       toolConfirmStore.close()
     })
@@ -369,7 +317,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     stream.onClose(() => {
       cancelFunction.value = null
       cancelRequested.value = false
-      resetTaskState()
+      resetRunState()
       retryStatus.value = null
       // Auto-send next queued message only on natural completion
       if (!userCancelled.value) {
@@ -382,14 +330,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       if (cancelRequested.value) return
       cancelRequested.value = true
       toolConfirmStore.close()
-      const s = taskState.value
+      const s = runState.value
       if (s.status === 'running' && !cancelSent) {
         cancelSent = true
-        void agentApi.cancelTask(s.taskId).catch(cancelError => {
-          console.warn(`Failed to cancel running task '${s.taskId}':`, cancelError)
+        void agentApi.cancelRun(s.runId).catch(cancelError => {
+          console.warn(`Failed to cancel running agent run '${s.runId}':`, cancelError)
         })
       }
-      resetTaskState()
+      resetRunState()
     }
   }
 
@@ -429,9 +377,9 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       throw new Error('Please select a model in settings first')
     }
 
-    const sessionId = currentSession.value?.id ?? 0
+    const threadId = currentThread.value?.id ?? 0
 
-    taskState.value = { status: 'pending' }
+    runState.value = { status: 'pending' }
     error.value = null
 
     const { agentType, prompt } = parseAgentOverride(content)
@@ -440,11 +388,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     const commandId = pendingCommandId.value ?? undefined
     pendingCommandId.value = null
 
-    let stream: TaskProgressStream | null = null
+    let stream: AgentRunStream | null = null
     try {
-      stream = await agentApi.executeTask({
+      stream = await agentApi.executeRun({
         workspacePath,
-        sessionId,
+        threadId,
         userPrompt: prompt,
         modelId: selectedModelId,
         agentType,
@@ -456,14 +404,14 @@ export const useAIChatStore = defineStore('ai-chat', () => {
         })),
       })
     } catch (executeError) {
-      resetTaskState()
+      resetRunState()
       error.value = formatErrorMessage(executeError)
       throw executeError
     }
 
     if (!stream) {
-      resetTaskState()
-      throw new Error('Failed to create task stream')
+      resetRunState()
+      throw new Error('Failed to create agent run stream')
     }
 
     attachStreamHandlers(stream)
@@ -475,11 +423,11 @@ export const useAIChatStore = defineStore('ai-chat', () => {
       try {
         cancelFunction.value()
       } catch (e) {
-        console.warn('Failed to stop task:', e)
+        console.warn('Failed to stop agent run:', e)
         error.value = formatErrorMessage(e)
       } finally {
         cancelFunction.value = null
-        resetTaskState()
+        resetRunState()
       }
     }
   }
@@ -512,22 +460,21 @@ export const useAIChatStore = defineStore('ai-chat', () => {
 
     // Task state (derived from single source of truth)
     isSending,
-    isCurrentSessionSending,
-    isSessionRunning,
+    isCurrentThreadSending,
+    isThreadRunning,
 
     // Derived
     messageList,
-    activeTaskBlocks,
-    activeExecutionNodes,
-    currentSession,
+    currentThread,
     currentWorkspacePath,
     hasWorkspace,
+    getCurrentThreadSubagentsForMessage,
 
     // Operations
     toggleSidebar,
     setSidebarWidth,
     startNewChat,
-    switchSession,
+    switchThread,
     sendMessage,
     stopCurrentTask,
     clearError,
@@ -535,7 +482,7 @@ export const useAIChatStore = defineStore('ai-chat', () => {
     pendingCommandId,
 
     // Message queue
-    currentSessionQueue,
+    currentThreadQueue,
     enqueueMessage,
     removeQueuedMessage,
     updateQueuedMessage,

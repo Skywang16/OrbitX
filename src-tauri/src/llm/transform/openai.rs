@@ -30,8 +30,8 @@ use serde_json::{json, Value as JsonValue};
 /// # Example
 ///
 /// ```rust
-/// use opencodex::llm::anthropic_types::*;
-/// use opencodex::llm::transform::openai::convert_to_openai_messages;
+/// use orbitx::llm::anthropic_types::*;
+/// use orbitx::llm::transform::openai::convert_to_openai_messages;
 ///
 /// let messages = vec![
 ///     MessageParam::user("Hello!"),

@@ -1,4 +1,4 @@
-import type { ExecuteTaskParams, TaskProgressPayload } from '@/api/agent/types'
+import type { AgentRunEvent, ExecuteRunParams } from '@/api/agent/types'
 import { channelApi } from './index'
 
 /**
@@ -6,25 +6,29 @@ import { channelApi } from './index'
  */
 class AgentChannelApi {
   /**
-   * Create Agent task execution stream
+   * Create agent run stream
    */
-  createTaskStream = (params: ExecuteTaskParams): ReadableStream<TaskProgressPayload> => {
-    // The backend may emit task_* events for subtasks on the same event stream.
-    // Only close this stream when the *root* task (the one created by agent_execute_task) ends.
+  createRunStream = (params: ExecuteRunParams): ReadableStream<AgentRunEvent> => {
+    // The backend may emit nested sub-agent events on the same stream.
+    // Only close this stream when the root agent run ends.
     let rootTaskId: string | null = null
-    return channelApi.createStream<TaskProgressPayload>(
-      'agent_execute_task',
+    return channelApi.createStream<AgentRunEvent>(
+      'agent_execute_run',
       { params },
       {
-        cancelCommand: 'agent_cancel_task',
-        shouldClose: (event: TaskProgressPayload) => {
-          if (event.type === 'task_created') {
-            rootTaskId = event.taskId
+        cancelCommand: 'agent_cancel_run',
+        shouldClose: (event: AgentRunEvent) => {
+          if (event.type === 'agent_run_created') {
+            rootTaskId = event.runId
             return false
           }
           if (!rootTaskId) return false
-          if (event.type === 'task_completed' || event.type === 'task_cancelled' || event.type === 'task_error') {
-            return event.taskId === rootTaskId
+          if (
+            event.type === 'agent_run_completed' ||
+            event.type === 'agent_run_cancelled' ||
+            event.type === 'agent_run_error'
+          ) {
+            return event.runId === rootTaskId
           }
           return false
         },
@@ -33,7 +37,7 @@ class AgentChannelApi {
   }
 
   /**
-   * Resume task removed (no longer supported)
+   * Resume run removed (no longer supported)
    */
 }
 

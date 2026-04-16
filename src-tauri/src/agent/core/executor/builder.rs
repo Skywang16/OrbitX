@@ -1,10 +1,10 @@
 /*!
- * TaskContext builder - creates a fresh TaskContext per user turn.
+ * AgentRunContext builder - creates a fresh AgentRunContext per user turn.
  *
  * New agent system design:
  * - No persisted "agent_executions" table.
  * - Session/message tables are the single source of truth for history.
- * - A task_id is runtime-only, used for streaming + cancellation.
+ * - A run_id is runtime-only, used for streaming + cancellation.
  */
 
 use std::sync::Arc;
@@ -14,43 +14,41 @@ use tauri::ipc::Channel;
 use crate::agent::agents::AgentConfigLoader;
 use crate::agent::command_system::CommandConfigLoader;
 use crate::agent::common::truncate_chars;
-use crate::agent::config::TaskExecutionConfig;
-use crate::agent::core::context::TaskContext;
-use crate::agent::core::executor::{ExecuteTaskParams, TaskExecutor};
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
-use crate::agent::persistence::{AgentNodeRole, CreateAgentNodeParams, CreateRunParams, RunStatus};
-use crate::agent::types::TaskEvent;
+use crate::agent::config::AgentRunConfig;
+use crate::agent::core::context::AgentRunContext;
+use crate::agent::core::executor::{AgentRunExecutor, ExecuteRunParams};
+use crate::agent::error::{AgentRunError, AgentRunResult};
+use crate::agent::types::AgentRunEvent;
 
 const MAX_ACTIVE_TASKS_GLOBAL: usize = 5;
 
-impl TaskExecutor {
+impl AgentRunExecutor {
     pub async fn build_or_restore_context(
         &self,
-        params: &ExecuteTaskParams,
-        progress_channel: Option<Channel<TaskEvent>>,
-    ) -> TaskExecutorResult<Arc<TaskContext>> {
-        self.finish_running_task_for_session(params.session_id)
-            .await?;
+        params: &ExecuteRunParams,
+        progress_channel: Option<Channel<AgentRunEvent>>,
+    ) -> AgentRunResult<Arc<AgentRunContext>> {
+        self.finish_running_run_for_thread(params.thread_id).await?;
         self.enforce_task_limits().await?;
         self.create_new_context(params, progress_channel).await
     }
 
-    async fn finish_running_task_for_session(&self, session_id: i64) -> TaskExecutorResult<()> {
+    async fn finish_running_run_for_thread(&self, thread_id: i64) -> AgentRunResult<()> {
         let mut to_cancel = Vec::new();
-        for entry in self.active_tasks().iter() {
-            if entry.value().session_id == session_id {
+        for entry in self.active_runs().iter() {
+            if entry.value().thread_id == thread_id {
                 to_cancel.push(entry.key().clone());
             }
         }
 
-        for task_id in to_cancel {
+        for run_id in to_cancel {
             if let Err(err) = self
-                .cancel_task(&task_id, Some("superseded by new user message".to_string()))
+                .cancel_run(&run_id, Some("superseded by new user message".to_string()))
                 .await
             {
                 tracing::warn!(
                     "Failed to cancel superseded running task '{}': {}",
-                    task_id,
+                    run_id,
                     err
                 );
             }
@@ -61,10 +59,10 @@ impl TaskExecutor {
 
     async fn create_new_context(
         &self,
-        params: &ExecuteTaskParams,
-        progress_channel: Option<Channel<TaskEvent>>,
-    ) -> TaskExecutorResult<Arc<TaskContext>> {
-        let task_id = format!("task_{}", uuid::Uuid::new_v4());
+        params: &ExecuteRunParams,
+        progress_channel: Option<Channel<AgentRunEvent>>,
+    ) -> AgentRunResult<Arc<AgentRunContext>> {
+        let run_id = format!("task_{}", uuid::Uuid::new_v4());
 
         let requested_workspace = params.workspace_path.clone();
         let workspace_root =
@@ -81,33 +79,33 @@ impl TaskExecutor {
             };
         let cwd = workspace_root.to_string_lossy().to_string();
 
-        let session = self
+        let thread = self
             .agent_persistence()
-            .sessions()
-            .get(params.session_id)
+            .threads()
+            .get(params.thread_id)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?
             .ok_or_else(|| {
-                TaskExecutorError::StatePersistenceFailed(format!(
-                    "session {} not found",
-                    params.session_id
+                AgentRunError::StatePersistenceFailed(format!(
+                    "thread {} not found",
+                    params.thread_id
                 ))
             })?;
         let mut agent_type = match params.agent_type.clone().filter(|v| !v.trim().is_empty()) {
             Some(agent_type) => agent_type,
-            None => session.agent_type.clone(),
+            None => thread.agent_type.clone(),
         };
 
         let effective = self
             .settings_manager()
             .get_effective_settings(Some(workspace_root.clone()))
             .await
-            .map_err(|e| TaskExecutorError::ConfigurationError(e.to_string()))?;
+            .map_err(|e| AgentRunError::ConfigurationError(e.to_string()))?;
 
         let agent_configs = AgentConfigLoader::load_for_workspace(&workspace_root)
             .await
             .map_err(|e| {
-                TaskExecutorError::ConfigurationError(format!("Failed to load agent configs: {e}"))
+                AgentRunError::ConfigurationError(format!("Failed to load agent configs: {e}"))
             })?;
 
         // Get tool filter for the requested agent type.
@@ -190,80 +188,42 @@ impl TaskExecutor {
             raw_user_prompt.clone()
         };
 
-        let run = self
-            .agent_persistence()
-            .runs()
-            .create(CreateRunParams {
-                session_id: params.session_id,
-                status: RunStatus::Running,
-                summary: None,
-            })
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let root_node = self
-            .agent_persistence()
-            .agent_nodes()
-            .create(CreateAgentNodeParams {
-                run_id: run.id,
-                parent_node_id: None,
-                backing_session_id: Some(params.session_id),
-                trigger_tool_call_id: None,
-                role: AgentNodeRole::Root,
-                profile: &agent_type,
-                title: &agent_type,
-                status: RunStatus::Running,
-                worktree_path: session.worktree_path.as_deref(),
-                model_id: Some(params.model_id.as_str()),
-            })
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        self.agent_persistence()
-            .runs()
-            .set_root_node_id(run.id, root_node.id)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let ctx = TaskContext::new(crate::agent::core::context::TaskContextInit {
-            task_id: task_id.clone(),
-            session_id: params.session_id,
-            run_id: run.id,
-            node_id: root_node.id,
+        let ctx = AgentRunContext::new(crate::agent::core::context::AgentRunContextInit {
+            run_id: run_id.clone(),
+            thread_id: params.thread_id,
             user_prompt,
             agent_type,
-            config: TaskExecutionConfig::default(),
+            config: AgentRunConfig::default(),
             workspace_path: cwd,
-            updates_run_status: true,
             emit_task_events: true,
             progress_channel,
-            deps: crate::agent::core::context::TaskContextDeps {
+            deps: crate::agent::core::context::AgentRunContextDeps {
                 tool_registry,
                 repositories: Arc::clone(&self.database()),
                 agent_persistence: Arc::clone(&self.agent_persistence()),
                 checkpoint_service: self.checkpoint_service(),
                 workspace_changes: self.workspace_changes(),
-                task_execution_runner: Arc::new(self.clone()),
+                subagent_runner: Arc::new(self.clone()),
+                settings_manager: self.settings_manager(),
             },
         })
         .await?;
 
         let ctx = Arc::new(ctx);
-        self.active_tasks()
-            .insert(task_id.clone(), Arc::clone(&ctx));
+        self.active_runs().insert(run_id.clone(), Arc::clone(&ctx));
 
         Ok(ctx)
     }
 
-    async fn enforce_task_limits(&self) -> TaskExecutorResult<()> {
+    async fn enforce_task_limits(&self) -> AgentRunResult<()> {
         let global_count = self
-            .active_tasks()
+            .active_runs()
             .iter()
             .filter(|entry| entry.value().emits_task_events())
             .count();
 
         if global_count >= MAX_ACTIVE_TASKS_GLOBAL {
-            return Err(TaskExecutorError::TooManyActiveTasksGlobal {
+            return Err(AgentRunError::TooManyActiveTasksGlobal {
                 current: global_count,
                 limit: MAX_ACTIVE_TASKS_GLOBAL,
             });

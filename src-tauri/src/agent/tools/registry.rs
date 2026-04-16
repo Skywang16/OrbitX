@@ -15,15 +15,14 @@ use super::r#trait::{
     ToolResultStatus, ToolSchema,
 };
 use crate::agent::common::truncate_chars;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::builtin::file_utils::{ensure_absolute, normalize_path};
-use crate::agent::types::TaskEvent;
+use crate::agent::types::AgentRunEvent;
 use crate::agent::{
     permissions::PermissionChecker, permissions::PermissionDecision, permissions::ToolAction,
     permissions::ToolFilter,
 };
-use crate::storage::repositories::AppPreferences;
 
 struct RateLimiter {
     calls: Vec<Instant>,
@@ -103,7 +102,7 @@ pub struct ToolConfirmationManager {
 
 struct PendingConfirmation {
     tx: tokio::sync::oneshot::Sender<ToolConfirmationDecision>,
-    task_id: String,
+    run_id: String,
     workspace_path: String,
     tool_name: String,
     summary: String,
@@ -151,49 +150,80 @@ impl ToolRegistry {
 
     pub async fn resolve_confirmation(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         request_id: &str,
         decision: ToolConfirmationDecision,
     ) -> bool {
+        tracing::info!(
+            "🔐 [resolve] request_id={} decision={:?} pending_count={}",
+            request_id,
+            decision,
+            self.confirmations.pending_confirmations.len()
+        );
         let removed = self.confirmations.pending_confirmations.remove(request_id);
         let Some((_, pending)) = removed else {
+            tracing::warn!(
+                "🔐 [resolve] request_id={} NOT FOUND in pending_confirmations! Keys: {:?}",
+                request_id,
+                self.confirmations
+                    .pending_confirmations
+                    .iter()
+                    .map(|e| e.key().clone())
+                    .collect::<Vec<_>>()
+            );
             return false;
         };
 
         let workspace = pending.workspace_path.clone();
-        let task_id = pending.task_id.clone();
+        let run_id = pending.run_id.clone();
         let permission = pending.permission.clone();
         let always_patterns = pending.always_patterns.clone();
+        tracing::info!(
+            "🔐 [resolve] delivering decision to oneshot: request_id={} run_id={} tool={}",
+            request_id,
+            run_id,
+            pending.tool_name
+        );
 
         let ok = pending.tx.send(decision).is_ok();
         if !ok {
             warn!(
-                "Failed to deliver tool confirmation decision for request '{}'",
+                "🔐 [resolve] Failed to deliver tool confirmation decision for request '{}' (receiver dropped)",
+                request_id
+            );
+        } else {
+            tracing::info!(
+                "🔐 [resolve] decision delivered successfully: request_id={}",
                 request_id
             );
         }
 
         match decision {
             ToolConfirmationDecision::AllowAlways => {
-                let db = context.session().repositories();
-                if let Err(err) =
-                    persist_approval_rules(db.as_ref(), &workspace, &permission, &always_patterns)
-                        .await
+                let settings_mgr = context.settings_manager();
+                let workspace_root = std::path::PathBuf::from(&workspace);
+                if let Err(err) = persist_approval_rules_to_local_settings(
+                    &settings_mgr,
+                    &workspace_root,
+                    &permission,
+                    &always_patterns,
+                )
+                .await
                 {
                     warn!("Failed to persist tool approval rules: {}", err);
                 }
-                cascade_approvals(
-                    db.as_ref(),
-                    &workspace,
+                cascade_approvals_from_local_settings(
+                    &settings_mgr,
+                    &workspace_root,
                     &self.confirmations.pending_confirmations,
                 )
                 .await;
             }
             ToolConfirmationDecision::AllowOnce => {
-                self.cascade_allow_once(&task_id, &workspace, &permission, &always_patterns);
+                self.cascade_allow_once(&run_id, &workspace, &permission, &always_patterns);
             }
             ToolConfirmationDecision::Deny => {
-                self.cancel_pending_confirmations_for_task(context, &task_id)
+                self.cancel_pending_confirmations_for_task(context, &run_id)
                     .await;
             }
         }
@@ -206,14 +236,14 @@ impl ToolRegistry {
 
     pub async fn cancel_pending_confirmations_for_task(
         &self,
-        context: &TaskContext,
-        task_id: &str,
+        context: &AgentRunContext,
+        run_id: &str,
     ) {
         let to_cancel = self
             .confirmations
             .pending_confirmations
             .iter()
-            .filter(|entry| entry.value().task_id == task_id)
+            .filter(|entry| entry.value().run_id == run_id)
             .map(|entry| entry.key().clone())
             .collect::<Vec<_>>();
 
@@ -227,7 +257,7 @@ impl ToolRegistry {
 
     fn cascade_allow_once(
         &self,
-        task_id: &str,
+        run_id: &str,
         workspace_path: &str,
         permission: &str,
         always_patterns: &[String],
@@ -236,7 +266,7 @@ impl ToolRegistry {
         for entry in self.confirmations.pending_confirmations.iter() {
             let id = entry.key().clone();
             let p = entry.value();
-            if p.task_id != task_id {
+            if p.run_id != run_id {
                 continue;
             }
             if p.workspace_path != workspace_path {
@@ -245,7 +275,14 @@ impl ToolRegistry {
             if p.permission != permission {
                 continue;
             }
-            if p.always_patterns != always_patterns {
+            // For shell commands: cascade ALL pending shell confirmations in the same task.
+            // For other tools: require the patterns to match exactly (same file/url/etc.).
+            let should_cascade = if permission == "shell" {
+                true
+            } else {
+                p.always_patterns == always_patterns
+            };
+            if !should_cascade {
                 continue;
             }
             to_resolve.push(id);
@@ -267,12 +304,18 @@ impl ToolRegistry {
         }
     }
 
-    async fn finish_confirmation_and_pump_next(&self, context: &TaskContext, request_id: &str) {
+    async fn finish_confirmation_and_pump_next(&self, context: &AgentRunContext, request_id: &str) {
         let mut state = self.confirmations.confirmation_state.lock().await;
 
         if state.active_request_id.as_deref() == Some(request_id) {
+            tracing::info!("🔐 [pump] clearing active request: {}", request_id);
             state.active_request_id = None;
         } else {
+            tracing::info!(
+                "🔐 [pump] request {} not active (active={:?}), removing from queue",
+                request_id,
+                state.active_request_id
+            );
             // If it was queued (shouldn't happen with a single-dialog UI), drop it.
             state.queue.retain(|id| id != request_id);
         }
@@ -281,11 +324,15 @@ impl ToolRegistry {
         self.pump_next_confirmation(context).await;
     }
 
-    async fn pump_next_confirmation(&self, context: &TaskContext) {
+    async fn pump_next_confirmation(&self, context: &AgentRunContext) {
         let mut state = self.confirmations.confirmation_state.lock().await;
 
         // Only pump when there is no active request.
         if state.active_request_id.is_some() {
+            tracing::debug!(
+                "🔐 [pump] skipping pump, active request exists: {:?}",
+                state.active_request_id
+            );
             return;
         }
 
@@ -300,12 +347,15 @@ impl ToolRegistry {
             {
                 break Some(candidate);
             }
+            tracing::debug!("🔐 [pump] skipping stale queued request: {}", candidate);
         };
 
         let Some(next_id) = next else {
+            tracing::debug!("🔐 [pump] queue empty, nothing to pump");
             return;
         };
 
+        tracing::info!("🔐 [pump] activating next request: {}", next_id);
         state.active_request_id = Some(next_id.clone());
         drop(state);
 
@@ -339,7 +389,7 @@ impl ToolRegistry {
 
     async fn emit_confirmation_request(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         request_id: &str,
     ) -> ToolExecutorResult<()> {
         let pending = self
@@ -352,8 +402,8 @@ impl ToolRegistry {
             })?;
 
         context
-            .emit_event(TaskEvent::ToolConfirmationRequested {
-                task_id: pending.task_id.clone(),
+            .emit_event(AgentRunEvent::ToolConfirmationRequested {
+                run_id: pending.run_id.clone(),
                 request_id: request_id.to_string(),
                 workspace_path: pending.workspace_path.clone(),
                 tool_name: pending.tool_name.clone(),
@@ -444,7 +494,7 @@ impl ToolRegistry {
     pub async fn execute_tool(
         &self,
         tool_name: &str,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolResult {
         let start = Instant::now();
@@ -552,9 +602,9 @@ impl ToolRegistry {
         }
 
         let requires_confirmation = match settings_decision {
-            // `task` is orchestration, not a side-effecting tool. It should never be blocked by
-            // confirmation prompts (only by explicit deny rules).
-            _ if resolved == "task"
+            // Collab tools are orchestration, not direct side-effecting tools. They should not be
+            // blocked by confirmation prompts unless explicitly denied by settings.
+            _ if is_collab_tool(&resolved)
                 && !matches!(settings_decision, Some(PermissionDecision::Deny)) =>
             {
                 false
@@ -571,7 +621,13 @@ impl ToolRegistry {
         };
 
         if requires_confirmation {
-            tracing::info!("⏸️  Waiting for confirmation: {}", resolved);
+            tracing::info!(
+                "⏸️  Waiting for confirmation: {} (run_id={}, settings_decision={:?}, matched={})",
+                resolved,
+                context.run_id,
+                settings_decision,
+                settings_matched
+            );
             if let Some(blocked) = self
                 .confirm_or_block_tool(&resolved, &metadata, context, &args, &action, start)
                 .await
@@ -580,6 +636,11 @@ impl ToolRegistry {
                 return blocked;
             }
             tracing::info!("✅ Tool confirmed: {}", resolved);
+        } else {
+            tracing::debug!(
+                "🔓 No confirmation needed: {} (settings_decision={:?}, matched={}, meta_confirm={}, category={:?})",
+                resolved, settings_decision, settings_matched, metadata.requires_confirmation, metadata.category
+            );
         }
 
         let timeout = metadata.effective_timeout();
@@ -645,7 +706,7 @@ impl ToolRegistry {
     async fn requires_workspace_confirmation(
         &self,
         metadata: &ToolMetadata,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: &serde_json::Value,
     ) -> bool {
         // Only write operations need workspace boundary confirmation.
@@ -683,7 +744,7 @@ impl ToolRegistry {
         &self,
         tool_name: &str,
         metadata: &ToolMetadata,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: &serde_json::Value,
         action: &ToolAction,
         start: Instant,
@@ -705,10 +766,18 @@ impl ToolRegistry {
         let workspace = context.session().workspace.to_string_lossy().to_string();
         let (permission, always_patterns) = confirmation_scope(action, metadata);
 
-        let db = context.session().repositories();
+        let settings_mgr = context.settings_manager();
+        let workspace_root = std::path::PathBuf::from(&workspace);
 
         if let Some(ext) = external_directory_always_patterns(metadata, context, args).await {
-            if !is_preapproved(db.as_ref(), &workspace, "external_directory", &ext).await {
+            if !is_preapproved_in_local_settings(
+                &settings_mgr,
+                &workspace_root,
+                "external_directory",
+                &ext,
+            )
+            .await
+            {
                 let summary = summarize_tool_call(tool_name, metadata, args);
                 let decision = match self
                     .request_tool_confirmation(
@@ -753,7 +822,20 @@ impl ToolRegistry {
             }
         }
 
-        if is_preapproved(db.as_ref(), &workspace, &permission, &always_patterns).await {
+        if is_preapproved_in_local_settings(
+            &settings_mgr,
+            &workspace_root,
+            &permission,
+            &always_patterns,
+        )
+        .await
+        {
+            tracing::info!(
+                "🔐 [confirm] pre-approved: tool={} permission={} patterns={:?}",
+                tool_name,
+                permission,
+                always_patterns
+            );
             return None;
         }
 
@@ -804,7 +886,7 @@ impl ToolRegistry {
 
     async fn request_tool_confirmation(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         workspace_path: &str,
         tool_name: &str,
         summary: &str,
@@ -812,12 +894,20 @@ impl ToolRegistry {
         always_patterns: &[String],
     ) -> ToolExecutorResult<ToolConfirmationDecision> {
         let request_id = Uuid::new_v4().to_string();
+        tracing::info!(
+            "🔐 [confirm] creating request: id={} tool={} run_id={} permission={} patterns={:?}",
+            request_id,
+            tool_name,
+            context.run_id,
+            permission,
+            always_patterns
+        );
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.confirmations.pending_confirmations.insert(
             request_id.clone(),
             PendingConfirmation {
                 tx,
-                task_id: context.task_id.to_string(),
+                run_id: context.run_id.to_string(),
                 workspace_path: workspace_path.to_string(),
                 tool_name: tool_name.to_string(),
                 summary: summary.to_string(),
@@ -832,8 +922,18 @@ impl ToolRegistry {
             let mut state = self.confirmations.confirmation_state.lock().await;
             if state.active_request_id.is_none() {
                 state.active_request_id = Some(request_id.clone());
+                tracing::info!(
+                    "🔐 [confirm] emitting immediately: id={} (no active request)",
+                    request_id
+                );
                 true
             } else {
+                tracing::info!(
+                    "🔐 [confirm] queued: id={} (active={:?}, queue_len={})",
+                    request_id,
+                    state.active_request_id,
+                    state.queue.len()
+                );
                 state.queue.push_back(request_id.clone());
                 false
             }
@@ -841,6 +941,7 @@ impl ToolRegistry {
 
         if should_emit {
             if let Err(err) = self.emit_confirmation_request(context, &request_id).await {
+                tracing::warn!("🔐 [confirm] emit failed: id={} err={}", request_id, err);
                 self.confirmations.pending_confirmations.remove(&request_id);
                 self.finish_confirmation_and_pump_next(context, &request_id)
                     .await;
@@ -848,27 +949,48 @@ impl ToolRegistry {
             }
         }
 
+        tracing::info!(
+            "🔐 [confirm] waiting for user decision: id={} tool={}",
+            request_id,
+            tool_name
+        );
         let decision = tokio::select! {
             res = tokio::time::timeout(Duration::from_secs(600), rx) => {
                 match res {
-                    Ok(Ok(d)) => Ok(d),
-                    Ok(Err(_)) => Err(ToolExecutorError::ExecutionFailed {
-                        tool_name: tool_name.to_string(),
-                        error: "Confirmation channel closed".to_string(),
-                    }),
-                    Err(_) => Err(ToolExecutorError::ExecutionTimeout {
-                        tool_name: tool_name.to_string(),
-                        timeout_seconds: 600,
-                    }),
+                    Ok(Ok(d)) => {
+                        tracing::info!("🔐 [confirm] received decision: id={} decision={:?}", request_id, d);
+                        Ok(d)
+                    },
+                    Ok(Err(_)) => {
+                        tracing::warn!("🔐 [confirm] oneshot channel closed (sender dropped): id={}", request_id);
+                        Err(ToolExecutorError::ExecutionFailed {
+                            tool_name: tool_name.to_string(),
+                            error: "Confirmation channel closed".to_string(),
+                        })
+                    },
+                    Err(_) => {
+                        tracing::warn!("🔐 [confirm] timed out after 600s: id={}", request_id);
+                        Err(ToolExecutorError::ExecutionTimeout {
+                            tool_name: tool_name.to_string(),
+                            timeout_seconds: 600,
+                        })
+                    },
                 }
             }
-            _ = context.states.abort_token.cancelled() => Err(ToolExecutorError::ExecutionFailed {
-                tool_name: tool_name.to_string(),
-                error: "Task aborted; confirmation cancelled".to_string(),
-            })
+            _ = context.states.abort_token.cancelled() => {
+                tracing::warn!("🔐 [confirm] aborted: id={}", request_id);
+                Err(ToolExecutorError::ExecutionFailed {
+                    tool_name: tool_name.to_string(),
+                    error: "Task aborted; confirmation cancelled".to_string(),
+                })
+            }
         };
 
         if decision.is_err() {
+            tracing::warn!(
+                "🔐 [confirm] cleaning up failed confirmation: id={}",
+                request_id
+            );
             self.confirmations.pending_confirmations.remove(&request_id);
             self.finish_confirmation_and_pump_next(context, &request_id)
                 .await;
@@ -880,7 +1002,7 @@ impl ToolRegistry {
     async fn execute_tool_impl(
         &self,
         tool_name: &str,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
         start: Instant,
     ) -> ToolResult {
@@ -1016,7 +1138,7 @@ impl ToolRegistry {
             .iter()
             .filter(|entry| {
                 let tool_name = entry.value().tool.name();
-                if tool_name == "task" && context.allowed_task_profiles.is_empty() {
+                if tool_name == "task" && context.allowed_subagent_types.is_empty() {
                     return false;
                 }
                 let action = build_tool_action_for_prompt(tool_name, workspace_root.clone());
@@ -1081,7 +1203,7 @@ fn build_tool_action_for_prompt(tool_name: &str, workspace_root: PathBuf) -> Too
 fn build_tool_action(
     tool_name: &str,
     metadata: &ToolMetadata,
-    context: &TaskContext,
+    context: &AgentRunContext,
     args: &serde_json::Value,
 ) -> ToolAction {
     let workspace_root = PathBuf::from(context.cwd.as_ref());
@@ -1152,10 +1274,14 @@ fn build_tool_action(
     }
 }
 
+fn is_collab_tool(tool_name: &str) -> bool {
+    tool_name == "task"
+}
+
 fn path_variants(
     args: &serde_json::Value,
     metadata: &ToolMetadata,
-    context: &TaskContext,
+    context: &AgentRunContext,
 ) -> Vec<String> {
     let Some(path) = tool_path_arg(args, metadata) else {
         return vec![];
@@ -1251,11 +1377,6 @@ pub enum ToolConfirmationDecision {
     Deny,
 }
 
-fn approval_rules_preference_key(workspace_path: &str) -> String {
-    let digest = blake3::hash(workspace_path.as_bytes());
-    format!("agent.tool_confirmation.ruleset.{}", digest.to_hex())
-}
-
 fn confirmation_scope(action: &ToolAction, metadata: &ToolMetadata) -> (String, Vec<String>) {
     let permission = action.tool.clone();
 
@@ -1269,6 +1390,9 @@ fn confirmation_scope(action: &ToolAction, metadata: &ToolMetadata) -> (String, 
         return (permission, vec!["*".to_string()]);
     }
 
+    // For shell (Execution) commands: use the actual command string as patterns.
+    // This lets AllowAlways write a specific Bash(prefix:*) rule, while AllowOnce
+    // cascade uses permission-level matching (all shell in same task are cascaded).
     let pattern = match action.param_variants.first() {
         Some(pattern) => pattern.clone(),
         None => "*".to_string(),
@@ -1278,7 +1402,7 @@ fn confirmation_scope(action: &ToolAction, metadata: &ToolMetadata) -> (String, 
 
 async fn external_directory_always_patterns(
     metadata: &ToolMetadata,
-    context: &TaskContext,
+    context: &AgentRunContext,
     args: &serde_json::Value,
 ) -> Option<Vec<String>> {
     if !matches!(
@@ -1331,136 +1455,245 @@ async fn external_directory_always_patterns(
     Some(vec![format!("{canon_str}/*")])
 }
 
-async fn load_approval_rules(
-    db: &crate::storage::DatabaseManager,
-    workspace_path: &str,
-) -> std::collections::HashSet<(String, String)> {
-    let key = approval_rules_preference_key(workspace_path);
-    let stored = match AppPreferences::new(db).get(&key).await {
-        Ok(Some(value)) => value,
-        Ok(None) => return std::collections::HashSet::new(),
-        Err(err) => {
-            tracing::warn!(
-                "Failed to load approval rules for workspace {}: {}",
-                workspace_path,
-                err
-            );
-            return std::collections::HashSet::new();
-        }
-    };
-    if stored.trim().is_empty() {
-        return std::collections::HashSet::new();
+/// Extract a meaningful command prefix for use in a `Bash(prefix:*)` permission rule.
+///
+/// Strategy (mirrors Claude Code's observable behavior):
+///   - If the binary is a well-known subcommand-based CLI (npm, cargo, git, …),
+///     take the first **two** tokens so that e.g. `npm run dev` → `npm run`.
+///   - Otherwise take only the first token (binary name).
+///
+/// The result is used as `Bash(<prefix>:*)` in `.orbitx/settings.local.json`.
+fn bash_allow_prefix(command: &str) -> String {
+    let cmd = command.trim();
+    if cmd.is_empty() {
+        return String::new();
     }
-    let list = match serde_json::from_str::<Vec<StoredApprovalRule>>(&stored) {
-        Ok(list) => list,
-        Err(err) => {
-            tracing::warn!(
-                "Invalid approval rules JSON for workspace {}: {}",
-                workspace_path,
-                err
-            );
-            return std::collections::HashSet::new();
-        }
+
+    // Tools where the second word is a meaningful subcommand worth capturing.
+    const SUBCOMMAND_TOOLS: &[&str] = &[
+        "npm",
+        "npx",
+        "yarn",
+        "pnpm",
+        "bun",
+        "cargo",
+        "rustup",
+        "git",
+        "docker",
+        "docker-compose",
+        "podman",
+        "kubectl",
+        "helm",
+        "terraform",
+        "python",
+        "python3",
+        "pip",
+        "pip3",
+        "go",
+        "mvn",
+        "gradle",
+        "aws",
+        "gcloud",
+        "az",
+        "make",
+    ];
+
+    let Ok(tokens) = shell_words::split(cmd) else {
+        // If shell parsing fails, fall back to first whitespace-separated word.
+        return cmd.split_whitespace().next().unwrap_or(cmd).to_string();
     };
-    list.into_iter()
-        .map(|r| (r.permission, r.pattern))
-        .collect()
+
+    let binary = match tokens.first() {
+        Some(b) => b.as_str(),
+        None => return String::new(),
+    };
+
+    if SUBCOMMAND_TOOLS.contains(&binary) {
+        if let Some(sub) = tokens.get(1) {
+            // Only include the subcommand if it looks like a subcommand (no leading `-`).
+            if !sub.starts_with('-') {
+                return format!("{binary} {sub}");
+            }
+        }
+    }
+
+    binary.to_string()
 }
 
-async fn is_preapproved(
-    db: &crate::storage::DatabaseManager,
-    workspace_path: &str,
+/// Convert internal `(permission, always_patterns)` from `confirmation_scope` into a settings
+/// rule string compatible with `PermissionChecker` / `.orbitx/settings.local.json`.
+///
+/// Shell: `"npm run dev"` → `"Bash(npm run:*)"` (Claude Code format)
+/// Write: path glob    → `"Write(<path>)"`
+/// WebFetch: url       → `"WebFetch(domain:<host>)"` or `"WebFetch(url:*)"`
+fn permission_to_settings_rule(permission: &str, pattern: &str) -> String {
+    match permission {
+        "shell" => {
+            if pattern == "*" {
+                // Fallback: no specific command available.
+                "Bash(*)".to_string()
+            } else {
+                // pattern is the actual command string, e.g. "npm run dev".
+                // Extract a meaningful prefix and format as Bash(prefix:*).
+                let prefix = bash_allow_prefix(pattern);
+                if prefix.is_empty() {
+                    "Bash(*)".to_string()
+                } else {
+                    format!("Bash({prefix}:*)")
+                }
+            }
+        }
+        "write" => {
+            if pattern == "*" {
+                "Write(**)".to_string()
+            } else {
+                format!("Write({pattern})")
+            }
+        }
+        "edit" | "multi_edit" => {
+            if pattern == "*" {
+                "Edit(**)".to_string()
+            } else {
+                format!("Edit({pattern})")
+            }
+        }
+        "read" => {
+            if pattern == "*" {
+                "Read(**)".to_string()
+            } else {
+                format!("Read({pattern})")
+            }
+        }
+        "web_fetch" => {
+            if pattern == "*" {
+                "WebFetch(*)".to_string()
+            } else {
+                format!("WebFetch({pattern})")
+            }
+        }
+        "web_search" => "WebSearch".to_string(),
+        other => {
+            if pattern == "*" {
+                other.to_string()
+            } else {
+                format!("{other}({pattern})")
+            }
+        }
+    }
+}
+
+/// Check whether a `(permission, always_patterns)` tuple is already allowed by the
+/// rules in `.orbitx/settings.local.json`.
+async fn is_preapproved_in_local_settings(
+    settings_mgr: &crate::settings::SettingsManager,
+    workspace_root: &std::path::Path,
     permission: &str,
     always_patterns: &[String],
 ) -> bool {
-    let rules = load_approval_rules(db, workspace_path).await;
-    always_patterns
-        .iter()
-        .all(|p| rules.contains(&(permission.to_string(), p.clone())))
-}
-
-async fn persist_approval_rules(
-    db: &crate::storage::DatabaseManager,
-    workspace_path: &str,
-    permission: &str,
-    patterns: &[String],
-) -> ToolExecutorResult<()> {
-    let key = approval_rules_preference_key(workspace_path);
-    let prefs = AppPreferences::new(db);
-
-    let existing = prefs
-        .get(&key)
+    let local = match settings_mgr
+        .get_workspace_local_settings(workspace_root)
         .await
-        .map_err(|err| ToolExecutorError::ExecutionFailed {
-            tool_name: "approval_rules".to_string(),
-            error: format!("Failed to load existing approval rules: {err}"),
-        })?;
-    let mut rules = if existing
-        .as_deref()
-        .is_none_or(|stored| stored.trim().is_empty())
     {
-        Vec::<StoredApprovalRule>::new()
-    } else {
-        let existing_rules =
-            existing
-                .as_deref()
-                .ok_or_else(|| ToolExecutorError::ExecutionFailed {
-                    tool_name: "approval_rules".to_string(),
-                    error: "Approval rules value disappeared before parsing".to_string(),
-                })?;
-        serde_json::from_str::<Vec<StoredApprovalRule>>(existing_rules).map_err(|err| {
-            ToolExecutorError::ExecutionFailed {
-                tool_name: "approval_rules".to_string(),
-                error: format!("Failed to parse approval rules JSON: {err}"),
-            }
-        })?
+        Ok(Some(s)) => s,
+        Ok(None) => return false,
+        Err(err) => {
+            tracing::warn!(
+                "Failed to read local settings for pre-approval check: {}",
+                err
+            );
+            return false;
+        }
     };
 
-    for p in patterns {
-        if rules
-            .iter()
-            .any(|r| r.permission == permission && r.pattern == *p)
-        {
-            continue;
-        }
-        rules.push(StoredApprovalRule {
-            permission: permission.to_string(),
-            pattern: p.clone(),
-        });
-    }
+    // Build a temporary PermissionChecker from the local rules so we can use its
+    // pattern matching logic rather than reimplementing it here.
+    let checker = crate::agent::permissions::PermissionChecker::new(&local.permissions);
 
-    let json = serde_json::to_string(&rules).map_err(|err| ToolExecutorError::ExecutionFailed {
-        tool_name: "approval_rules".to_string(),
-        error: format!("Failed to serialize approval rules: {err}"),
-    })?;
-    prefs.set(&key, Some(json.as_str())).await.map_err(|err| {
-        ToolExecutorError::ExecutionFailed {
-            tool_name: "approval_rules".to_string(),
-            error: format!("Failed to persist approval rules: {err}"),
+    // Build a synthetic ToolAction representing the permission + patterns and ask whether
+    // the local settings explicitly allow it.
+    always_patterns.iter().all(|p| {
+        // Translate back to the rule string that PermissionChecker understands.
+        let rule = permission_to_settings_rule(permission, p);
+        // Parse the rule into a ToolAction for matching.
+        if let Some(parsed) = crate::agent::permissions::pattern::PermissionPattern::parse(&rule) {
+            let action = crate::agent::permissions::ToolAction {
+                tool: parsed.tool.clone(),
+                param_variants: parsed
+                    .param
+                    .as_deref()
+                    .map(|s| vec![s.to_string()])
+                    .unwrap_or_default(),
+                workspace_root: workspace_root.to_path_buf(),
+            };
+            matches!(
+                checker.check(&action),
+                crate::agent::permissions::PermissionDecision::Allow
+            )
+        } else {
+            false
         }
-    })?;
-    Ok(())
+    })
 }
 
-async fn cascade_approvals(
-    db: &crate::storage::DatabaseManager,
-    workspace_path: &str,
+/// Append new allow-rules to `.orbitx/settings.local.json`.
+/// Creates the file if it does not exist yet.
+async fn persist_approval_rules_to_local_settings(
+    settings_mgr: &crate::settings::SettingsManager,
+    workspace_root: &std::path::Path,
+    permission: &str,
+    patterns: &[String],
+) -> Result<(), String> {
+    let mut local = settings_mgr
+        .get_workspace_local_settings(workspace_root)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
+
+    for p in patterns {
+        let rule = permission_to_settings_rule(permission, p);
+        if !local.permissions.allow.contains(&rule) {
+            local.permissions.allow.push(rule);
+        }
+    }
+
+    settings_mgr
+        .update_workspace_local_settings(workspace_root, &local)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// After persisting AllowAlways rules, automatically resolve all pending confirmations
+/// in the same workspace that are now covered by the updated local settings.
+async fn cascade_approvals_from_local_settings(
+    settings_mgr: &crate::settings::SettingsManager,
+    workspace_root: &std::path::Path,
     pending: &DashMap<String, PendingConfirmation>,
 ) {
-    let rules = load_approval_rules(db, workspace_path).await;
+    let workspace_str = workspace_root.to_string_lossy().to_string();
+
+    // Collect candidates first to avoid holding the DashMap borrow while doing async I/O.
+    let candidates: Vec<(String, String, Vec<String>)> = pending
+        .iter()
+        .filter(|entry| entry.value().workspace_path == workspace_str)
+        .map(|entry| {
+            (
+                entry.key().clone(),
+                entry.value().permission.clone(),
+                entry.value().always_patterns.clone(),
+            )
+        })
+        .collect();
 
     let mut to_resolve = Vec::new();
-    for entry in pending.iter() {
-        let id = entry.key().clone();
-        let p = entry.value();
-        if p.workspace_path != workspace_path {
-            continue;
-        }
-        let ok = p
-            .always_patterns
-            .iter()
-            .all(|pat| rules.contains(&(p.permission.clone(), pat.clone())));
-        if ok {
+    for (id, permission, always_patterns) in candidates {
+        if is_preapproved_in_local_settings(
+            settings_mgr,
+            workspace_root,
+            &permission,
+            &always_patterns,
+        )
+        .await
+        {
             to_resolve.push(id);
         }
     }
@@ -1527,7 +1760,7 @@ impl ToolConfirmationManager {
     pub fn lookup_task_id(&self, request_id: &str) -> Option<String> {
         self.pending_confirmations
             .get(request_id)
-            .map(|entry| entry.value().task_id.clone())
+            .map(|entry| entry.value().run_id.clone())
     }
 }
 

@@ -7,12 +7,12 @@ pub enum WorkspaceError {
     #[error("Workspace not found: {path}")]
     WorkspaceNotFound { path: String },
 
-    #[error("Session not found: {id}")]
-    SessionNotFound { id: i64 },
+    #[error("Thread not found: {id}")]
+    ThreadNotFound { id: i64 },
 
-    #[error("Session {session_id} does not belong to workspace {workspace_path}")]
-    SessionWorkspaceMismatch {
-        session_id: i64,
+    #[error("Thread {thread_id} does not belong to workspace {workspace_path}")]
+    ThreadWorkspaceMismatch {
+        thread_id: i64,
         workspace_path: String,
     },
 
@@ -38,13 +38,13 @@ impl WorkspaceError {
         WorkspaceError::WorkspaceNotFound { path: path.into() }
     }
 
-    pub fn session_not_found(id: i64) -> Self {
-        WorkspaceError::SessionNotFound { id }
+    pub fn thread_not_found(id: i64) -> Self {
+        WorkspaceError::ThreadNotFound { id }
     }
 
-    pub fn session_workspace_mismatch(session_id: i64, workspace_path: impl Into<String>) -> Self {
-        WorkspaceError::SessionWorkspaceMismatch {
-            session_id,
+    pub fn thread_workspace_mismatch(thread_id: i64, workspace_path: impl Into<String>) -> Self {
+        WorkspaceError::ThreadWorkspaceMismatch {
+            thread_id,
             workspace_path: workspace_path.into(),
         }
     }

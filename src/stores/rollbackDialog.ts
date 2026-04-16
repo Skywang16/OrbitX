@@ -31,7 +31,7 @@ export const useRollbackDialogStore = defineStore('rollbackDialog', () => {
         return
       }
 
-      const childCheckpoint = getChildCheckpoint(data.checkpoint.sessionId, data.workspacePath, data.checkpoint.id)
+      const childCheckpoint = getChildCheckpoint(data.checkpoint.threadId, data.workspacePath, data.checkpoint.id)
 
       if (childCheckpoint) {
         files.value = await checkpointApi.diff(data.checkpoint.id, childCheckpoint.id, data.workspacePath)

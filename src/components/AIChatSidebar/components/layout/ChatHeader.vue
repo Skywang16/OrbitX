@@ -3,21 +3,23 @@
    * ChatHeader - Header of the chat sidebar
    * Note: This component is only used in AIChatSidebar, the main interface uses MainChatArea
    */
-  import type { SessionRecord } from '@/api/workspace'
+  import type { ThreadRecord } from '@/api/workspace'
   import { useI18n } from 'vue-i18n'
   import SessionSelect from './SessionSelect.vue'
 
   interface Props {
-    sessions: SessionRecord[]
-    currentSessionId?: number | null
+    threads: ThreadRecord[]
+    currentThreadId?: number | null
+    parentThreadId?: number | null
     selectedLabel?: string | null
     isLoading?: boolean
   }
 
   interface Emits {
-    (e: 'select-session', sessionId: number): void
-    (e: 'create-new-session'): void
-    (e: 'refresh-sessions'): void
+    (e: 'select-thread', threadId: number): void
+    (e: 'create-new-thread'): void
+    (e: 'refresh-threads'): void
+    (e: 'go-back'): void
   }
 
   withDefaults(defineProps<Props>(), {
@@ -27,35 +29,40 @@
   const emit = defineEmits<Emits>()
   const { t } = useI18n()
 
-  const handleSelectSession = (sessionId: number) => {
-    emit('select-session', sessionId)
+  const handleSelectThread = (threadId: number) => {
+    emit('select-thread', threadId)
   }
 
-  const handleCreateNewSession = () => {
-    emit('create-new-session')
+  const handleCreateNewThread = () => {
+    emit('create-new-thread')
   }
 
-  const handleRefreshSessions = () => {
-    emit('refresh-sessions')
+  const handleRefreshThreads = () => {
+    emit('refresh-threads')
   }
 </script>
 
 <template>
   <div class="chat-header">
+    <button v-if="parentThreadId" class="back-btn" @click="emit('go-back')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </button>
     <div class="header-content">
       <SessionSelect
-        :sessions="sessions"
-        :current-session-id="currentSessionId || null"
+        :threads="threads"
+        :current-thread-id="currentThreadId || null"
         :selected-label="selectedLabel || null"
         :loading="isLoading"
-        @select-session="handleSelectSession"
-        @create-new-session="handleCreateNewSession"
-        @refresh-sessions="handleRefreshSessions"
+        @select-thread="handleSelectThread"
+        @create-new-thread="handleCreateNewThread"
+        @refresh-threads="handleRefreshThreads"
       />
     </div>
 
     <div class="header-actions">
-      <button class="icon-btn" :title="t('chat.new_session')" @click="handleCreateNewSession">
+      <button class="icon-btn" :title="t('chat.new_session')" @click="handleCreateNewThread">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -75,6 +82,24 @@
     gap: 8px;
     height: 40px;
     position: relative;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-300);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .back-btn:hover {
+    color: var(--text-100);
+    background: var(--bg-300);
   }
 
   .chat-header::after {
@@ -112,15 +137,19 @@
     height: 28px;
     background: transparent;
     border: none;
-    border-radius: var(--border-radius-md);
-    color: var(--text-400);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-300);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
   }
 
   .icon-btn:hover {
-    background: var(--bg-300);
-    color: var(--text-200);
+    background: var(--color-hover);
+    color: var(--color-primary);
+  }
+
+  .icon-btn:active {
+    transform: scale(0.95);
   }
 
   .icon-btn svg {

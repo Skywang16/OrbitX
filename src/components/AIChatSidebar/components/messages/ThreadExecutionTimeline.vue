@@ -3,7 +3,7 @@
   import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 
   interface Props {
-    sessionId?: number | null
+    threadId?: number | null
     scrollContainerId: string
   }
 
@@ -13,10 +13,10 @@
   const hoveredEntryId = ref<string | null>(null)
   const timelineRowsEl = ref<HTMLElement | null>(null)
   const timelineEntries = computed(() => {
-    if (!props.sessionId || props.sessionId <= 0) {
+    if (!props.threadId || props.threadId <= 0) {
       return []
     }
-    return workspaceStore.getSessionView(props.sessionId)?.timeline ?? []
+    return workspaceStore.getThreadView(props.threadId)?.timeline ?? []
   })
   const hovered = ref(false)
   let hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -91,7 +91,7 @@
   const unbindScrollListener = () => getScrollContainer()?.removeEventListener('scroll', onScroll)
 
   watch(
-    () => [props.scrollContainerId, props.sessionId, timelineEntries.value.length],
+    () => [props.scrollContainerId, props.threadId, timelineEntries.value.length],
     () => {
       unbindScrollListener()
       updateActiveMessage()
@@ -102,7 +102,7 @@
 
   // Debounced scroll-into-view: wait until outer scrolling settles before syncing
   let syncTimer: ReturnType<typeof setTimeout> | null = null
-  watch(activeMessageId, (id) => {
+  watch(activeMessageId, id => {
     if (syncTimer) {
       clearTimeout(syncTimer)
       syncTimer = null
@@ -133,7 +133,7 @@
   -->
   <div
     v-if="timelineEntries.length > 0"
-    class="session-execution-timeline"
+    class="thread-execution-timeline"
     :class="{ hovered }"
     @mouseenter="showCard"
     @mouseleave="scheduleHide"
@@ -167,7 +167,7 @@
 </template>
 
 <style scoped>
-  .session-execution-timeline {
+  .thread-execution-timeline {
     position: absolute;
     top: 50%;
     right: 20px;
@@ -189,7 +189,7 @@
       box-shadow 0.15s ease;
   }
 
-  .session-execution-timeline.hovered {
+  .thread-execution-timeline.hovered {
     background: color-mix(in srgb, var(--bg-100) 85%, transparent);
     backdrop-filter: blur(16px) saturate(160%);
     -webkit-backdrop-filter: blur(16px) saturate(160%);
@@ -201,8 +201,8 @@
   }
 
   /* gradient fade masks */
-  .session-execution-timeline::before,
-  .session-execution-timeline::after {
+  .thread-execution-timeline::before,
+  .thread-execution-timeline::after {
     content: '';
     position: absolute;
     left: 0;
@@ -214,18 +214,18 @@
     transition: opacity 0.15s ease;
   }
 
-  .session-execution-timeline::before {
+  .thread-execution-timeline::before {
     top: 0;
     background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-100) 90%, transparent), transparent);
   }
 
-  .session-execution-timeline::after {
+  .thread-execution-timeline::after {
     bottom: 0;
     background: linear-gradient(to top, color-mix(in srgb, var(--bg-100) 90%, transparent), transparent);
   }
 
-  .session-execution-timeline.hovered::before,
-  .session-execution-timeline.hovered::after {
+  .thread-execution-timeline.hovered::before,
+  .thread-execution-timeline.hovered::after {
     opacity: 1;
   }
 
@@ -258,7 +258,7 @@
   }
 
   /* when card is open, rows become interactive for hover tracking and clicks */
-  .session-execution-timeline.hovered .timeline-row {
+  .thread-execution-timeline.hovered .timeline-row {
     pointer-events: auto;
     cursor: pointer;
   }
@@ -279,7 +279,7 @@
       color 0.12s ease;
   }
 
-  .session-execution-timeline.hovered .row-title {
+  .thread-execution-timeline.hovered .row-title {
     opacity: 1;
   }
 

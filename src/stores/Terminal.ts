@@ -358,11 +358,11 @@ export const useTerminalStore = defineStore('Terminal', () => {
       shell: 'shell',
       displayTitle: getPathBasename(initialDirectory || '~'),
       kind: 'workspace',
-      sessionId: null,
-      taskTerminalId: null,
+      threadId: null,
+      agentTerminalId: null,
       sourceLabel: null,
-      taskMode: null,
-      taskStatus: null,
+      agentMode: null,
+      agentStatus: null,
     }
 
     if (typeof options?.shellName === 'string') {

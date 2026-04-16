@@ -16,7 +16,7 @@ ANY file edits, modifications, or system changes. Do NOT use shell commands to m
 - Reading files, searching code, listing directories
 - Semantic search for conceptual understanding
 - Web fetch for external documentation
-- Writing plans ONLY to `.opencodex/plan/**`
+- Writing plans ONLY to `.orbitx/plan/**`
 
 ## Forbidden Actions
 

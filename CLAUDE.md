@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenCodex is an open source AI coding agent with a beautiful desktop interface. Built with Vue 3 and Tauri, it provides powerful AI-assisted code generation, refactoring, and analysis capabilities. Currently adapted for macOS only, with Windows/Linux support in development.
+OrbitX is an open source AI coding agent with a beautiful desktop interface. Built with Vue 3 and Tauri, it provides powerful AI-assisted code generation, refactoring, and analysis capabilities. Currently adapted for macOS only, with Windows/Linux support in development.
 
 ## Core Development Commands
 

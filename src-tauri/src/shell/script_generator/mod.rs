@@ -85,18 +85,18 @@ impl ShellScriptGenerator {
     ) -> std::collections::HashMap<String, String> {
         let mut env_vars = std::collections::HashMap::new();
 
-        env_vars.insert("OPENCODEX_SHELL_INTEGRATION".to_string(), "1".to_string());
+        env_vars.insert("ORBITX_SHELL_INTEGRATION".to_string(), "1".to_string());
 
         if self.config.enable_command_tracking {
-            env_vars.insert("OPENCODEX_COMMAND_TRACKING".to_string(), "1".to_string());
+            env_vars.insert("ORBITX_COMMAND_TRACKING".to_string(), "1".to_string());
         }
 
         if self.config.enable_cwd_sync {
-            env_vars.insert("OPENCODEX_CWD_SYNC".to_string(), "1".to_string());
+            env_vars.insert("ORBITX_CWD_SYNC".to_string(), "1".to_string());
         }
 
         if self.config.enable_title_updates {
-            env_vars.insert("OPENCODEX_TITLE_UPDATES".to_string(), "1".to_string());
+            env_vars.insert("ORBITX_TITLE_UPDATES".to_string(), "1".to_string());
         }
 
         for (key, value) in &self.config.custom_env_vars {

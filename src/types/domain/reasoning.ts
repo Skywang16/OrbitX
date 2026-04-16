@@ -13,8 +13,8 @@
 export interface ReasoningPart {
   /** Unique identifier for this reasoning part */
   id: string
-  /** Session ID this part belongs to */
-  sessionId: number
+  /** Thread ID this part belongs to */
+  threadId: number
   /** Message ID this part belongs to */
   messageId: string
   /** The reasoning/thinking text content */
@@ -87,10 +87,10 @@ export const ReasoningUtils = {
   /**
    * Create a new reasoning part with start time.
    */
-  create(id: string, sessionId: number, messageId: string): ReasoningPart {
+  create(id: string, threadId: number, messageId: string): ReasoningPart {
     return {
       id,
-      sessionId,
+      threadId,
       messageId,
       text: '',
       time: {

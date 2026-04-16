@@ -5,34 +5,57 @@ mod web_fetch_tests {
     use std::sync::Arc;
     use std::time::Duration;
     use tempfile::TempDir;
-    use terminal_lib::agent::config::TaskExecutionConfig;
+    use terminal_lib::agent::config::AgentRunConfig;
     use terminal_lib::agent::core::context::{
-        TaskContext, TaskContextDeps, TaskContextInit, TaskExecutionRequest, TaskExecutionResponse,
-        TaskExecutionRunner,
+        AgentRunContext, AgentRunContextDeps, AgentRunContextInit, SubAgentRequest,
+        SubAgentResponse, SubAgentRunner,
     };
-    use terminal_lib::agent::error::{TaskExecutorError, TaskExecutorResult};
+    use terminal_lib::agent::error::{AgentRunError, AgentRunResult};
     use terminal_lib::agent::persistence::AgentPersistence;
     use terminal_lib::agent::tools::builtin::WebFetchTool;
     use terminal_lib::agent::tools::{RunnableTool, ToolRegistry};
     use terminal_lib::agent::workspace_changes::WorkspaceChangeJournal;
+    use terminal_lib::settings::SettingsManager;
     use terminal_lib::storage::{DatabaseManager, DatabaseOptions, StoragePathsBuilder};
 
-    struct NoopTaskExecutionRunner;
+    struct NoopSubAgentRunner;
 
     #[async_trait::async_trait]
-    impl TaskExecutionRunner for NoopTaskExecutionRunner {
-        async fn run_task_execution(
+    impl SubAgentRunner for NoopSubAgentRunner {
+        async fn run_subagent(
             &self,
-            _parent: &TaskContext,
-            _request: TaskExecutionRequest,
-        ) -> TaskExecutorResult<TaskExecutionResponse> {
-            Err(TaskExecutorError::InternalError(
-                "NoopTaskExecutionRunner does not execute child tasks".to_string(),
+            _parent: &AgentRunContext,
+            _request: SubAgentRequest,
+        ) -> AgentRunResult<SubAgentResponse> {
+            Err(AgentRunError::InternalError(
+                "NoopSubAgentRunner does not execute child agents".to_string(),
+            ))
+        }
+
+        async fn spawn_subagent(
+            &self,
+            _parent: &AgentRunContext,
+            _request: SubAgentRequest,
+            _collab_call_id: String,
+            _collab_tool: String,
+        ) -> AgentRunResult<i64> {
+            Err(AgentRunError::InternalError(
+                "NoopSubAgentRunner does not spawn child agents".to_string(),
+            ))
+        }
+
+        async fn cancel_subagent(
+            &self,
+            _parent: &AgentRunContext,
+            _thread_id: i64,
+        ) -> AgentRunResult<()> {
+            Err(AgentRunError::InternalError(
+                "NoopSubAgentRunner does not cancel child agents".to_string(),
             ))
         }
     }
 
-    async fn create_test_task_context(root: &Path) -> TaskContext {
+    async fn create_test_task_context(root: &Path) -> AgentRunContext {
         let storage_root = root.join("storage");
         std::fs::create_dir_all(&storage_root).expect("failed to create test storage root");
 
@@ -64,29 +87,63 @@ mod web_fetch_tests {
             .to_string_lossy()
             .to_string();
 
-        TaskContext::new(TaskContextInit {
-            task_id: "web-fetch-test".to_string(),
-            session_id: 1,
-            run_id: 1,
-            node_id: 1,
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "INSERT INTO workspaces (path, display_name, active_thread_id, selected_run_action_id, created_at, updated_at, last_accessed_at)
+             VALUES (?, ?, NULL, NULL, ?, ?, ?)",
+        )
+        .bind(&cwd)
+        .bind("Web Fetch Test")
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(database.pool())
+        .await
+        .expect("failed to create test workspace");
+
+        let persistence = Arc::new(AgentPersistence::new(Arc::clone(&database)));
+        let thread = persistence
+            .threads()
+            .create(
+                terminal_lib::agent::rollout::projection::CreateThreadParams {
+                    workspace_path: &cwd,
+                    title: "Web Fetch Test",
+                    display_name: None,
+                    agent_type: "chat",
+                    parent_thread_id: None,
+                    spawned_by_tool_call_id: None,
+                    rollout_path: "",
+                    worktree_path: None,
+                    model_id: None,
+                    provider_id: None,
+                },
+            )
+            .await
+            .expect("failed to create test thread");
+
+        AgentRunContext::new(AgentRunContextInit {
+            run_id: "web-fetch-test".to_string(),
+            thread_id: thread.id,
             user_prompt: "test prompt".to_string(),
             agent_type: "chat".to_string(),
-            config: TaskExecutionConfig::default(),
+            config: AgentRunConfig::default(),
             workspace_path: cwd,
-            updates_run_status: true,
             emit_task_events: false,
             progress_channel: None,
-            deps: TaskContextDeps {
+            deps: AgentRunContextDeps {
                 tool_registry: Arc::new(ToolRegistry::default()),
                 repositories: Arc::clone(&database),
-                agent_persistence: Arc::new(AgentPersistence::new(Arc::clone(&database))),
+                agent_persistence: persistence,
                 checkpoint_service: None,
                 workspace_changes: Arc::new(WorkspaceChangeJournal::new()),
-                task_execution_runner: Arc::new(NoopTaskExecutionRunner),
+                subagent_runner: Arc::new(NoopSubAgentRunner),
+                settings_manager: Arc::new(
+                    SettingsManager::new().expect("failed to create test settings manager"),
+                ),
             },
         })
         .await
-        .expect("failed to create test task context")
+        .expect("failed to create test run context")
     }
 
     #[tokio::test(flavor = "multi_thread")]

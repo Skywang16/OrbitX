@@ -13,7 +13,7 @@ pub use crate::llm::anthropic_types::ReasoningBlockMetadata as ReasoningMetadata
 #[serde(rename_all = "camelCase")]
 pub struct ReasoningPart {
     pub id: String,
-    pub session_id: i64,
+    pub thread_id: i64,
     pub message_id: String,
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,10 +31,10 @@ pub struct ReasoningTime {
 }
 
 impl ReasoningPart {
-    pub fn new(id: String, session_id: i64, message_id: String) -> Self {
+    pub fn new(id: String, thread_id: i64, message_id: String) -> Self {
         Self {
             id,
-            session_id,
+            thread_id,
             message_id,
             text: String::new(),
             metadata: None,

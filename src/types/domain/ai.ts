@@ -175,15 +175,15 @@ export interface ChatInputState {
 }
 
 export interface ConversationState {
-  currentSessionId: number | null | -1
-  sessions: Conversation[]
+  currentThreadId: number | null | -1
+  threads: Conversation[]
   messages: Message[]
   isLoading: boolean
   error: string | null
 }
 
 export interface SendMessageRequest {
-  sessionId: number
+  threadId: number
   content: string
   modelId?: string
 }

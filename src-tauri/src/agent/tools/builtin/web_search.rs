@@ -6,7 +6,7 @@ use std::time::Duration;
 use tracing::warn;
 
 use super::file_utils::lenient;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPriority,
@@ -108,7 +108,7 @@ Examples:
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        _context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: WebSearchArgs = serde_json::from_value(args)?;
@@ -140,16 +140,21 @@ Examples:
         let res = exa_mcp_search(&args.query, num_results, search_type).await;
 
         match res {
-            Ok(content) => Ok(ToolResult {
-                content: vec![ToolResultContent::Success(content)],
-                status: ToolResultStatus::Success,
-                cancel_reason: None,
-                execution_time_ms: Some(started.elapsed().as_millis() as u64),
-                ext_info: Some(json!({
-                    "provider": "exa",
-                    "type": search_type,
-                })),
-            }),
+            Ok(content) => {
+                let results = parse_exa_results(&content);
+                Ok(ToolResult {
+                    content: vec![ToolResultContent::Success(content)],
+                    status: ToolResultStatus::Success,
+                    cancel_reason: None,
+                    execution_time_ms: Some(started.elapsed().as_millis() as u64),
+                    ext_info: Some(json!({
+                        "provider": "exa",
+                        "type": search_type,
+                        "results": results,
+                        "totalFound": results.len(),
+                    })),
+                })
+            }
             Err(e) => Ok(ToolResult {
                 content: vec![ToolResultContent::Error(e.to_string())],
                 status: ToolResultStatus::Error,
@@ -205,6 +210,101 @@ struct McpContent {
 #[derive(Debug, Deserialize)]
 struct McpError {
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchResultEntry {
+    title: String,
+    url: String,
+    snippet: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    published_date: Option<String>,
+}
+
+const SNIPPET_MAX_LEN: usize = 300;
+
+/// Parse Exa MCP text response into structured results.
+/// Exa returns blocks separated by blank lines with "Title:", "URL:", "Score:", "Text:" fields.
+fn parse_exa_results(text: &str) -> Vec<WebSearchResultEntry> {
+    let mut results = Vec::new();
+    let mut title = String::new();
+    let mut url = String::new();
+    let mut score: Option<f64> = None;
+    let mut published_date: Option<String> = None;
+    let mut in_text = false;
+    let mut text_buf = String::new();
+
+    let flush = |results: &mut Vec<WebSearchResultEntry>,
+                 title: &mut String,
+                 url: &mut String,
+                 score: &mut Option<f64>,
+                 published_date: &mut Option<String>,
+                 text_buf: &mut String| {
+        if !title.is_empty() || !url.is_empty() {
+            let mut snippet = text_buf.trim().to_string();
+            if snippet.len() > SNIPPET_MAX_LEN {
+                snippet.truncate(SNIPPET_MAX_LEN);
+                snippet.push_str("…");
+            }
+            results.push(WebSearchResultEntry {
+                title: std::mem::take(title),
+                url: std::mem::take(url),
+                snippet,
+                score: score.take(),
+                published_date: published_date.take(),
+            });
+        }
+        text_buf.clear();
+    };
+
+    for line in text.lines() {
+        if let Some(val) = line.strip_prefix("Title: ") {
+            if in_text {
+                in_text = false;
+            }
+            flush(
+                &mut results,
+                &mut title,
+                &mut url,
+                &mut score,
+                &mut published_date,
+                &mut text_buf,
+            );
+            title = val.to_string();
+        } else if let Some(val) = line.strip_prefix("URL: ") {
+            in_text = false;
+            url = val.to_string();
+        } else if let Some(val) = line.strip_prefix("Score: ") {
+            in_text = false;
+            score = val.parse().ok();
+        } else if let Some(val) = line.strip_prefix("Published Date: ") {
+            in_text = false;
+            published_date = Some(val.to_string());
+        } else if let Some(val) = line.strip_prefix("Text: ") {
+            in_text = true;
+            text_buf.push_str(val);
+        } else if line.starts_with("ID: ") || line.starts_with("Author: ") {
+            in_text = false;
+            // skip
+        } else if in_text {
+            text_buf.push('\n');
+            text_buf.push_str(line);
+        }
+    }
+
+    flush(
+        &mut results,
+        &mut title,
+        &mut url,
+        &mut score,
+        &mut published_date,
+        &mut text_buf,
+    );
+
+    results
 }
 
 const EXA_MCP_URL: &str = "https://mcp.exa.ai/mcp";

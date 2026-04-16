@@ -1,3 +1,5 @@
+import type { SubagentRecord } from './subagent'
+
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'streaming' | 'completed' | 'cancelled' | 'error'
 export type ToolStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'error'
@@ -23,7 +25,7 @@ export interface RetryStatus {
 
 export interface Message {
   id: number
-  sessionId: number
+  threadId: number
   role: MessageRole
   agentType: string
   parentMessageId?: number
@@ -59,15 +61,6 @@ export type Block =
       durationMs?: number
     }
   | { type: 'agent_switch'; fromAgent: string; toAgent: string; reason?: string }
-  | {
-      type: 'subtask'
-      id: string
-      childSessionId: number
-      agentType: string
-      description: string
-      status: 'pending' | 'running' | 'completed' | 'cancelled' | 'error'
-      summary?: string
-    }
   | { type: 'error'; code: string; message: string; details?: string }
 
 export interface ToolOutput {
@@ -77,14 +70,16 @@ export interface ToolOutput {
   cancelReason?: string
 }
 
-export type TaskEvent =
-  | { type: 'task_created'; taskId: string; sessionId: number; workspacePath: string }
-  | { type: 'message_created'; taskId: string; message: Message }
-  | { type: 'block_appended'; taskId: string; messageId: number; block: Block }
-  | { type: 'block_updated'; taskId: string; messageId: number; blockId: string; block: Block }
+export type AgentRunEvent =
+  | { type: 'agent_run_created'; runId: string; threadId: number; workspacePath: string }
+  | { type: 'message_created'; runId: string; message: Message }
+  | { type: 'subagent_created'; runId: string; subagent: SubagentRecord }
+  | { type: 'subagent_updated'; runId: string; subagent: SubagentRecord }
+  | { type: 'block_appended'; runId: string; messageId: number; block: Block }
+  | { type: 'block_updated'; runId: string; messageId: number; blockId: string; block: Block }
   | {
       type: 'tool_confirmation_requested'
-      taskId: string
+      runId: string
       requestId: string
       workspacePath: string
       toolName: string
@@ -92,7 +87,7 @@ export type TaskEvent =
     }
   | {
       type: 'message_finished'
-      taskId: string
+      runId: string
       messageId: number
       status: MessageStatus
       finishedAt: string
@@ -100,12 +95,12 @@ export type TaskEvent =
       tokenUsage?: TokenUsage
       contextUsage?: ContextUsage
     }
-  | { type: 'task_completed'; taskId: string }
-  | { type: 'task_error'; taskId: string; error: { code: string; message: string; details?: string } }
-  | { type: 'task_cancelled'; taskId: string }
+  | { type: 'agent_run_completed'; runId: string }
+  | { type: 'agent_run_error'; runId: string; error: { code: string; message: string; details?: string } }
+  | { type: 'agent_run_cancelled'; runId: string }
   | {
-      type: 'task_retrying'
-      taskId: string
+      type: 'agent_run_retrying'
+      runId: string
       attempt: number
       maxAttempts: number
       reason: string

@@ -7,7 +7,7 @@ pub struct CommandConfig {
     pub description: Option<String>,
     pub agent: Option<String>,
     pub model: Option<String>,
-    pub subtask: bool,
+    pub delegated: bool,
     pub template: String,
 }
 
@@ -18,7 +18,7 @@ pub struct CommandSummary {
     pub description: Option<String>,
     pub agent: Option<String>,
     pub model: Option<String>,
-    pub subtask: bool,
+    pub delegated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +27,6 @@ pub struct CommandRenderResult {
     pub name: String,
     pub agent: Option<String>,
     pub model: Option<String>,
-    pub subtask: bool,
+    pub delegated: bool,
     pub prompt: String,
 }

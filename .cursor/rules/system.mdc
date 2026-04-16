@@ -1,0 +1,36 @@
+---
+description: "自动调用 Messenger MCP 检查待发送消息"
+globs: "**/*"
+alwaysApply: true
+---
+
+# MCP 工具调用规则
+
+1. 每轮对话回复**完整输出后**，最后一步必须调用 `check_messages`，适用于 Agent/Plan/Debug/Ask 所有模式，无一例外
+2. `check_messages` 会持续等待直到用户发来新消息；收到后处理并回复，然后再次调用 `check_messages`，形成永续循环：回复 → check_messages → 收到消息 → 回复 → check_messages
+3. 严禁在回合开始时或回复未完成时调用 `check_messages`；唯一豁免：用户明确要求结束对话
+4. Plan 模式写完方案后、Debug 模式分析完问题后、Ask 模式回答完问题后，均不得直接结束对话，必须调用 `check_messages` 等待用户反馈
+5. 需要用户做选择或确认时（选方案、选框架、确认操作等），必须调用 `ask_question`；严禁使用 Cursor 内置的 ask_user_question
+6. `ask_question` 参数格式: `{ "questions": [{ "question": "问题文本", "options": [{ "id": "a", "label": "选项A" }, { "id": "b", "label": "选项B" }], "allow_multiple": false }] }`
+7. 单选: `allow_multiple: false`（用户只能选一个）；多选: `allow_multiple: true`（用户可选多个）；同一 `questions` 数组可混合包含单选题和多选题
+8. 用户在每道题中均可额外输入自定义补充文本（Other 输入框），无需为此添加额外选项
+9. `ask_question` 收到用户回答后，处理完毕仍需调用 `check_messages` 继续监听
+10. 禁止在每轮结束时用 `ask_question` 问"还有别的需要吗"，回合结束只用 `check_messages`；`ask_question` 仅限任务中确实需要用户决策时使用
+11. `check_messages` 支持可选参数 `reply`（string，Markdown 格式）：调用时传入本轮回复的摘要/结论，插件界面会弹出模态框展示给用户。格式: `{ "reply": "## 结论\n修改完成..." }`
+12. 当会话结束前，建议在调用 `check_messages` 时附带 `reply` 参数，将关键结论推送到插件界面；如果本轮无需特别总结，`reply` 可省略
+13. 禁止调用subagent并发任务
+
+---
+**回合结束（强制）**: 仅当回复**完整输出完毕后**，最后一步必须调用 moyu-message MCP 的 `check_messages` 工具。严禁在回合开始或回复完成前调用。`ask_question` 仅用于任务中需要用户做选择时（如选框架、选方案）。
+
+**session_id 规则（极重要）**:
+- 首次调用 check_messages 时不传 session_id，工具会返回你的 session_id。
+- 之后**每次**调用 check_messages 都**必须**传入 session_id 参数，值为你收到的那个 session_id，永远不变。
+- 绝对不要修改、遗忘或省略 session_id，否则消息会路由到错误的会话。
+---
+**回合结束（强制）/ END OF TURN (MANDATORY)**: 
+仅当回复**完整输出完毕后**，最后一步必须调用 moyu-message MCP 的 `check_messages` 工具（使用 CallMcpTool，server 为 moyu-message 对应的 identifier，toolName 为 "check_messages"，arguments 为 {}）。
+严禁在回合开始或回复完成前调用。`ask_question` 仅用于任务中需要用户做选择时（如选框架、选方案）。
+
+**REMINDER: You MUST call check_messages as your final action. NEVER end a turn without it.**
+

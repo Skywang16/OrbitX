@@ -2,8 +2,8 @@ use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_opener::OpenerExt;
 use tracing::warn;
 
-const DOCS_URL: &str = "https://github.com/user/opencodex";
-const ISSUES_URL: &str = "https://github.com/user/opencodex/issues";
+const DOCS_URL: &str = "https://github.com/user/orbitx";
+const ISSUES_URL: &str = "https://github.com/user/orbitx/issues";
 
 /// Handle menu events
 pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event_id: &str) {

@@ -1,49 +1,49 @@
 /**
  * Agent API - Frontend interface wrapper for backend Agent system
  *
- * Provides task execution, state management, real-time progress monitoring, etc.
+ * Provides agent run execution, state management, and real-time progress monitoring.
  */
 
 import { agentChannelApi } from '@/api/channel/agent'
 import { invoke } from '@/utils/request'
 import type {
+  AgentRunEvent,
+  AgentRunStream,
+  AgentRunSummary,
   CommandRenderResult,
   CommandSummary,
-  ExecuteTaskParams,
+  ExecuteRunParams,
+  RunListFilter,
   SkillSummary,
   SkillValidationResult,
-  TaskListFilter,
-  TaskProgressPayload,
-  TaskProgressStream,
-  TaskSummary,
 } from './types'
 
 /**
  * Agent API main class
  *
- * Wraps all functionality of backend TaskExecutor, providing type-safe interface
+ * Wraps backend agent runtime commands with a type-safe frontend interface.
  */
 export class AgentApi {
   /**
-   * Execute Agent task
+   * Execute an agent run
    * @param userPrompt User input
-   * @param sessionId Session ID
+   * @param threadId Thread ID
    * @param modelId Model ID
    * @param images Image attachments (optional)
-   * @returns Returns task progress stream
+   * @returns Returns agent run stream
    */
-  executeTask = async (params: ExecuteTaskParams): Promise<TaskProgressStream> => {
-    const stream = agentChannelApi.createTaskStream(params)
+  executeRun = async (params: ExecuteRunParams): Promise<AgentRunStream> => {
+    const stream = agentChannelApi.createRunStream(params)
     return this.createProgressStreamFromReadableStream(stream)
   }
 
   /**
-   * Cancel task
-   * @param taskId Task ID
+   * Cancel agent run
+   * @param runId Task ID
    * @param reason Cancellation reason
    */
-  cancelTask = async (taskId: string, reason?: string): Promise<void> => {
-    await invoke('agent_cancel_task', { taskId, reason })
+  cancelRun = async (runId: string, reason?: string): Promise<void> => {
+    await invoke('agent_cancel_run', { runId, reason })
   }
 
   confirmTool = async (requestId: string, decision: 'allow_once' | 'allow_always' | 'deny'): Promise<void> => {
@@ -53,13 +53,13 @@ export class AgentApi {
   }
 
   /**
-   * List tasks
+   * List active agent runs
    * @param filters Filter conditions
-   * @returns Task summary list
+   * @returns Agent run summary list
    */
-  listTasks = async (filters?: TaskListFilter): Promise<TaskSummary[]> => {
-    return await invoke<TaskSummary[]>('agent_list_tasks', {
-      sessionId: filters?.sessionId,
+  listRuns = async (filters?: RunListFilter): Promise<AgentRunSummary[]> => {
+    return await invoke<AgentRunSummary[]>('agent_list_runs', {
+      threadId: filters?.threadId,
       statusFilter: filters?.status,
     })
   }
@@ -89,39 +89,39 @@ export class AgentApi {
   }
 
   /**
-   * Get task details
-   * @param taskId Task ID
-   * @returns Task detailed information
+   * Get run details
+   * @param runId Task ID
+   * @returns Agent run detailed information
    */
-  getTask = async (taskId: string): Promise<TaskSummary> => {
-    const tasks = await this.listTasks()
-    const task = tasks.find(t => t.taskId === taskId)
+  getRun = async (runId: string): Promise<AgentRunSummary> => {
+    const tasks = await this.listRuns()
+    const task = tasks.find(t => t.runId === runId)
 
     if (!task) {
-      throw new Error(`Task ${taskId} not found`)
+      throw new Error(`Agent run ${runId} not found`)
     }
 
     return task
   }
 
-  sendCommand = async (taskId: string, command: { type: 'cancel'; reason?: string }): Promise<void> => {
-    await this.cancelTask(taskId, command.reason)
+  sendCommand = async (runId: string, command: { type: 'cancel'; reason?: string }): Promise<void> => {
+    await this.cancelRun(runId, command.reason)
   }
 
   /**
-   * Create task progress stream from ReadableStream
+   * Create agent run stream from ReadableStream
    * @private
    * @param stream ReadableStream
-   * @returns TaskProgressStream
+   * @returns AgentRunStream
    */
-  private createProgressStreamFromReadableStream(stream: ReadableStream<TaskProgressPayload>): TaskProgressStream {
+  private createProgressStreamFromReadableStream(stream: ReadableStream<AgentRunEvent>): AgentRunStream {
     let isClosed = false
-    const callbacks: Array<(event: TaskProgressPayload) => void> = []
+    const callbacks: Array<(event: AgentRunEvent) => void> = []
     const errorCallbacks: Array<(error: Error) => void> = []
     const closeCallbacks: Array<() => void> = []
-    let reader: ReadableStreamDefaultReader<TaskProgressPayload> | null = null
-    // Used to temporarily store events when there are no subscribers yet, to avoid losing early events like TaskCreated
-    const pendingEvents: TaskProgressPayload[] = []
+    let reader: ReadableStreamDefaultReader<AgentRunEvent> | null = null
+    // Used to temporarily store events when there are no subscribers yet, to avoid losing early root-run events.
+    const pendingEvents: AgentRunEvent[] = []
 
     const startReading = async () => {
       try {
@@ -196,7 +196,7 @@ export class AgentApi {
     startReading()
 
     // Create stream object
-    const taskProgressStream: TaskProgressStream = {
+    const taskProgressStream: AgentRunStream = {
       onProgress: callback => {
         if (!isClosed) {
           callbacks.push(callback)
@@ -256,15 +256,15 @@ export * from './types'
 /**
  * Frontend extension types
  */
-export interface AgentTaskState extends TaskSummary {
+export interface AgentRunState extends AgentRunSummary {
   /** Whether listening to progress */
   isListening?: boolean
   /** Last update time */
   lastUpdated?: Date
   /** Progress stream reference */
-  progressStream?: TaskProgressStream
+  progressStream?: AgentRunStream
   /** Recent progress events */
-  recentEvents?: TaskProgressPayload[]
+  recentEvents?: AgentRunEvent[]
   /** Error information */
   error?: string
 }

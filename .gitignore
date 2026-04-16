@@ -47,3 +47,7 @@ docs/
 AGENTS.md
 WARP.md
 .ace-tool/
+
+# OrbitX: workspace-local settings (personal runtime overrides, not for team)
+# Equivalent to Claude Code's .claude/settings.local.json
+.orbitx/settings.local.json

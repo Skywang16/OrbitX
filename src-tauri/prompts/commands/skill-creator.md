@@ -80,4 +80,4 @@ Create a markdown file following this structure:
 [Guidelines and recommendations]
 ```
 
-Save the skill to `.opencodex/skills/[skill-name]/SKILL.md` in the workspace.
+Save the skill to `.orbitx/skills/[skill-name]/SKILL.md` in the workspace.

@@ -21,7 +21,7 @@
   import ImageLightbox from '@/components/AIChatSidebar/components/input/ImageLightbox.vue'
   import MessageList from '@/components/AIChatSidebar/components/messages/MessageList.vue'
   import RollbackConfirmDialog from '@/components/AIChatSidebar/components/messages/RollbackConfirmDialog.vue'
-  import SessionExecutionTimeline from '@/components/AIChatSidebar/components/messages/SessionExecutionTimeline.vue'
+  import ThreadExecutionTimeline from '@/components/AIChatSidebar/components/messages/ThreadExecutionTimeline.vue'
   import ToolConfirmationDialog from '@/components/AIChatSidebar/components/messages/ToolConfirmationDialog.vue'
   import AddActionDialog from './AddActionDialog.vue'
   import AnimatedNumber from './AnimatedNumber.vue'
@@ -43,16 +43,16 @@
 
   const { t } = useI18n()
   const { isRepository, changedCount, diffAdditions, diffDeletions } = storeToRefs(gitStore)
-  const { selectedSession } = storeToRefs(workspaceStore)
+  const { selectedThread } = storeToRefs(workspaceStore)
 
   // Use storeToRefs to ensure reactive tracking
-  const { messageList, currentSession, currentWorkspacePath, isSending, isCurrentSessionSending } =
+  const { messageList, currentThread, currentWorkspacePath, isSending, isCurrentThreadSending } =
     storeToRefs(aiChatStore)
   const { actions, selectedAction } = storeToRefs(runActionsStore)
   const { terminalPanelVisible } = storeToRefs(layoutStore)
 
   // Whether there's an active workspace (show Run button only when session is selected)
-  const hasActiveWorkspace = computed(() => !!selectedSession.value)
+  const hasActiveWorkspace = computed(() => !!selectedThread.value)
 
   // Dialog state
   const showCommitDialog = ref(false)
@@ -163,6 +163,11 @@
     }
   }
 
+  const handleGoBack = async () => {
+    const parentId = selectedThread.value?.parentThreadId
+    if (parentId) await aiChatStore.switchThread(parentId)
+  }
+
   const handleNewSession = async () => {
     await aiChatStore.startNewChat()
   }
@@ -221,7 +226,7 @@
     if (result.success) {
       const path = currentWorkspacePath.value
       if (path) {
-        await workspaceStore.loadSessionViews(path)
+        await workspaceStore.loadThreadViews(path)
       }
       if (result.restoreContent && result.restoreContent.trim().length > 0) {
         messageInput.value = result.restoreContent
@@ -293,8 +298,13 @@
       @dblclick="handleDoubleClick"
     >
       <div class="header-left" @mousedown.stop @dblclick.stop>
+        <button v-if="selectedThread?.parentThreadId" class="back-btn" @click="handleGoBack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
         <h1 class="chat-title">
-          {{ currentSession?.title || t('chat.new_session_placeholder') }}
+          {{ currentThread?.title || t('chat.new_session_placeholder') }}
         </h1>
       </div>
 
@@ -390,12 +400,12 @@
 
     <!-- Messages Area -->
     <div class="messages-area">
-      <SessionExecutionTimeline :session-id="currentSession?.id ?? null" scroll-container-id="main-chat-message-list" />
+      <ThreadExecutionTimeline :thread-id="currentThread?.id ?? null" scroll-container-id="main-chat-message-list" />
       <MessageList
         dom-id="main-chat-message-list"
         :messages="messageList"
-        :is-loading="isCurrentSessionSending"
-        :session-id="currentSession?.id ?? null"
+        :is-loading="isCurrentThreadSending"
+        :thread-id="currentThread?.id ?? null"
         :workspace-path="currentWorkspacePath ?? ''"
       />
     </div>
@@ -459,6 +469,25 @@
     align-items: center;
     min-width: 0;
     -webkit-app-region: no-drag;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-300);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+
+  .back-btn:hover {
+    color: var(--text-100);
+    background: var(--bg-300);
   }
 
   .chat-title {
@@ -593,32 +622,33 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    background: var(--bg-100);
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-lg);
-    color: var(--text-400);
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    color: var(--text-300);
     cursor: pointer;
-    transition: all 0.12s ease;
+    transition: all 0.2s ease;
   }
 
   .toolbar-icon-btn:hover {
-    background: var(--bg-200);
-    border-color: var(--border-400);
-    color: var(--text-200);
+    background: var(--color-hover);
+    color: var(--color-primary);
+  }
+
+  .toolbar-icon-btn:active {
+    transform: scale(0.95);
   }
 
   .toolbar-icon-btn--active {
-    background: var(--text-100);
-    border-color: var(--text-100);
-    color: var(--bg-100);
+    background: var(--color-hover);
+    color: var(--color-primary);
   }
 
   .toolbar-icon-btn--active:hover {
-    background: var(--text-200);
-    border-color: var(--text-200);
-    color: var(--bg-100);
+    background: var(--color-hover);
+    color: var(--color-primary);
   }
 
   .toolbar-icon-btn--active svg {
@@ -628,7 +658,7 @@
   .toolbar-icon-btn svg {
     width: 14px;
     height: 14px;
-    opacity: 0.7;
+    opacity: 0.8;
   }
 
   /* Git Stats */

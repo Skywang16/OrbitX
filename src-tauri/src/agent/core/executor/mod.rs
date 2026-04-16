@@ -1,9 +1,9 @@
 /*!
- * TaskExecutor - Agent task executor
+ * AgentRunExecutor - Agent run executor
  *
  * Responsibilities:
- * - Task lifecycle management (create, pause, resume, cancel)
- * - Task state query and management
+ * - Agent run lifecycle management (create, pause, resume, cancel)
+ * - Agent run state query and management
  * - Coordinate PromptOrchestrator and ReactOrchestrator
  *
  * Non-responsibilities (already separated):
@@ -18,11 +18,11 @@ mod lifecycle;
 mod react_handler;
 mod react_impl;
 mod state;
-mod subtask;
+mod subagent;
 mod types;
 
 pub use react_handler::ReactHandler;
-pub use state::TaskExecutorStats;
+pub use state::AgentRunExecutorStats;
 pub use types::*;
 
 use std::sync::Arc;
@@ -40,8 +40,8 @@ use crate::lsp::LspManager;
 use crate::settings::SettingsManager;
 use crate::storage::{DatabaseManager, UnifiedCache};
 
-/// TaskExecutor internal state
-struct TaskExecutorInner {
+/// AgentRunExecutor internal state
+struct AgentRunExecutorInner {
     // Core services
     database: Arc<DatabaseManager>,
     cache: Arc<UnifiedCache>,
@@ -60,13 +60,13 @@ struct TaskExecutorInner {
     prompt_orchestrator: Arc<PromptOrchestrator>,
     react_orchestrator: Arc<ReactOrchestrator>,
 
-    // Task state management - only used to find running tasks for interruption
+    // Active run state management - only used to find running runs for interruption
     // No longer cache conversation_contexts, load from DB each time
-    active_tasks: DashMap<String, Arc<crate::agent::core::context::TaskContext>>,
+    active_runs: DashMap<String, Arc<crate::agent::core::context::AgentRunContext>>,
     active_child_executions_by_parent: DashMap<String, usize>,
 }
 
-pub(crate) struct TaskExecutorServices {
+pub(crate) struct AgentRunExecutorServices {
     pub database: Arc<DatabaseManager>,
     pub cache: Arc<UnifiedCache>,
     pub agent_persistence: Arc<AgentPersistence>,
@@ -78,29 +78,59 @@ pub(crate) struct TaskExecutorServices {
     pub vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
 }
 
-/// TaskExecutor - Task executor
+/// AgentRunExecutor - Agent run executor
 ///
-/// - All APIs return Arc<TaskContext>, caller manages lifecycle
+/// - All APIs return Arc<AgentRunContext>, caller manages lifecycle
 /// - DashMap directly stores Arc, only increments reference count when accessed
 #[derive(Clone)]
-pub struct TaskExecutor {
-    inner: Arc<TaskExecutorInner>,
+pub struct AgentRunExecutor {
+    inner: Arc<AgentRunExecutorInner>,
 }
 
 #[async_trait::async_trait]
-impl crate::agent::core::context::TaskExecutionRunner for TaskExecutor {
-    async fn run_task_execution(
+impl crate::agent::core::context::SubAgentRunner for AgentRunExecutor {
+    async fn run_subagent(
         &self,
-        parent: &crate::agent::core::context::TaskContext,
-        request: crate::agent::core::context::TaskExecutionRequest,
-    ) -> crate::agent::error::TaskExecutorResult<crate::agent::core::context::TaskExecutionResponse>
-    {
-        subtask::run_subtask(self, parent, request).await
+        parent: &crate::agent::core::context::AgentRunContext,
+        request: crate::agent::core::context::SubAgentRequest,
+    ) -> crate::agent::error::AgentRunResult<crate::agent::core::context::SubAgentResponse> {
+        subagent::run_subagent_task(self, parent, request).await
+    }
+
+    async fn spawn_subagent(
+        &self,
+        parent: &crate::agent::core::context::AgentRunContext,
+        request: crate::agent::core::context::SubAgentRequest,
+        collab_call_id: String,
+        collab_tool: String,
+    ) -> crate::agent::error::AgentRunResult<i64> {
+        subagent::spawn_subagent_detached(self, parent, request, collab_call_id, collab_tool).await
+    }
+
+    async fn cancel_subagent(
+        &self,
+        _parent: &crate::agent::core::context::AgentRunContext,
+        thread_id: i64,
+    ) -> crate::agent::error::AgentRunResult<()> {
+        if let Some(ctx) = self
+            .active_runs()
+            .iter()
+            .find(|entry| entry.value().thread_id == thread_id)
+            .map(|entry| Arc::clone(entry.value()))
+        {
+            ctx.abort();
+        }
+        self.inner
+            .agent_persistence
+            .threads()
+            .update_status(thread_id, "cancelled")
+            .await
+            .map_err(|e| crate::agent::error::AgentRunError::StatePersistenceFailed(e.to_string()))
     }
 }
 
-impl TaskExecutor {
-    /// Create new TaskExecutor instance.
+impl AgentRunExecutor {
+    /// Create new agent run executor instance.
     ///
     /// Pass `None` for `checkpoint_service` if checkpointing is not needed.
     pub fn new(
@@ -113,7 +143,7 @@ impl TaskExecutor {
         workspace_changes: Arc<WorkspaceChangeJournal>,
         vector_search_engine: Option<Arc<crate::vector_db::search::SemanticSearchEngine>>,
     ) -> Self {
-        Self::build(TaskExecutorServices {
+        Self::build(AgentRunExecutorServices {
             database,
             cache,
             agent_persistence,
@@ -126,13 +156,13 @@ impl TaskExecutor {
         })
     }
 
-    /// Create TaskExecutor instance with Checkpoint service.
-    pub(crate) fn with_checkpoint_service(services: TaskExecutorServices) -> Self {
+    /// Create agent run executor instance with Checkpoint service.
+    pub(crate) fn with_checkpoint_service(services: AgentRunExecutorServices) -> Self {
         Self::build(services)
     }
 
-    fn build(services: TaskExecutorServices) -> Self {
-        let TaskExecutorServices {
+    fn build(services: AgentRunExecutorServices) -> Self {
+        let AgentRunExecutorServices {
             database,
             cache,
             agent_persistence,
@@ -154,7 +184,7 @@ impl TaskExecutor {
         ));
 
         Self {
-            inner: Arc::new(TaskExecutorInner {
+            inner: Arc::new(AgentRunExecutorInner {
                 database,
                 cache,
                 agent_persistence,
@@ -167,7 +197,7 @@ impl TaskExecutor {
                 tool_confirmations: Arc::new(ToolConfirmationManager::new()),
                 prompt_orchestrator,
                 react_orchestrator,
-                active_tasks: DashMap::new(),
+                active_runs: DashMap::new(),
                 active_child_executions_by_parent: DashMap::new(),
             }),
         }
@@ -221,15 +251,15 @@ impl TaskExecutor {
         Arc::clone(&self.inner.react_orchestrator)
     }
 
-    pub(crate) fn active_tasks(
+    pub(crate) fn active_runs(
         &self,
-    ) -> &DashMap<String, Arc<crate::agent::core::context::TaskContext>> {
-        &self.inner.active_tasks
+    ) -> &DashMap<String, Arc<crate::agent::core::context::AgentRunContext>> {
+        &self.inner.active_runs
     }
 
     pub(crate) fn active_child_executions_global(&self) -> usize {
         self.inner
-            .active_tasks
+            .active_runs
             .iter()
             .filter(|entry| !entry.value().emits_task_events())
             .count()

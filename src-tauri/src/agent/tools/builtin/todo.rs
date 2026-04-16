@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority as MetaPriority, ToolResult,
@@ -293,7 +293,7 @@ impl RunnableTool for TodoWriteTool {
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        _context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: TodoWriteArgs = serde_json::from_value(args)?;

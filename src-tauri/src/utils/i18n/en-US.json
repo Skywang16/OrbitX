@@ -1,12 +1,12 @@
 {
   "menu": {
-    "about": "About OpenCodex",
+    "about": "About OrbitX",
     "settings": "Settings...",
     "services": "Services",
-    "hide": "Hide OpenCodex",
+    "hide": "Hide OrbitX",
     "hide_others": "Hide Others",
     "show_all": "Show All",
-    "quit": "Quit OpenCodex",
+    "quit": "Quit OrbitX",
     "new_terminal": "New Terminal",
     "edit": "Edit",
     "undo": "Undo",
@@ -24,7 +24,7 @@
     "minimize": "Minimize",
     "always_on_top": "Always on Top",
     "help": "Help",
-    "documentation": "OpenCodex Documentation",
+    "documentation": "OrbitX Documentation",
     "report_issue": "Report Issue..."
   },
   "common": {
@@ -77,7 +77,7 @@
     "open_folder_failed": "Failed to open configuration folder"
   },
   "agent": {
-    "cancel_failed": "Failed to cancel task",
+    "cancel_failed": "Failed to cancel agent run",
     "command_not_found": "Command not found",
     "context": {
       "file_status_failed": "Failed to get file context status",
@@ -90,12 +90,12 @@
       "set_user_rules_failed": "Failed to set user rules",
       "update_failed": "Failed to update conversation"
     },
-    "execute_failed": "Failed to execute task",
-    "too_many_active_tasks_global": "At most 5 agent tasks can run concurrently in the app",
-    "execute_tree_failed": "Failed to execute task tree",
-    "list_failed": "Failed to list tasks",
+    "execute_failed": "Failed to execute agent run",
+    "too_many_active_tasks_global": "At most 5 agent runs can run concurrently in the app",
+    "execute_tree_failed": "Failed to execute agent run tree",
+    "list_failed": "Failed to list agent runs",
     "list_skills_failed": "Failed to list skills",
-    "pause_failed": "Failed to pause task",
+    "pause_failed": "Failed to pause agent run",
     "switch_failed": "Failed to switch agent",
     "terminal_manager_not_initialized": "Agent terminal not ready",
     "tool_confirm_not_found": "Tool confirmation request not found",
@@ -105,6 +105,26 @@
       "conversations_failed": "Failed to load conversations",
       "messages_failed": "Failed to load messages"
     }
+  },
+  "subagent": {
+    "names": [
+      "Sappho",
+      "Herodotus",
+      "Socrates",
+      "Plato",
+      "Aristotle",
+      "Euclid",
+      "Archimedes",
+      "Cicero",
+      "Virgil",
+      "Hypatia",
+      "Aesop",
+      "Ptolemy",
+      "Marcus Aurelius",
+      "Avicenna",
+      "Maimonides",
+      "Alhazen"
+    ]
   },
   "checkpoint": {
     "list_failed": "Failed to list checkpoints",
@@ -130,15 +150,15 @@
   },
   "workspace": {
     "get_failed": "Failed to get workspace",
-    "sessions_failed": "Failed to list sessions",
+    "threads_failed": "Failed to list threads",
     "messages_failed": "Failed to get messages",
-    "active_session_failed": "Failed to get active session",
-    "create_session_failed": "Failed to create session",
-    "set_active_session_failed": "Failed to set active session",
-    "clear_active_session_failed": "Failed to clear active session",
-    "delete_session_failed": "Failed to delete session",
-    "session_not_found": "Session not found",
-    "trim_session_failed": "Failed to trim session messages",
+    "active_thread_failed": "Failed to get active thread",
+    "create_thread_failed": "Failed to create thread",
+    "set_active_thread_failed": "Failed to set active thread",
+    "clear_active_thread_failed": "Failed to clear active thread",
+    "delete_thread_failed": "Failed to delete thread",
+    "thread_not_found": "Thread not found",
+    "trim_thread_failed": "Failed to trim thread messages",
     "recent": {
       "get_failed": "Failed to get recent workspaces",
       "add_failed": "Failed to add recent workspace",
@@ -223,8 +243,7 @@
   },
   "storage": {
     "get_config_failed": "Failed to get configuration",
-    "update_config_failed": "Failed to update configuration",
-    "save_session_failed": "Failed to save session state"
+    "update_config_failed": "Failed to update configuration"
   },
   "settings": {
     "get_failed": "Failed to get settings",

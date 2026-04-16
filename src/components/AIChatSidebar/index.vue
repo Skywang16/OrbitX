@@ -13,7 +13,7 @@
   import ResizeHandle from './components/layout/ResizeHandle.vue'
   import MessageList from './components/messages/MessageList.vue'
   import RollbackConfirmDialog from './components/messages/RollbackConfirmDialog.vue'
-  import SessionExecutionTimeline from './components/messages/SessionExecutionTimeline.vue'
+  import ThreadExecutionTimeline from './components/messages/ThreadExecutionTimeline.vue'
   import ToolConfirmationDialog from './components/messages/ToolConfirmationDialog.vue'
 
   const aiChatStore = useAIChatStore()
@@ -23,7 +23,7 @@
 
   const currentSessions = computed(() => {
     const path = aiChatStore.currentWorkspacePath
-    return workspaceStore.getTopLevelSessions(path)
+    return workspaceStore.getTopLevelThreads(path)
   })
 
   const { t } = useI18n()
@@ -59,18 +59,23 @@
     await aiChatStore.sendMessage(message, images)
   }
 
-  const handleSessionSelect = async (sessionId: number) => {
-    await aiChatStore.switchSession(sessionId)
+  const handleThreadSelect = async (threadId: number) => {
+    await aiChatStore.switchThread(threadId)
   }
 
-  const handleCreateSession = async () => {
+  const handleCreateThread = async () => {
     await aiChatStore.startNewChat()
   }
 
-  const handleRefreshSessions = async () => {
+  const handleGoBack = async () => {
+    const parentId = workspaceStore.selectedThread?.parentThreadId
+    if (parentId) await aiChatStore.switchThread(parentId)
+  }
+
+  const handleRefreshThreads = async () => {
     const path = aiChatStore.currentWorkspacePath
     if (path) {
-      await workspaceStore.loadSessionViews(path)
+      await workspaceStore.loadThreadViews(path)
     }
   }
 
@@ -78,7 +83,7 @@
     event.preventDefault()
 
     isDragging.value = true
-    document.body.classList.add('opencodex-resizing')
+    document.body.classList.add('orbitx-resizing')
 
     const startX = event.clientX
     const startWidth = aiChatStore.sidebarWidth
@@ -93,7 +98,7 @@
 
     const handleMouseUp = () => {
       isDragging.value = false
-      document.body.classList.remove('opencodex-resizing')
+      document.body.classList.remove('orbitx-resizing')
 
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -138,7 +143,7 @@
     if (result.success) {
       const path = aiChatStore.currentWorkspacePath
       if (path) {
-        await workspaceStore.loadSessionViews(path)
+        await workspaceStore.loadThreadViews(path)
       }
       if (result.restoreContent && result.restoreContent.trim().length > 0) {
         messageInput.value = result.restoreContent
@@ -175,13 +180,15 @@
 
     <div class="ai-chat-content">
       <ChatHeader
-        :sessions="currentSessions"
-        :current-session-id="aiChatStore.currentSession?.id ?? null"
-        :selected-label="workspaceStore.selectedSession?.title || null"
-        :is-loading="aiChatStore.isCurrentSessionSending"
-        @select-session="handleSessionSelect"
-        @create-new-session="handleCreateSession"
-        @refresh-sessions="handleRefreshSessions"
+        :threads="currentSessions"
+        :current-thread-id="aiChatStore.currentThread?.id ?? null"
+        :parent-thread-id="workspaceStore.selectedThread?.parentThreadId ?? null"
+        :selected-label="workspaceStore.selectedThread?.title || null"
+        :is-loading="aiChatStore.isCurrentThreadSending"
+        @select-thread="handleThreadSelect"
+        @create-new-thread="handleCreateThread"
+        @refresh-threads="handleRefreshThreads"
+        @go-back="handleGoBack"
       />
       <div class="messages-and-tasks">
         <!-- No workspace welcome page -->
@@ -197,15 +204,15 @@
 
         <!-- Normal message list -->
         <template v-else>
-          <SessionExecutionTimeline
-            :session-id="aiChatStore.currentSession?.id ?? null"
+          <ThreadExecutionTimeline
+            :thread-id="aiChatStore.currentThread?.id ?? null"
             scroll-container-id="sidebar-chat-message-list"
           />
           <MessageList
             dom-id="sidebar-chat-message-list"
             :messages="aiChatStore.messageList"
-            :is-loading="aiChatStore.isCurrentSessionSending"
-            :session-id="aiChatStore.currentSession?.id ?? null"
+            :is-loading="aiChatStore.isCurrentThreadSending"
+            :thread-id="aiChatStore.currentThread?.id ?? null"
             :workspace-path="aiChatStore.currentWorkspacePath ?? ''"
           />
         </template>

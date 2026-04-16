@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "moyu-message": {
+      "command": "node",
+      "args": [
+        "/Users/wangjiajie/.cursor/extensions/moyu.moyucurinfo-1.5.0/dist/mcp-server.mjs",
+        "--channel",
+        "b20f2f8106a8"
+      ]
+    }
+  }
+}

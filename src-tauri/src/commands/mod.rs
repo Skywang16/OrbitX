@@ -65,25 +65,45 @@ pub async fn open_in_editor(path: String) -> TauriApiResult<()> {
     Ok(api_success!(()))
 }
 
+#[tauri::command]
+pub async fn fetch_registry_skills() -> TauriApiResult<String> {
+    match reqwest::get("https://skillregistry.io/api/skills").await {
+        Ok(resp) => match resp.text().await {
+            Ok(text) => Ok(api_success!(text)),
+            Err(e) => {
+                warn!("Failed to read registry skills response: {}", e);
+                Ok(api_error!("Failed to read registry skills response"))
+            }
+        },
+        Err(e) => {
+            warn!("Failed to fetch registry skills: {}", e);
+            Ok(api_error!("Failed to fetch registry skills"))
+        }
+    }
+}
+
 pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
         // File drag and drop command
         file_handle_open,
         // Open directory in editor
         open_in_editor,
+        // Fetch skills from registry
+        fetch_registry_skills,
         // Workspace management commands (from workspace module)
         crate::workspace::commands::workspace_get_recent,
         crate::workspace::commands::workspace_add_recent,
         crate::workspace::commands::workspace_remove_recent,
         crate::workspace::commands::workspace_maintain,
         crate::workspace::commands::workspace_get_or_create,
-        crate::workspace::commands::workspace_list_session_views,
-        crate::workspace::commands::workspace_get_messages,
-        crate::workspace::commands::workspace_get_active_session,
-        crate::workspace::commands::workspace_create_session,
-        crate::workspace::commands::workspace_set_active_session,
-        crate::workspace::commands::workspace_clear_active_session,
-        crate::workspace::commands::workspace_delete_session,
+        crate::workspace::commands::workspace_list_thread_views,
+        crate::workspace::commands::workspace_get_thread_messages,
+        crate::workspace::commands::workspace_get_active_thread,
+        crate::workspace::commands::workspace_get_thread,
+        crate::workspace::commands::workspace_create_thread,
+        crate::workspace::commands::workspace_set_active_thread,
+        crate::workspace::commands::workspace_clear_active_thread,
+        crate::workspace::commands::workspace_delete_thread,
         crate::workspace::commands::workspace_get_project_rules,
         crate::workspace::commands::workspace_set_project_rules,
         crate::workspace::commands::workspace_list_rules_files,
@@ -93,6 +113,8 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::workspace::commands::workspace_update_run_action,
         crate::workspace::commands::workspace_delete_run_action,
         crate::workspace::commands::workspace_set_selected_run_action,
+        crate::workspace::commands::workspace_get_selected_run_action,
+        crate::workspace::commands::workspace_get_run_actions_by_paths,
         // Preferences commands
         crate::workspace::commands::preferences_get_batch,
         crate::workspace::commands::preferences_set,
@@ -152,7 +174,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::config::commands::config_set,
         crate::config::commands::config_reset_to_defaults,
         crate::config::commands::config_open_folder,
-        // AI settings (settings.json / workspace .opencodex/settings.json)
+        // AI settings (settings.json / workspace .orbitx/settings.json)
         crate::settings::commands::get_global_settings,
         crate::settings::commands::update_global_settings,
         crate::settings::commands::get_workspace_settings,
@@ -220,10 +242,10 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::llm::oauth::commands::refresh_oauth_token,
         crate::llm::oauth::commands::check_oauth_status,
         // Agent executor commands (registered for frontend calls)
-        crate::agent::core::commands::agent_execute_task,
-        crate::agent::core::commands::agent_cancel_task,
+        crate::agent::core::commands::agent_execute_run,
+        crate::agent::core::commands::agent_cancel_run,
         crate::agent::core::commands::agent_tool_confirm,
-        crate::agent::core::commands::agent_list_tasks,
+        crate::agent::core::commands::agent_list_runs,
         crate::agent::core::commands::agent_list_commands,
         crate::agent::core::commands::agent_render_command,
         crate::agent::core::commands::agent_list_skills,
@@ -236,6 +258,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         // Node.js version management commands
         crate::node::commands::node_check_project,
         crate::node::commands::node_get_version_manager,
+        crate::node::commands::node_get_current_version,
         crate::node::commands::node_list_versions,
         crate::node::commands::node_get_switch_command,
         // Vector database commands
@@ -252,6 +275,7 @@ pub fn register_all_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> t
         crate::checkpoint::commands::checkpoint_diff,
         crate::checkpoint::commands::checkpoint_diff_with_workspace,
         crate::checkpoint::commands::checkpoint_get_file_content,
+        crate::workspace::commands::workspace_list_subagents,
         // File system commands
         crate::filesystem::commands::fs_read_dir,
     ])

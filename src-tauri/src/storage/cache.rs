@@ -61,7 +61,7 @@ pub struct CacheEntrySnapshot {
 #[derive(Debug, Clone, Copy)]
 pub enum CacheNamespace {
     Rules,      // Global rules, project rules
-    Session,    // Session state
+    Thread,     // Thread state
     UI,         // UI state
     Agent,      // Agent temporary data
     Completion, // Completion cache
@@ -73,7 +73,7 @@ impl CacheNamespace {
     fn prefix(&self) -> &'static str {
         match self {
             Self::Rules => "rules:",
-            Self::Session => "session:",
+            Self::Thread => "thread:",
             Self::UI => "ui:",
             Self::Agent => "agent:",
             Self::Completion => "completion:",
@@ -196,27 +196,27 @@ impl UnifiedCache {
         }
     }
 
-    /// Session: Get active session
-    pub async fn get_active_session(&self) -> Option<i64> {
+    /// Thread: Get active thread
+    pub async fn get_active_thread(&self) -> Option<i64> {
         match self
-            .get_deserialized_ns(CacheNamespace::Session, "active_session")
+            .get_deserialized_ns(CacheNamespace::Thread, "active_thread")
             .await
         {
-            Ok(session_id) => session_id,
+            Ok(thread_id) => thread_id,
             Err(err) => {
-                tracing::warn!("Failed to load active session from cache: {}", err);
+                tracing::warn!("Failed to load active thread from cache: {}", err);
                 None
             }
         }
     }
 
-    /// Session: Set active session
-    pub async fn set_active_session(&self, id: Option<i64>) -> CacheResult<()> {
-        if let Some(session_id) = id {
-            self.set_serialized_ns(CacheNamespace::Session, "active_session", &session_id)
+    /// Thread: Set active thread
+    pub async fn set_active_thread(&self, id: Option<i64>) -> CacheResult<()> {
+        if let Some(thread_id) = id {
+            self.set_serialized_ns(CacheNamespace::Thread, "active_thread", &thread_id)
                 .await
         } else {
-            self.remove_ns(CacheNamespace::Session, "active_session")
+            self.remove_ns(CacheNamespace::Thread, "active_thread")
                 .await;
             Ok(())
         }

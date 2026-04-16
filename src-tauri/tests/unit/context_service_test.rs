@@ -20,6 +20,13 @@ fn create_test_context_service() -> Arc<TerminalContextService> {
     TerminalContextService::new_with_integration(registry, shell_integration, terminal_mux, cache)
 }
 
+fn expected_fallback_cwd() -> String {
+    dirs::home_dir()
+        .or_else(|| std::env::current_dir().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "~".to_string())
+}
+
 #[tokio::test]
 async fn test_cache_stats_initialization() {
     let service = create_test_context_service();
@@ -85,7 +92,10 @@ async fn test_get_context_with_fallback() {
     assert!(result.is_ok(), "回退逻辑应该返回默认上下文");
 
     let context = result.unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
 }
 
 #[tokio::test]

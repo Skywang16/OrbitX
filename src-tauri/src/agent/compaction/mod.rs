@@ -4,7 +4,7 @@ pub mod result;
 pub mod service;
 
 pub use config::CompactionConfig;
-pub use loader::SessionMessageLoader;
+pub use loader::ThreadMessageLoader;
 pub use result::{CompactionPhase, CompactionResult};
 pub use service::{
     CompactionService, CompactionTrigger, PreparedCompaction, SummaryCompletion, SummaryJob,

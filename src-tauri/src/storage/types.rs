@@ -51,19 +51,19 @@ impl Default for WindowGeometry {
 #[serde(rename_all = "camelCase")]
 pub enum TerminalRuntimeKind {
     Workspace,
-    Task,
+    Agent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum TaskTerminalMode {
+pub enum AgentTerminalMode {
     Blocking,
     Background,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum TaskTerminalStatus {
+pub enum AgentTerminalStatus {
     Initializing,
     Running,
     Completed,
@@ -80,11 +80,11 @@ pub struct TerminalRuntimeState {
     /// Pre-computed display title for the tab, calculated by the backend.
     pub display_title: String,
     pub kind: TerminalRuntimeKind,
-    pub session_id: Option<i64>,
-    pub task_terminal_id: Option<String>,
+    pub thread_id: Option<i64>,
+    pub agent_terminal_id: Option<String>,
     pub source_label: Option<String>,
-    pub task_mode: Option<TaskTerminalMode>,
-    pub task_status: Option<TaskTerminalStatus>,
+    pub agent_mode: Option<AgentTerminalMode>,
+    pub agent_status: Option<AgentTerminalStatus>,
 }
 
 /// Configuration section type

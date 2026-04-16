@@ -1,44 +1,41 @@
-import {
-  workspaceApi,
-  type SessionRecord,
-  type SessionViewRecord,
-  type WorkspaceRecord,
-} from '@/api/workspace'
-import type { Message } from '@/types'
+import { workspaceApi, type ThreadRecord, type ThreadViewRecord, type WorkspaceRecord } from '@/api/workspace'
+import type { Message, SubagentRecord } from '@/types'
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, shallowRef } from 'vue'
 
-const MAX_CACHED_SESSIONS = 10
+const MAX_CACHED_THREADS = 10
 const INITIAL_PAGE_SIZE = 100
 const LOAD_MORE_PAGE_SIZE = 50
 
 export interface WorkspaceNode {
   workspace: WorkspaceRecord
-  sessionViews: SessionViewRecord[]
+  threadViews: ThreadViewRecord[]
   isLoading: boolean
 }
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   // State
   const tree = shallowRef<Map<string, WorkspaceNode>>(new Map())
-  const selectedSession = ref<SessionRecord | null>(null)
-  const messagesBySessionId = reactive<Map<number, Message[]>>(new Map())
+  const selectedThread = ref<ThreadRecord | null>(null)
+  const messagesByThreadId = reactive<Map<number, Message[]>>(new Map())
+  const subagentsByThreadId = reactive<Map<number, SubagentRecord[]>>(new Map())
   const messagesHasMoreMap = reactive<Map<number, boolean>>(new Map())
-  const messageIdToSessionId = new Map<number, number>()
+  const messageIdToThreadId = new Map<number, number>()
   const activeWorkspacePath = ref<string | null>(null)
-  const sessionAccessOrder: number[] = [] // LRU tracking: oldest first
+  const threadAccessOrder: number[] = [] // LRU tracking: oldest first
+  const messageFetches = new Map<number, Promise<void>>()
 
   // Computed
   const messages = computed<Message[]>(() => {
-    const sessionId = selectedSession.value?.id
-    if (!sessionId) return []
-    return messagesBySessionId.get(sessionId) ?? []
+    const threadId = selectedThread.value?.id
+    if (!threadId) return []
+    return messagesByThreadId.get(threadId) ?? []
   })
 
   const messagesHasMore = computed(() => {
-    const sessionId = selectedSession.value?.id
-    if (!sessionId) return false
-    return messagesHasMoreMap.get(sessionId) ?? false
+    const threadId = selectedThread.value?.id
+    if (!threadId) return false
+    return messagesHasMoreMap.get(threadId) ?? false
   })
 
   const workspaces = computed(() => {
@@ -52,63 +49,80 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const hasWorkspace = computed(() => currentWorkspacePath.value !== null)
 
   // LRU cache management
-  const touchSession = (sessionId: number) => {
-    const idx = sessionAccessOrder.indexOf(sessionId)
-    if (idx >= 0) sessionAccessOrder.splice(idx, 1)
-    sessionAccessOrder.push(sessionId)
+  const touchThread = (threadId: number) => {
+    const idx = threadAccessOrder.indexOf(threadId)
+    if (idx >= 0) threadAccessOrder.splice(idx, 1)
+    threadAccessOrder.push(threadId)
   }
 
-  const evictOldSessions = () => {
-    const currentId = selectedSession.value?.id
-    let guard = sessionAccessOrder.length
-    while (sessionAccessOrder.length > MAX_CACHED_SESSIONS && guard > 0) {
+  const evictOldThreads = () => {
+    const currentId = selectedThread.value?.id
+    let guard = threadAccessOrder.length
+    while (threadAccessOrder.length > MAX_CACHED_THREADS && guard > 0) {
       guard--
-      const oldest = sessionAccessOrder[0]
+      const oldest = threadAccessOrder[0]
       if (oldest === currentId) {
-        sessionAccessOrder.shift()
-        sessionAccessOrder.push(oldest)
+        threadAccessOrder.shift()
+        threadAccessOrder.push(oldest)
         continue
       }
-      sessionAccessOrder.shift()
-      const cached = messagesBySessionId.get(oldest)
+      threadAccessOrder.shift()
+      const cached = messagesByThreadId.get(oldest)
       if (cached) {
-        for (const msg of cached) messageIdToSessionId.delete(msg.id)
+        for (const msg of cached) messageIdToThreadId.delete(msg.id)
       }
-      messagesBySessionId.delete(oldest)
+      messagesByThreadId.delete(oldest)
+      subagentsByThreadId.delete(oldest)
     }
   }
 
   // Internal helpers
   const indexMessageList = (list: Message[]) => {
     for (const msg of list) {
-      messageIdToSessionId.set(msg.id, msg.sessionId)
+      messageIdToThreadId.set(msg.id, msg.threadId)
     }
   }
 
-  const setSessionMessages = (sessionId: number, list: Message[]) => {
-    messagesBySessionId.set(sessionId, reactive(list))
+  const setThreadMessages = (threadId: number, list: Message[]) => {
+    messagesByThreadId.set(threadId, reactive(list))
     indexMessageList(list)
-    touchSession(sessionId)
-    evictOldSessions()
+    touchThread(threadId)
+    evictOldThreads()
   }
 
-  const ensureSessionMessages = (sessionId: number): Message[] => {
-    touchSession(sessionId)
-    const existing = messagesBySessionId.get(sessionId)
+  const ensureThreadMessages = (threadId: number): Message[] => {
+    touchThread(threadId)
+    const existing = messagesByThreadId.get(threadId)
     if (existing) return existing
     const created = reactive<Message[]>([])
-    messagesBySessionId.set(sessionId, created)
-    evictOldSessions()
+    messagesByThreadId.set(threadId, created)
+    evictOldThreads()
     return created
   }
 
-  const resolveSessionIdByMessageId = (messageId: number): number | null => {
-    const indexed = messageIdToSessionId.get(messageId)
+  const setThreadSubagents = (threadId: number, list: SubagentRecord[]) => {
+    subagentsByThreadId.set(threadId, reactive(list))
+    touchThread(threadId)
+    evictOldThreads()
+  }
+
+  const ensureThreadSubagents = (threadId: number): SubagentRecord[] => {
+    touchThread(threadId)
+    const existing = subagentsByThreadId.get(threadId)
+    if (existing) return existing
+    const created = reactive<SubagentRecord[]>([])
+    subagentsByThreadId.set(threadId, created)
+    evictOldThreads()
+    return created
+  }
+
+  const resolveThreadIdByMessageId = (messageId: number): number | null => {
+    const indexed = messageIdToThreadId.get(messageId)
     if (typeof indexed === 'number') return indexed
-    for (const [sessionId, list] of messagesBySessionId.entries()) {
+    for (const [threadId, list] of messagesByThreadId.entries()) {
       if (list.some(m => m.id === messageId)) {
-        messageIdToSessionId.set(messageId, sessionId)
-        return sessionId
+        messageIdToThreadId.set(messageId, threadId)
+        return threadId
       }
     }
     return null
@@ -121,24 +135,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     for (const ws of list) {
       newTree.set(ws.path, {
         workspace: ws,
-        sessionViews: tree.value.get(ws.path)?.sessionViews || [],
+        threadViews: tree.value.get(ws.path)?.threadViews || [],
         isLoading: false,
       })
     }
     tree.value = newTree
 
     // Restore last active session
-    if (!selectedSession.value) {
+    if (!selectedThread.value) {
       for (const ws of list) {
-        if (ws.activeSessionId) {
-          await selectSessionById(ws.activeSessionId, ws.path)
+        if (ws.activeThreadId) {
+          await selectThreadById(ws.activeThreadId, ws.path)
           break
         }
       }
     }
   }
 
-  const loadSessionViews = async (path: string) => {
+  const loadThreadViews = async (path: string) => {
     const node = tree.value.get(path)
     if (!node || node.isLoading) return
 
@@ -146,20 +160,20 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     tree.value = new Map(tree.value).set(path, { ...node, isLoading: true })
 
     try {
-      const sessionViews = await workspaceApi.listSessionViews(path)
+      const threadViews = await workspaceApi.listThreadViews(path)
       tree.value = new Map(tree.value).set(path, {
         ...node,
-        sessionViews,
+        threadViews,
         isLoading: false,
       })
-      if (selectedSession.value?.workspacePath === path) {
-        const refreshed = sessionViews.find(item => item.session.id === selectedSession.value?.id)?.session
+      if (selectedThread.value?.workspacePath === path) {
+        const refreshed = threadViews.find(item => item.thread.id === selectedThread.value?.id)?.thread
         if (refreshed) {
-          selectedSession.value = refreshed
+          selectedThread.value = refreshed
         }
       }
     } catch (error) {
-      console.warn(`Failed to load sessions for workspace '${path}':`, error)
+      console.warn(`Failed to load threads for workspace '${path}':`, error)
       tree.value = new Map(tree.value).set(path, { ...node, isLoading: false })
     }
   }
@@ -169,42 +183,50 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return tree.value.get(path)
   }
 
-  const getSessionViews = (path: string | null): SessionViewRecord[] => {
-    return getNode(path)?.sessionViews ?? []
+  const getThreadViews = (path: string | null): ThreadViewRecord[] => {
+    return getNode(path)?.threadViews ?? []
   }
 
-  const getSessions = (path: string | null): SessionRecord[] => {
-    return getSessionViews(path).map(item => item.session)
+  const getThreads = (path: string | null): ThreadRecord[] => {
+    return getThreadViews(path).map(item => item.thread)
   }
 
-  const getTopLevelSessions = (path: string | null): SessionRecord[] => {
-    return getSessions(path).filter(session => session.parentId == null)
+  const getTopLevelThreads = (path: string | null): ThreadRecord[] => {
+    return getThreads(path).filter(thread => thread.parentThreadId == null)
   }
 
-  const getSessionView = (sessionId: number, workspacePath?: string | null): SessionViewRecord | undefined => {
-    const path = workspacePath ?? selectedSession.value?.workspacePath ?? activeWorkspacePath.value
-    return getSessionViews(path).find(item => item.session.id === sessionId)
+  const getThreadView = (threadId: number, workspacePath?: string | null): ThreadViewRecord | undefined => {
+    const path = workspacePath ?? selectedThread.value?.workspacePath ?? activeWorkspacePath.value
+    return getThreadViews(path).find(item => item.thread.id === threadId)
   }
 
-  // Session operations
-  const loadInitialMessages = async (sessionId: number) => {
-    setSessionMessages(sessionId, [])
-    const loaded = await workspaceApi.getMessages(sessionId, INITIAL_PAGE_SIZE)
-    setSessionMessages(sessionId, loaded)
-    messagesHasMoreMap.set(sessionId, loaded.length >= INITIAL_PAGE_SIZE)
+  // Thread operations
+  const loadInitialMessages = async (threadId: number) => {
+    setThreadMessages(threadId, [])
+    const loaded = await workspaceApi.getThreadMessages(threadId, INITIAL_PAGE_SIZE)
+    setThreadMessages(threadId, loaded)
+    const subagents = await workspaceApi.listSubagents(threadId)
+    setThreadSubagents(threadId, subagents)
+    messagesHasMoreMap.set(threadId, loaded.length >= INITIAL_PAGE_SIZE)
   }
 
-  const selectSession = async (session: SessionRecord) => {
-    if (selectedSession.value?.id === session.id) return
-    selectedSession.value = session
-    activeWorkspacePath.value = session.workspacePath
-    workspaceApi.setActiveSession(session.workspacePath, session.id)
-    await loadInitialMessages(session.id)
+  const selectThread = async (thread: ThreadRecord) => {
+    if (selectedThread.value?.id === thread.id) return
+    selectedThread.value = thread
+    activeWorkspacePath.value = thread.workspacePath
+    workspaceApi.setActiveThread(thread.workspacePath, thread.id)
+    await loadInitialMessages(thread.id)
   }
 
-  const selectSessionById = async (sessionId: number, workspacePath: string) => {
-    if (selectedSession.value?.id === sessionId) return
-    const sessionViews = await workspaceApi.listSessionViews(workspacePath)
+  const selectThreadById = async (threadId: number, workspacePath: string) => {
+    if (selectedThread.value?.id === threadId) {
+      // Same thread is already selected (e.g., user sent another message to current thread).
+      // We still need to refresh threadViews so the sidebar title reflects any title update
+      // that the backend wrote before emitting agent_run_created.
+      void loadThreadViews(workspacePath)
+      return
+    }
+    const threadViews = await workspaceApi.listThreadViews(workspacePath)
     const existingNode = tree.value.get(workspacePath)
     const workspace: WorkspaceRecord = existingNode?.workspace ?? {
       path: workspacePath,
@@ -215,122 +237,126 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
     tree.value = new Map(tree.value).set(workspacePath, {
       workspace,
-      sessionViews,
+      threadViews,
       isLoading: false,
     })
-    const session = sessionViews.find(item => item.session.id === sessionId)?.session
-    if (session) {
-      selectedSession.value = session
+    const thread =
+      threadViews.find(item => item.thread.id === threadId)?.thread ?? (await workspaceApi.getThread(threadId))
+    if (thread) {
+      selectedThread.value = thread
       activeWorkspacePath.value = workspacePath
-      await loadInitialMessages(sessionId)
+      await loadInitialMessages(threadId)
     }
   }
 
   const loadMoreMessages = async () => {
-    const sessionId = selectedSession.value?.id
-    if (!sessionId) return
-    const list = messagesBySessionId.get(sessionId)
+    const threadId = selectedThread.value?.id
+    if (!threadId) return
+    const list = messagesByThreadId.get(threadId)
     if (!list || list.length === 0) return
     const oldestId = list[0].id
-    const older = await workspaceApi.getMessages(sessionId, LOAD_MORE_PAGE_SIZE, oldestId)
+    const older = await workspaceApi.getThreadMessages(threadId, LOAD_MORE_PAGE_SIZE, oldestId)
     if (older.length === 0) {
-      messagesHasMoreMap.set(sessionId, false)
+      messagesHasMoreMap.set(threadId, false)
       return
     }
     list.unshift(...older)
     indexMessageList(older)
-    messagesHasMoreMap.set(sessionId, older.length >= LOAD_MORE_PAGE_SIZE)
+    messagesHasMoreMap.set(threadId, older.length >= LOAD_MORE_PAGE_SIZE)
   }
 
   const clearSelection = () => {
-    selectedSession.value = null
+    selectedThread.value = null
   }
 
   const setActiveWorkspace = (path: string | null) => {
     activeWorkspacePath.value = path
   }
 
-  const deleteSession = async (sessionId: number, workspacePath: string) => {
-    await workspaceApi.deleteSession(sessionId)
+  const deleteThread = async (threadId: number, workspacePath: string) => {
+    await workspaceApi.deleteThread(threadId)
     const node = tree.value.get(workspacePath)
     if (node) {
       tree.value = new Map(tree.value).set(workspacePath, {
         ...node,
-        sessionViews: node.sessionViews.filter(item => item.session.id !== sessionId),
+        threadViews: node.threadViews.filter(item => item.thread.id !== threadId),
       })
     }
-    if (selectedSession.value?.id === sessionId) {
-      selectedSession.value = null
-      workspaceApi.clearActiveSession(workspacePath)
+    if (selectedThread.value?.id === threadId) {
+      selectedThread.value = null
+      workspaceApi.clearActiveThread(workspacePath)
     }
-    const cached = messagesBySessionId.get(sessionId)
+    const cached = messagesByThreadId.get(threadId)
     if (cached) {
-      for (const msg of cached) messageIdToSessionId.delete(msg.id)
+      for (const msg of cached) messageIdToThreadId.delete(msg.id)
     }
-    messagesBySessionId.delete(sessionId)
+    messagesByThreadId.delete(threadId)
+    subagentsByThreadId.delete(threadId)
   }
 
   const deleteWorkspace = async (workspacePath: string) => {
     await workspaceApi.deleteWorkspace(workspacePath)
     const node = tree.value.get(workspacePath)
     if (node) {
-      for (const view of node.sessionViews) {
-        const cached = messagesBySessionId.get(view.session.id)
+      for (const view of node.threadViews) {
+        const cached = messagesByThreadId.get(view.thread.id)
         if (cached) {
-          for (const msg of cached) messageIdToSessionId.delete(msg.id)
+          for (const msg of cached) messageIdToThreadId.delete(msg.id)
         }
-        messagesBySessionId.delete(view.session.id)
+        messagesByThreadId.delete(view.thread.id)
+        subagentsByThreadId.delete(view.thread.id)
       }
     }
     const newTree = new Map(tree.value)
     newTree.delete(workspacePath)
     tree.value = newTree
-    if (selectedSession.value?.workspacePath === workspacePath) {
-      selectedSession.value = null
+    if (selectedThread.value?.workspacePath === workspacePath) {
+      selectedThread.value = null
     }
     if (activeWorkspacePath.value === workspacePath) {
       activeWorkspacePath.value = null
     }
   }
 
-  const createSession = async (workspacePath: string, title?: string) => {
+  const createThread = async (workspacePath: string, title?: string) => {
     await workspaceApi.getOrCreate(workspacePath)
-    const session = await workspaceApi.createSession(workspacePath, title ?? '')
+    const thread = await workspaceApi.createThread(workspacePath, title ?? '')
     const node = tree.value.get(workspacePath)
     if (node) {
       tree.value = new Map(tree.value).set(workspacePath, {
         ...node,
-        sessionViews: [{ session, timeline: [], executionTree: [] }, ...node.sessionViews],
+        threadViews: [{ thread, timeline: [], executionTree: [] }, ...node.threadViews],
       })
     }
-    selectedSession.value = session
+    selectedThread.value = thread
     activeWorkspacePath.value = workspacePath
-    workspaceApi.setActiveSession(workspacePath, session.id)
-    setSessionMessages(session.id, [])
-    return session
+    workspaceApi.setActiveThread(workspacePath, thread.id)
+    setThreadMessages(thread.id, [])
+    setThreadSubagents(thread.id, [])
+    return thread
   }
 
   // Message operations (for stream updates)
   const upsertMessage = (message: Message) => {
-    const list = ensureSessionMessages(message.sessionId)
+    const list = ensureThreadMessages(message.threadId)
     const idx = list.findIndex(m => m.id === message.id)
     if (idx >= 0) {
       list[idx] = message
     } else {
       list.push(message)
     }
-    messageIdToSessionId.set(message.id, message.sessionId)
+    messageIdToThreadId.set(message.id, message.threadId)
   }
 
   const appendBlock = (messageId: number, block: Message['blocks'][number]) => {
-    const sessionId = resolveSessionIdByMessageId(messageId)
-    if (!sessionId) {
-      console.warn(`[workspace] appendBlock: session not found for message ${messageId}`)
+    const threadId = resolveThreadIdByMessageId(messageId)
+    if (!threadId) {
+      console.warn(`[workspace] appendBlock: thread not found for message ${messageId}`)
       return
     }
-    const list = messagesBySessionId.get(sessionId)
+    const list = messagesByThreadId.get(threadId)
     if (!list) {
-      console.warn(`[workspace] appendBlock: message list not found for session ${sessionId}`)
+      console.warn(`[workspace] appendBlock: message list not found for thread ${threadId}`)
       return
     }
     const msg = list.find(m => m.id === messageId)
@@ -342,14 +368,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   const updateBlock = (messageId: number, blockId: string, block: Message['blocks'][number]) => {
-    const sessionId = resolveSessionIdByMessageId(messageId)
-    if (!sessionId) {
-      console.warn(`[workspace] updateBlock: session not found for message ${messageId}`)
+    const threadId = resolveThreadIdByMessageId(messageId)
+    if (!threadId) {
+      console.warn(`[workspace] updateBlock: thread not found for message ${messageId}`)
       return
     }
-    const list = messagesBySessionId.get(sessionId)
+    const list = messagesByThreadId.get(threadId)
     if (!list) {
-      console.warn(`[workspace] updateBlock: message list not found for session ${sessionId}`)
+      console.warn(`[workspace] updateBlock: message list not found for thread ${threadId}`)
       return
     }
     const msg = list.find(m => m.id === messageId)
@@ -369,14 +395,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     messageId: number,
     patch: Partial<Pick<Message, 'status' | 'finishedAt' | 'durationMs' | 'tokenUsage' | 'contextUsage'>>
   ) => {
-    const sessionId = resolveSessionIdByMessageId(messageId)
-    if (!sessionId) {
-      console.warn(`[workspace] finishMessage: session not found for message ${messageId}`)
+    const threadId = resolveThreadIdByMessageId(messageId)
+    if (!threadId) {
+      console.warn(`[workspace] finishMessage: thread not found for message ${messageId}`)
       return
     }
-    const list = messagesBySessionId.get(sessionId)
+    const list = messagesByThreadId.get(threadId)
     if (!list) {
-      console.warn(`[workspace] finishMessage: message list not found for session ${sessionId}`)
+      console.warn(`[workspace] finishMessage: message list not found for thread ${threadId}`)
       return
     }
     const msg = list.find(m => m.id === messageId)
@@ -387,37 +413,76 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     Object.assign(msg, patch)
   }
 
-  const fetchMessages = async (sessionId: number) => {
-    await loadInitialMessages(sessionId)
+  const upsertSubagent = (subagent: SubagentRecord) => {
+    const list = ensureThreadSubagents(subagent.parentThreadId)
+    const idx = list.findIndex(item => item.id === subagent.id)
+    if (idx >= 0) {
+      list[idx] = subagent
+    } else {
+      list.push(subagent)
+      list.sort((left, right) => {
+        if (left.createdAt === right.createdAt) return left.id.localeCompare(right.id)
+        return left.createdAt.localeCompare(right.createdAt)
+      })
+    }
   }
 
-  const getCachedMessages = (sessionId: number) => messagesBySessionId.get(sessionId) ?? []
+  const fetchSubagents = async (threadId: number) => {
+    const loaded = await workspaceApi.listSubagents(threadId)
+    setThreadSubagents(threadId, loaded)
+  }
+
+  const getSubagents = (threadId: number) => subagentsByThreadId.get(threadId) ?? []
+
+  const fetchMessages = async (threadId: number) => {
+    const existing = messageFetches.get(threadId)
+    if (existing) {
+      await existing
+      return
+    }
+
+    const request = (async () => {
+      const loaded = await workspaceApi.getThreadMessages(threadId, INITIAL_PAGE_SIZE)
+      setThreadMessages(threadId, loaded)
+      messagesHasMoreMap.set(threadId, loaded.length >= INITIAL_PAGE_SIZE)
+    })()
+
+    messageFetches.set(threadId, request)
+    try {
+      await request
+    } finally {
+      messageFetches.delete(threadId)
+    }
+  }
+
+  const getCachedMessages = (threadId: number) => messagesByThreadId.get(threadId) ?? []
 
   return {
     // State
     tree,
-    selectedSession,
+    selectedThread,
     messages,
     messagesHasMore,
+    subagentsByThreadId,
     activeWorkspacePath,
     workspaces,
     currentWorkspacePath,
     hasWorkspace,
     // Tree
     loadTree,
-    loadSessionViews,
+    loadThreadViews,
     getNode,
-    getSessions,
-    getTopLevelSessions,
-    getSessionViews,
-    getSessionView,
-    // Session
-    selectSession,
-    selectSessionById,
+    getThreads,
+    getTopLevelThreads,
+    getThreadViews,
+    getThreadView,
+    // Thread
+    selectThread,
+    selectThreadById,
     clearSelection,
     setActiveWorkspace,
-    createSession,
-    deleteSession,
+    createThread,
+    deleteThread,
     deleteWorkspace,
     // Message
     upsertMessage,
@@ -425,6 +490,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateBlock,
     finishMessage,
     fetchMessages,
+    upsertSubagent,
+    fetchSubagents,
+    getSubagents,
     loadMoreMessages,
     getCachedMessages,
   }

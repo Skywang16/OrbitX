@@ -180,9 +180,8 @@ impl DatabaseManager {
 
         self.execute_sql_scripts().await?;
         self.ensure_ai_models_schema().await?;
-        self.ensure_messages_schema().await?;
         self.ensure_workspaces_schema().await?;
-        self.ensure_sessions_schema().await?;
+        self.ensure_threads_schema().await?;
         self.insert_default_data().await?;
         Ok(())
     }
@@ -193,6 +192,14 @@ impl DatabaseManager {
 
     pub fn config_dir(&self) -> &Path {
         &self.paths.config_dir
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.paths.state_dir
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.paths.data_dir
     }
 
     pub async fn encrypt_data(&self, data: &str) -> DatabaseResult<Vec<u8>> {
@@ -256,44 +263,6 @@ impl DatabaseManager {
         }
 
         tracing::info!("All SQL scripts executed successfully");
-        Ok(())
-    }
-
-    async fn ensure_messages_schema(&self) -> DatabaseResult<()> {
-        let rows = sqlx::query("PRAGMA table_info(messages)")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|err| {
-                DatabaseError::internal(format!("Failed to inspect messages schema: {err}"))
-            })?;
-
-        let mut has_is_internal = false;
-        for row in &rows {
-            if pragma_text_column(row, "name", "messages table_info")? == "is_internal" {
-                has_is_internal = true;
-                break;
-            }
-        }
-
-        if !has_is_internal {
-            let mut tx = self.pool.begin().await.map_err(|err| {
-                DatabaseError::internal(format!("Failed to begin transaction: {err}"))
-            })?;
-
-            sqlx::query("ALTER TABLE messages ADD COLUMN is_internal INTEGER NOT NULL DEFAULT 0")
-                .execute(&mut *tx)
-                .await
-                .map_err(|err| {
-                    DatabaseError::internal(format!(
-                        "Failed to migrate messages schema (add is_internal): {err}"
-                    ))
-                })?;
-
-            tx.commit().await.map_err(|err| {
-                DatabaseError::internal(format!("Failed to commit transaction: {err}"))
-            })?;
-        }
-
         Ok(())
     }
 
@@ -512,29 +481,29 @@ impl DatabaseManager {
         Ok(())
     }
 
-    async fn ensure_sessions_schema(&self) -> DatabaseResult<()> {
-        let rows = sqlx::query("PRAGMA table_info(sessions)")
+    async fn ensure_threads_schema(&self) -> DatabaseResult<()> {
+        let rows = sqlx::query("PRAGMA table_info(threads)")
             .fetch_all(&self.pool)
             .await
             .map_err(|err| {
-                DatabaseError::internal(format!("Failed to inspect sessions schema: {err}"))
+                DatabaseError::internal(format!("Failed to inspect threads schema: {err}"))
             })?;
 
-        let mut has_worktree_path = false;
+        let mut has_display_name = false;
         for row in &rows {
-            if pragma_text_column(row, "name", "sessions table_info")? == "worktree_path" {
-                has_worktree_path = true;
+            if pragma_text_column(row, "name", "threads table_info")? == "display_name" {
+                has_display_name = true;
                 break;
             }
         }
 
-        if !has_worktree_path {
-            sqlx::query("ALTER TABLE sessions ADD COLUMN worktree_path TEXT")
+        if !has_display_name {
+            sqlx::query("ALTER TABLE threads ADD COLUMN display_name TEXT")
                 .execute(&self.pool)
                 .await
                 .map_err(|err| {
                     DatabaseError::internal(format!(
-                        "Failed to migrate sessions schema (add worktree_path): {err}"
+                        "Failed to migrate threads schema (add display_name): {err}"
                     ))
                 })?;
         }
@@ -639,7 +608,7 @@ impl KeyVault {
 
         let mut hasher = Sha256::new();
         hasher.update(device_id.as_bytes());
-        hasher.update(b"opencodex-secret-v1");
+        hasher.update(b"orbitx-secret-v1");
 
         let result = hasher.finalize();
         let mut bytes = [0u8; 32];

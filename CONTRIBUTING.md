@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for your interest in the OpenCodex project! We welcome all forms of contributions.
+Thank you for your interest in the OrbitX project! We welcome all forms of contributions.
 
 ## 🤝 How to Contribute
 
@@ -8,7 +8,7 @@ Thank you for your interest in the OpenCodex project! We welcome all forms of co
 
 If you find a bug or have a feature suggestion:
 
-1. Search [Issues](https://github.com/Skywang16/OpenCodex/issues) to see if the issue already exists
+1. Search [Issues](https://github.com/Skywang16/OrbitX/issues) to see if the issue already exists
 2. If not, create a new Issue
 3. Use a clear title and detailed description
 4. For bugs, provide reproduction steps
@@ -18,8 +18,8 @@ If you find a bug or have a feature suggestion:
 1. **Fork the repository**
 
    ```bash
-   git clone https://github.com/Skywang16/OpenCodex.git
-   cd OpenCodex
+   git clone https://github.com/Skywang16/OrbitX.git
+   cd OrbitX
    ```
 
 2. **Create a branch**
@@ -168,7 +168,7 @@ If you encounter issues while contributing:
 
 ## 🙏 Acknowledgments
 
-Thanks to all developers who contribute to the OpenCodex project!
+Thanks to all developers who contribute to the OrbitX project!
 
 ---
 

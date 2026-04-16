@@ -12,9 +12,9 @@ export enum ConfigSection {
   Ai = 'ai',
 }
 
-export type RuntimeTerminalKind = 'workspace' | 'task'
-export type TaskTerminalMode = 'blocking' | 'background'
-export type TaskTerminalStatus = 'initializing' | 'running' | 'completed' | 'failed' | 'aborted'
+export type RuntimeTerminalKind = 'workspace' | 'agent'
+export type AgentTerminalMode = 'blocking' | 'background'
+export type AgentTerminalStatus = 'initializing' | 'running' | 'completed' | 'failed' | 'aborted'
 
 export interface DataQuery {
   query: string
@@ -51,11 +51,11 @@ export interface RuntimeTerminalState {
   /** Pre-computed display title for the tab */
   displayTitle: string
   kind: RuntimeTerminalKind
-  sessionId: number | null
-  taskTerminalId: string | null
+  threadId: number | null
+  agentTerminalId: string | null
   sourceLabel: string | null
-  taskMode: TaskTerminalMode | null
-  taskStatus: TaskTerminalStatus | null
+  agentMode: AgentTerminalMode | null
+  agentStatus: AgentTerminalStatus | null
 }
 
 export interface StorageEvent {

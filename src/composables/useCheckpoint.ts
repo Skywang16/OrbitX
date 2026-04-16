@@ -6,22 +6,22 @@ import type { CheckpointSummary } from '@/types/domain/checkpoint'
 import { ref } from 'vue'
 
 const checkpointsMap = ref<Map<string, CheckpointSummary[]>>(new Map())
-const loadingSessions = ref<Set<string>>(new Set())
+const loadingThreads = ref<Set<string>>(new Set())
 
-const makeKey = (sessionId: number, workspacePath: string) => `${workspacePath}::${sessionId}`
+const makeKey = (threadId: number, workspacePath: string) => `${workspacePath}::${threadId}`
 
 export const useCheckpoint = () => {
-  const loadCheckpoints = async (sessionId: number, workspacePath: string) => {
+  const loadCheckpoints = async (threadId: number, workspacePath: string) => {
     if (!workspacePath) return
-    const key = makeKey(sessionId, workspacePath)
-    if (loadingSessions.value.has(key)) return
+    const key = makeKey(threadId, workspacePath)
+    if (loadingThreads.value.has(key)) return
 
-    loadingSessions.value.add(key)
+    loadingThreads.value.add(key)
     try {
-      const list = await checkpointApi.list(sessionId, workspacePath)
+      const list = await checkpointApi.list(threadId, workspacePath)
       checkpointsMap.value.set(key, list)
     } finally {
-      loadingSessions.value.delete(key)
+      loadingThreads.value.delete(key)
     }
   }
 
@@ -29,11 +29,11 @@ export const useCheckpoint = () => {
    * Find checkpoint by messageId
    */
   const getCheckpointByMessageId = (
-    sessionId: number,
+    threadId: number,
     workspacePath: string,
     messageId: number
   ): CheckpointSummary | null => {
-    const list = checkpointsMap.value.get(makeKey(sessionId, workspacePath))
+    const list = checkpointsMap.value.get(makeKey(threadId, workspacePath))
     if (!list) return null
     return list.find(cp => cp.messageId === messageId) ?? null
   }
@@ -42,34 +42,34 @@ export const useCheckpoint = () => {
    * Get child checkpoint of specified checkpoint
    */
   const getChildCheckpoint = (
-    sessionId: number,
+    threadId: number,
     workspacePath: string,
     checkpointId: number
   ): CheckpointSummary | null => {
-    const list = checkpointsMap.value.get(makeKey(sessionId, workspacePath))
+    const list = checkpointsMap.value.get(makeKey(threadId, workspacePath))
     if (!list) return null
     return list.find(cp => cp.parentId === checkpointId) ?? null
   }
 
-  const getCheckpointsBySession = (sessionId: number, workspacePath: string): CheckpointSummary[] => {
-    return checkpointsMap.value.get(makeKey(sessionId, workspacePath)) ?? []
+  const getCheckpointsByThread = (threadId: number, workspacePath: string): CheckpointSummary[] => {
+    return checkpointsMap.value.get(makeKey(threadId, workspacePath)) ?? []
   }
 
-  const refreshCheckpoints = async (sessionId: number, workspacePath: string) => {
-    const key = makeKey(sessionId, workspacePath)
+  const refreshCheckpoints = async (threadId: number, workspacePath: string) => {
+    const key = makeKey(threadId, workspacePath)
     checkpointsMap.value.delete(key)
-    await loadCheckpoints(sessionId, workspacePath)
+    await loadCheckpoints(threadId, workspacePath)
   }
 
-  const isLoading = (sessionId: number, workspacePath: string) => {
-    return loadingSessions.value.has(makeKey(sessionId, workspacePath))
+  const isLoading = (threadId: number, workspacePath: string) => {
+    return loadingThreads.value.has(makeKey(threadId, workspacePath))
   }
 
   return {
     loadCheckpoints,
     getCheckpointByMessageId,
     getChildCheckpoint,
-    getCheckpointsBySession,
+    getCheckpointsByThread,
     refreshCheckpoints,
     isLoading,
   }

@@ -1,12 +1,12 @@
 {
   "menu": {
-    "about": "关于 OpenCodex",
+    "about": "关于 OrbitX",
     "settings": "设置...",
     "services": "服务",
-    "hide": "隐藏 OpenCodex",
+    "hide": "隐藏 OrbitX",
     "hide_others": "隐藏其他",
     "show_all": "显示全部",
-    "quit": "退出 OpenCodex",
+    "quit": "退出 OrbitX",
     "new_terminal": "新建终端",
     "edit": "编辑",
     "undo": "撤销",
@@ -24,7 +24,7 @@
     "minimize": "最小化",
     "always_on_top": "窗口置顶",
     "help": "帮助",
-    "documentation": "OpenCodex 文档",
+    "documentation": "OrbitX 文档",
     "report_issue": "报告问题..."
   },
   "common": {
@@ -77,7 +77,7 @@
     "open_folder_failed": "打开配置目录失败"
   },
   "agent": {
-    "cancel_failed": "取消任务失败",
+    "cancel_failed": "取消 Agent 运行失败",
     "command_not_found": "命令不存在",
     "context": {
       "file_status_failed": "获取文件上下文状态失败",
@@ -90,12 +90,12 @@
       "set_user_rules_failed": "设置规则失败",
       "update_failed": "更新会话失败"
     },
-    "execute_failed": "执行任务失败",
-    "too_many_active_tasks_global": "当前应用最多只能同时运行 5 个 Agent 任务",
-    "execute_tree_failed": "执行任务树失败",
-    "list_failed": "获取任务列表失败",
+    "execute_failed": "执行 Agent 运行失败",
+    "too_many_active_tasks_global": "当前应用最多只能同时运行 5 个 Agent 运行",
+    "execute_tree_failed": "执行 Agent 运行树失败",
+    "list_failed": "获取 Agent 运行列表失败",
     "list_skills_failed": "获取 Skill 列表失败",
-    "pause_failed": "暂停任务失败",
+    "pause_failed": "暂停 Agent 运行失败",
     "switch_failed": "切换 Agent 失败",
     "terminal_manager_not_initialized": "Agent 终端尚未就绪",
     "tool_confirm_not_found": "工具确认请求不存在",
@@ -105,6 +105,26 @@
       "conversations_failed": "获取会话列表失败",
       "messages_failed": "获取消息列表失败"
     }
+  },
+  "subagent": {
+    "names": [
+      "李白",
+      "杜甫",
+      "王维",
+      "苏轼",
+      "辛弃疾",
+      "李清照",
+      "班昭",
+      "司马迁",
+      "张衡",
+      "祖冲之",
+      "郦道元",
+      "沈括",
+      "王羲之",
+      "陶渊明",
+      "韩愈",
+      "柳宗元"
+    ]
   },
   "checkpoint": {
     "list_failed": "获取检查点列表失败",
@@ -130,15 +150,15 @@
   },
   "workspace": {
     "get_failed": "获取工作区失败",
-    "sessions_failed": "获取会话列表失败",
+    "threads_failed": "获取线程列表失败",
     "messages_failed": "获取消息列表失败",
-    "active_session_failed": "获取活跃会话失败",
-    "create_session_failed": "创建会话失败",
-    "set_active_session_failed": "设置活跃会话失败",
-    "clear_active_session_failed": "清除活跃会话失败",
-    "delete_session_failed": "删除会话失败",
-    "session_not_found": "会话不存在",
-    "trim_session_failed": "清理会话消息失败",
+    "active_thread_failed": "获取活跃线程失败",
+    "create_thread_failed": "创建线程失败",
+    "set_active_thread_failed": "设置活跃线程失败",
+    "clear_active_thread_failed": "清除活跃线程失败",
+    "delete_thread_failed": "删除线程失败",
+    "thread_not_found": "线程不存在",
+    "trim_thread_failed": "清理线程消息失败",
     "recent": {
       "get_failed": "获取最近工作区失败",
       "add_failed": "添加最近工作区失败",
@@ -223,8 +243,7 @@
   },
   "storage": {
     "get_config_failed": "获取配置失败",
-    "update_config_failed": "更新配置失败",
-    "save_session_failed": "保存会话状态失败"
+    "update_config_failed": "更新配置失败"
   },
   "settings": {
     "get_failed": "获取设置失败",

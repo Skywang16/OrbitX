@@ -70,8 +70,10 @@
         return
       }
 
-      await refreshCheckpoints(checkpoint.sessionId, workspacePath)
-      await workspaceStore.fetchMessages(checkpoint.sessionId)
+      await refreshCheckpoints(checkpoint.threadId, workspacePath)
+      await workspaceStore.fetchMessages(checkpoint.threadId)
+      await workspaceStore.fetchSubagents(checkpoint.threadId)
+      await workspaceStore.loadThreadViews(workspacePath)
 
       emit('rollback', {
         success: true,

@@ -21,22 +21,22 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_last_accessed
 CREATE INDEX IF NOT EXISTS idx_run_actions_workspace
     ON run_actions(workspace_path, sort_order);
 
-CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_path);
-CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_type);
-CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(workspace_path, status);
-
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role);
-CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_message_id);
-
-CREATE INDEX IF NOT EXISTS idx_tool_executions_message ON tool_executions(message_id);
-CREATE INDEX IF NOT EXISTS idx_tool_executions_session ON tool_executions(session_id);
-CREATE INDEX IF NOT EXISTS idx_tool_executions_tool ON tool_executions(tool_name);
-CREATE INDEX IF NOT EXISTS idx_tool_executions_status ON tool_executions(status);
+CREATE INDEX IF NOT EXISTS idx_threads_workspace ON threads(workspace_path);
+CREATE INDEX IF NOT EXISTS idx_threads_parent ON threads(parent_thread_id);
+CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(workspace_path, status);
+CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_threads_archived ON threads(is_archived);
+CREATE INDEX IF NOT EXISTS idx_subagents_parent_thread ON subagents(parent_thread_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_subagents_parent_message ON subagents(parent_message_id);
+CREATE INDEX IF NOT EXISTS idx_subagents_child_thread ON subagents(child_thread_id);
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_thread ON agent_jobs(thread_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_status ON agent_jobs(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_job_items_job_status ON agent_job_items(job_id, status, row_index ASC);
+CREATE INDEX IF NOT EXISTS idx_agent_logs_thread_ts ON agent_logs(thread_id, ts DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_thread_memories_updated ON thread_memories(source_updated_at DESC, thread_id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_checkpoints_workspace ON checkpoints(workspace_path, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_thread ON checkpoints(thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_message ON checkpoints(message_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_parent ON checkpoints(parent_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoint_files_checkpoint ON checkpoint_file_snapshots(checkpoint_id);

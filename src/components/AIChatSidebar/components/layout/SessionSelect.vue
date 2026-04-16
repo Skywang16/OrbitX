@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { SessionRecord } from '@/api/workspace'
+  import type { ThreadRecord } from '@/api/workspace'
   import type { SelectOption } from '@/ui'
   import { XSelect } from '@/ui'
   import { computed } from 'vue'
@@ -7,17 +7,17 @@
 
   // Props definition
   interface Props {
-    sessions: SessionRecord[]
-    currentSessionId: number | null
+    threads: ThreadRecord[]
+    currentThreadId: number | null
     selectedLabel?: string | null
     loading?: boolean
   }
 
   // Emits definition
   interface Emits {
-    (e: 'select-session', sessionId: number): void
-    (e: 'create-new-session'): void
-    (e: 'refresh-sessions'): void
+    (e: 'select-thread', threadId: number): void
+    (e: 'create-new-thread'): void
+    (e: 'refresh-threads'): void
   }
 
   const props = withDefaults(defineProps<Props>(), {
@@ -28,10 +28,10 @@
   const { t } = useI18n()
 
   const selectOptions = computed<SelectOption[]>(() => {
-    return props.sessions.map(session => ({
-      label: session.title || t('chat.new_session'),
-      value: session.id,
-      description: `${session.messageCount} ${t('session.messages')} · ${formatSessionTime(session.updatedAt)}`,
+    return props.threads.map(thread => ({
+      label: thread.title || t('chat.new_session'),
+      value: thread.id,
+      description: `${thread.messageCount} ${t('session.messages')} · ${formatSessionTime(thread.updatedAt)}`,
     }))
   })
 
@@ -43,13 +43,13 @@
 
   const handleSelectChange = (value: string | number | null | Array<string | number>) => {
     if (value !== null && !Array.isArray(value)) {
-      emit('select-session', Number(value))
+      emit('select-thread', Number(value))
     }
   }
 
   const handleVisibleChange = (visible: boolean) => {
     if (visible) {
-      emit('refresh-sessions')
+      emit('refresh-threads')
     }
   }
 </script>
@@ -57,7 +57,7 @@
 <template>
   <div class="session-select">
     <XSelect
-      :model-value="props.currentSessionId"
+      :model-value="props.currentThreadId"
       :options="selectOptions"
       :placeholder="displayValue"
       size="small"
@@ -93,11 +93,11 @@
   }
 
   .session-select :deep(.x-select__input:hover) {
-    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover);
   }
 
   .session-select :deep(.x-select--open .x-select__input) {
-    background-color: var(--color-hover, rgba(0, 0, 0, 0.05));
+    background-color: var(--color-hover);
   }
 
   .session-select :deep(.x-select__value) {

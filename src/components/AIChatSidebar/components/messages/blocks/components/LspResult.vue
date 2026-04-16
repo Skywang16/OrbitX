@@ -173,7 +173,7 @@
   .lsp-result {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 2px;
     padding: 2px 0;
   }
 
@@ -181,29 +181,28 @@
   .fallback,
   .hover-content {
     margin: 0;
-    color: var(--text-400);
+    color: var(--text-500);
     font-family: var(--font-family-mono);
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.5;
     white-space: pre-wrap;
+    word-break: break-word;
   }
 
+  /* ── status list ── */
   .status-grid,
   .diagnostic-groups,
   .symbol-list,
   .location-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 1px;
   }
 
   .status-card,
   .hover-card,
   .diagnostic-group {
-    border: 1px solid var(--border-200);
-    background: var(--bg-100);
-    border-radius: var(--border-radius-lg);
-    padding: 10px 12px;
+    padding: 3px 0;
   }
 
   .status-card__header,
@@ -211,17 +210,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 6px;
+    gap: 8px;
+    margin-bottom: 2px;
   }
 
   .status-card__name,
   .diagnostic-group__file,
   .symbol-name,
   .location-row__title {
-    color: var(--text-200);
-    font-size: 13px;
-    font-weight: 600;
+    color: var(--text-300);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .status-card__meta,
@@ -231,29 +235,34 @@
   .hover-range,
   .symbol-detail {
     color: var(--text-500);
-    font-size: 12px;
+    font-size: 11px;
     font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .status-card__stats {
     display: flex;
-    gap: 10px;
-    margin-top: 6px;
+    gap: 8px;
+    margin-top: 2px;
   }
 
   .status-card__error {
-    margin-top: 8px;
+    margin-top: 2px;
     color: var(--color-error);
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.4;
   }
 
   .status-pill {
     border-radius: 999px;
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 1px 6px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.02em;
+    flex-shrink: 0;
   }
 
   .status-pill.ready {
@@ -271,16 +280,21 @@
     background: var(--bg-300);
   }
 
+  /* ── rows (symbol / location / diagnostic) ── */
   .symbol-row,
   .location-row,
   .diagnostic-row {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 8px 10px;
-    border: 1px solid var(--border-200);
-    border-radius: var(--border-radius-md);
-    background: color-mix(in srgb, var(--bg-100) 88%, var(--bg-200));
+    gap: 8px;
+    padding: 2px 3px;
+    border-radius: 3px;
+  }
+
+  .symbol-row:hover,
+  .location-row:hover,
+  .diagnostic-row:hover {
+    background: color-mix(in srgb, var(--bg-200) 60%, transparent);
   }
 
   .symbol-row {
@@ -295,6 +309,9 @@
   .symbol-name {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .symbol-detail {
@@ -346,5 +363,10 @@
     color: var(--text-300);
     font-size: 13px;
     line-height: 1.45;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
   }
 </style>

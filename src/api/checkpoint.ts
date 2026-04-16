@@ -3,20 +3,20 @@ import { invoke } from '@/utils/request'
 
 export const checkpointApi = {
   /**
-   * Get checkpoint list for session
+   * Get checkpoint list for thread
    */
-  list: async (sessionId: number, workspacePath: string): Promise<CheckpointSummary[]> => {
+  list: async (threadId: number, workspacePath: string): Promise<CheckpointSummary[]> => {
     if (!workspacePath) {
       console.warn('[checkpointApi] workspacePath is required')
       return []
     }
-    return (await invoke<CheckpointSummary[]>('checkpoint_list', { sessionId, workspacePath })) ?? []
+    return (await invoke<CheckpointSummary[]>('checkpoint_list', { threadId, workspacePath })) ?? []
   },
 
   /**
    * Rollback to specified checkpoint
    *
-   * Only checkpointId needed, backend retrieves session/workspace/message information from checkpoint record
+   * Only checkpointId needed, backend retrieves thread/workspace/message information from checkpoint record
    */
   rollback: async (checkpointId: number): Promise<RollbackResult | null> => {
     return (await invoke<RollbackResult>('checkpoint_rollback', { checkpointId })) ?? null

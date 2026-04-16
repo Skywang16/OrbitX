@@ -103,11 +103,11 @@ impl ConfigPaths {
     /// Get application data directory
     ///
     /// Returns appropriate application data directory based on platform:
-    /// - Windows: `%APPDATA%\OpenCodex`
-    /// - macOS: `~/Library/Application Support/OpenCodex`
-    /// - Linux: `~/.config/opencodex`
+    /// - Windows: `%APPDATA%\OrbitX`
+    /// - macOS: `~/Library/Application Support/OrbitX`
+    /// - Linux: `~/.config/orbitx`
     fn get_app_data_dir() -> ConfigPathsResult<PathBuf> {
-        let app_name = "OpenCodex";
+        let app_name = "OrbitX";
 
         #[cfg(target_os = "windows")]
         {
@@ -136,7 +136,7 @@ impl ConfigPaths {
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         {
             let home = dirs::home_dir().ok_or(ConfigPathsError::HomeDirectoryUnavailable)?;
-            Ok(home.join(".opencodex"))
+            Ok(home.join(".orbitx"))
         }
     }
 
@@ -292,7 +292,7 @@ impl Default for ConfigPaths {
 
 /// Convenience function to get global Skills directory path
 ///
-/// Returns `~/.config/opencodex/skills` (or platform-specific path)
+/// Returns `~/.config/orbitx/skills` (or platform-specific path)
 pub fn skills_dir() -> PathBuf {
     ConfigPaths::default().skills_dir().to_path_buf()
 }

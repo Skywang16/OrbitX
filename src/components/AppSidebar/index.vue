@@ -1,9 +1,8 @@
 <script setup lang="ts">
-  import { workspaceApi, type ExecutionNodeRecord, type SessionRecord, type WorkspaceRecord } from '@/api/workspace'
+  import { workspaceApi, type ThreadRecord, type WorkspaceRecord } from '@/api/workspace'
   import { useAIChatStore } from '@/components/AIChatSidebar'
   import { useLayoutStore } from '@/stores/layout'
   import { useWorkspaceStore } from '@/stores/workspace'
-  import { getAgentColor } from '@/utils/agentColors'
   import { formatRelativeTime } from '@/utils/dateFormatter'
   import { onBeforeUnmount } from 'vue'
   import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -18,7 +17,7 @@
   const aiChatStore = useAIChatStore()
 
   const { showSettings } = storeToRefs(layoutStore)
-  const { selectedSession } = storeToRefs(workspaceStore)
+  const { selectedThread } = storeToRefs(workspaceStore)
 
   const props = defineProps<{
     isVisible: boolean
@@ -103,14 +102,14 @@
   }
 
   const expandedPaths = ref<Set<string>>(new Set())
-  const currentSessionId = computed(() => selectedSession.value?.id ?? null)
+  const currentThreadId = computed(() => selectedThread.value?.id ?? null)
 
   // Auto-expand workspace folder when a session is selected (e.g. on restore)
   watch(
-    selectedSession,
-    session => {
-      if (session && !expandedPaths.value.has(session.workspacePath)) {
-        expandedPaths.value.add(session.workspacePath)
+    selectedThread,
+    thread => {
+      if (thread && !expandedPaths.value.has(thread.workspacePath)) {
+        expandedPaths.value.add(thread.workspacePath)
         expandedPaths.value = new Set(expandedPaths.value)
       }
     },
@@ -124,7 +123,7 @@
 
   const isExpanded = (path: string) => expandedPaths.value.has(path)
   const getNode = (path: string) => workspaceStore.getNode(path)
-  const getSessions = (path: string): SessionRecord[] => workspaceStore.getTopLevelSessions(path)
+  const getThreads = (path: string): ThreadRecord[] => workspaceStore.getTopLevelThreads(path)
 
   const handleToggleWorkspace = async (path: string) => {
     workspaceStore.setActiveWorkspace(path)
@@ -133,8 +132,8 @@
     } else {
       expandedPaths.value.add(path)
       const node = workspaceStore.getNode(path)
-      if (node && node.sessionViews.length === 0 && !node.isLoading) {
-        await workspaceStore.loadSessionViews(path)
+      if (node && node.threadViews.length === 0 && !node.isLoading) {
+        await workspaceStore.loadThreadViews(path)
       }
     }
     expandedPaths.value = new Set(expandedPaths.value)
@@ -142,9 +141,9 @@
 
   const isWorkspaceActive = (path: string) => workspaceStore.activeWorkspacePath === path
 
-  const handleSelectSession = async (session: SessionRecord) => {
+  const handleSelectThread = async (thread: ThreadRecord) => {
     emit('update:showSkills', false)
-    await workspaceStore.selectSession(session)
+    await workspaceStore.selectThread(thread)
   }
 
   const handleNewThread = async () => {
@@ -168,7 +167,7 @@
       // Expand and load sessions
       expandedPaths.value.add(selected)
       expandedPaths.value = new Set(expandedPaths.value)
-      await workspaceStore.loadSessionViews(selected)
+      await workspaceStore.loadThreadViews(selected)
     }
   }
 
@@ -176,49 +175,12 @@
     layoutStore.openSettings()
   }
 
-  const getSessionTitle = (session: { title?: string | null; id: number }) => {
-    return session.title || t('sidebar.new_thread')
+  const getThreadTitle = (thread: { title?: string | null; id: number }) => {
+    return thread.title || t('sidebar.new_thread')
   }
 
-  const isSessionActive = (session: SessionRecord) => session.id === currentSessionId.value
-  const isSessionLoading = (session: SessionRecord) => aiChatStore.isSessionRunning(session.id)
-  const getActiveChildAgents = (workspacePath: string, sessionId: number) => {
-    const sessionView = workspaceStore.getNode(workspacePath)?.sessionViews.find(view => view.session.id === sessionId)
-    if (!sessionView) return []
-
-    const nodes: Array<{
-      id: number
-      title: string
-      profile: string
-      status: ExecutionNodeRecord['status']
-      backingSessionId: number
-    }> = []
-
-    const collect = (node: ExecutionNodeRecord) => {
-      if (
-        node.role !== 'root' &&
-        typeof node.backingSessionId === 'number' &&
-        (node.status === 'queued' || node.status === 'running')
-      ) {
-        nodes.push({
-          id: node.id,
-          title: node.title,
-          profile: node.profile,
-          status: node.status,
-          backingSessionId: node.backingSessionId,
-        })
-      }
-      node.children.forEach(collect)
-    }
-
-    sessionView.executionTree.forEach(collect)
-    return nodes
-  }
-
-  const handleOpenChildAgent = async (event: MouseEvent, sessionId: number) => {
-    event.stopPropagation()
-    await aiChatStore.switchSession(sessionId)
-  }
+  const isThreadActive = (thread: ThreadRecord) => thread.id === currentThreadId.value
+  const isThreadLoading = (thread: ThreadRecord) => aiChatStore.isThreadRunning(thread.id)
 
   const handleNewSessionInWorkspace = async (event: MouseEvent, workspacePath: string) => {
     event.stopPropagation()
@@ -229,7 +191,7 @@
       expandedPaths.value.add(workspacePath)
       expandedPaths.value = new Set(expandedPaths.value)
     }
-    await workspaceStore.createSession(workspacePath)
+    await workspaceStore.createThread(workspacePath)
   }
 
   const confirmingDeleteId = ref<number | null>(null)
@@ -266,15 +228,15 @@
     }
   }
 
-  const handleDeleteSession = async (event: MouseEvent, session: SessionRecord) => {
+  const handleDeleteThread = async (event: MouseEvent, thread: ThreadRecord) => {
     event.stopPropagation()
-    if (confirmingDeleteId.value === session.id) {
+    if (confirmingDeleteId.value === thread.id) {
       clearConfirmingTimer()
       confirmingDeleteId.value = null
-      await workspaceStore.deleteSession(session.id, session.workspacePath)
+      await workspaceStore.deleteThread(thread.id, thread.workspacePath)
     } else {
       clearConfirmingTimer()
-      confirmingDeleteId.value = session.id
+      confirmingDeleteId.value = thread.id
       confirmingTimer = setTimeout(() => {
         confirmingDeleteId.value = null
       }, 2000)
@@ -480,17 +442,17 @@
 
               <Transition name="tree-expand">
                 <div v-if="isExpanded(workspace.path)" class="sessions-list">
-                  <div v-if="!getSessions(workspace.path).length" class="no-sessions">
+                  <div v-if="!getThreads(workspace.path).length" class="no-sessions">
                     {{ t('sidebar.no_threads') }}
                   </div>
-                  <template v-for="session in getSessions(workspace.path)" :key="session.id">
+                  <template v-for="thread in getThreads(workspace.path)" :key="thread.id">
                     <div
                       class="session-item"
-                      :class="{ active: isSessionActive(session), loading: isSessionLoading(session) }"
-                      @click.stop="handleSelectSession(session)"
+                      :class="{ active: isThreadActive(thread), loading: isThreadLoading(thread) }"
+                      @click.stop="handleSelectThread(thread)"
                       @mouseleave="resetConfirming"
                     >
-                      <span v-if="isSessionLoading(session)" class="session-loading">
+                      <span v-if="isThreadLoading(thread)" class="session-loading">
                         <svg viewBox="0 0 16 16" fill="none">
                           <path
                             d="M8 2a6 6 0 0 1 0 12"
@@ -500,17 +462,17 @@
                           />
                         </svg>
                       </span>
-                      <span class="session-title">{{ getSessionTitle(session) }}</span>
+                      <span class="session-title">{{ getThreadTitle(thread) }}</span>
                       <span class="session-trailing">
-                        <span class="session-time">{{ formatRelativeTime(session.updatedAt * 1000) }}</span>
+                        <span class="session-time">{{ formatRelativeTime(thread.updatedAt * 1000) }}</span>
                         <button
                           class="delete-btn"
-                          :class="{ confirming: confirmingDeleteId === session.id }"
-                          :title="confirmingDeleteId === session.id ? t('common.confirm') : t('sidebar.delete_session')"
-                          @click="handleDeleteSession($event, session)"
+                          :class="{ confirming: confirmingDeleteId === thread.id }"
+                          :title="confirmingDeleteId === thread.id ? t('common.confirm') : t('sidebar.delete_session')"
+                          @click="handleDeleteThread($event, thread)"
                         >
                           <svg
-                            v-if="confirmingDeleteId === session.id"
+                            v-if="confirmingDeleteId === thread.id"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -535,16 +497,6 @@
                           </svg>
                         </button>
                       </span>
-                    </div>
-                    <div
-                      v-for="(agent, idx) in getActiveChildAgents(workspace.path, session.id)"
-                      :key="`${session.id}-${agent.id}`"
-                      class="child-agent-item"
-                      @click.stop="handleOpenChildAgent($event, agent.backingSessionId)"
-                    >
-                      <span class="child-agent-dot" :style="{ background: getAgentColor(idx) }" />
-                      <span class="child-agent-name">{{ agent.title || agent.profile }}</span>
-                      <span class="child-agent-profile">{{ agent.profile }}</span>
                     </div>
                   </template>
                 </div>
@@ -1115,44 +1067,6 @@
     font-size: 12px;
     color: var(--text-300);
     white-space: nowrap;
-  }
-
-  .child-agent-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: 26px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: var(--border-radius-md);
-    color: var(--text-300);
-  }
-
-  .child-agent-item:hover {
-    background: var(--color-hover);
-    color: var(--text-100);
-  }
-
-  .child-agent-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .child-agent-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 500;
-  }
-
-  .child-agent-profile {
-    color: var(--text-400);
-    font-size: 11px;
-    flex-shrink: 0;
   }
 
   .empty-state {

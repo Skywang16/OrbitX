@@ -48,11 +48,11 @@
   }
 
   const handleSidebarDragStart = () => {
-    document.body.classList.add('opencodex-resizing', 'opencodex-resize-col')
+    document.body.classList.add('orbitx-resizing', 'orbitx-resize-col')
   }
 
   const handleSidebarDragEnd = () => {
-    document.body.classList.remove('opencodex-resizing', 'opencodex-resize-col')
+    document.body.classList.remove('orbitx-resizing', 'orbitx-resize-col')
   }
 
   // ============ Settings State ============
@@ -63,14 +63,14 @@
     const directory = await windowApi.handleFileOpen(filePath)
     if (directory) {
       await workspaceStore.loadTree()
-      await workspaceStore.loadSessionViews(directory)
+      await workspaceStore.loadThreadViews(directory)
     }
   }
 
   const startDividerDrag = (event: MouseEvent) => {
     event.preventDefault()
     isDraggingDivider.value = true
-    document.body.classList.add('opencodex-resizing', 'opencodex-resize-row')
+    document.body.classList.add('orbitx-resizing', 'orbitx-resize-row')
 
     const startY = event.clientY
     const startHeight = layoutStore.terminalPanelHeight
@@ -84,7 +84,7 @@
 
     const handleMouseUp = () => {
       isDraggingDivider.value = false
-      document.body.classList.remove('opencodex-resizing', 'opencodex-resize-row')
+      document.body.classList.remove('orbitx-resizing', 'orbitx-resize-row')
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }

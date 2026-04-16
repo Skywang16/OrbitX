@@ -14,20 +14,21 @@ use tokio::sync::RwLock;
 
 use self::chain::Chain;
 use self::states::{ExecutionState, TaskStates};
-use crate::agent::config::{AgentConfig, TaskExecutionConfig};
+use crate::agent::config::{AgentConfig, AgentRunConfig};
 use crate::agent::context::FileContextTracker;
 use crate::agent::core::executor::ImageAttachment;
 use crate::agent::core::status::AgentTaskStatus;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{AgentRunError, AgentRunResult};
 use crate::agent::persistence::repositories::CreateMessageParams;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::react::runtime::ReactRuntime;
 use crate::agent::react::types::ReactRuntimeConfig;
-use crate::agent::state::manager::{StateManager, TaskState, TaskStatus, TaskThresholds};
-use crate::agent::state::session::SessionContext;
+use crate::agent::rollout::{RolloutItem, ThreadMeta};
+use crate::agent::state::manager::{AgentRunStatus, StateManager, TaskState, TaskThresholds};
+use crate::agent::state::session::ThreadContext;
 use crate::agent::tools::ToolRegistry;
 use crate::agent::types::{
-    Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, SubtaskStatus, TaskEvent,
+    AgentRunEvent, Block, ErrorBlock, MessageRole as UiMessageRole, MessageStatus, SubagentStatus,
     TokenUsage, ToolStatus, UserImageBlock, UserTextBlock,
 };
 use crate::agent::workspace_changes::WorkspaceChangeJournal;
@@ -35,26 +36,39 @@ use crate::checkpoint::CheckpointService;
 use crate::llm::anthropic_types::{
     ContentBlock, MessageContent, MessageParam, MessageRole as AnthropicRole, SystemPrompt,
 };
+use crate::settings::SettingsManager;
 use crate::storage::DatabaseManager;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 #[async_trait::async_trait]
-pub trait TaskExecutionRunner: Send + Sync {
-    async fn run_task_execution(
+pub trait SubAgentRunner: Send + Sync {
+    async fn run_subagent(
         &self,
-        parent: &TaskContext,
-        request: TaskExecutionRequest,
-    ) -> TaskExecutorResult<TaskExecutionResponse>;
+        parent: &AgentRunContext,
+        request: SubAgentRequest,
+    ) -> AgentRunResult<SubAgentResponse>;
+
+    async fn spawn_subagent(
+        &self,
+        parent: &AgentRunContext,
+        request: SubAgentRequest,
+        collab_call_id: String,
+        collab_tool: String,
+    ) -> AgentRunResult<i64>;
+
+    async fn cancel_subagent(&self, parent: &AgentRunContext, thread_id: i64)
+        -> AgentRunResult<()>;
 }
 
 #[derive(Debug, Clone)]
-pub struct TaskExecutionRequest {
+pub struct SubAgentRequest {
     pub description: String,
     pub prompt: String,
     pub profile: String,
-    pub session_id: Option<i64>,
+    pub thread_id: Option<i64>,
     pub call_id: Option<String>,
+    pub resume_existing: bool,
     /// Optional model override for this delegated execution. When set, the backing session
     /// uses this model instead of inheriting the parent's model_id.
     pub model_id: Option<String>,
@@ -65,56 +79,52 @@ pub struct TaskExecutionRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct TaskExecutionResponse {
-    pub session_id: i64,
-    pub status: SubtaskStatus,
+pub struct SubAgentResponse {
+    pub thread_id: i64,
+    pub status: SubagentStatus,
     pub summary: Option<String>,
 }
 
-pub struct TaskContextDeps {
+pub struct AgentRunContextDeps {
     pub tool_registry: Arc<ToolRegistry>,
     pub repositories: Arc<DatabaseManager>,
     pub agent_persistence: Arc<AgentPersistence>,
     pub checkpoint_service: Option<Arc<CheckpointService>>,
     pub workspace_changes: Arc<WorkspaceChangeJournal>,
-    pub task_execution_runner: Arc<dyn TaskExecutionRunner>,
+    pub subagent_runner: Arc<dyn SubAgentRunner>,
+    pub settings_manager: Arc<SettingsManager>,
 }
 
-pub struct TaskContextInit {
-    pub task_id: String,
-    pub session_id: i64,
-    pub run_id: i64,
-    pub node_id: i64,
+pub struct AgentRunContextInit {
+    pub run_id: String,
+    pub thread_id: i64,
     pub user_prompt: String,
     pub agent_type: String,
-    pub config: TaskExecutionConfig,
+    pub config: AgentRunConfig,
     pub workspace_path: String,
-    pub updates_run_status: bool,
     pub emit_task_events: bool,
-    pub progress_channel: Option<Channel<TaskEvent>>,
-    pub deps: TaskContextDeps,
+    pub progress_channel: Option<Channel<AgentRunEvent>>,
+    pub deps: AgentRunContextDeps,
 }
 
-pub struct TaskContext {
-    pub task_id: Arc<str>,
-    pub session_id: i64,
-    pub run_id: i64,
-    pub node_id: i64,
+pub struct AgentRunContext {
+    pub run_id: Arc<str>,
+    pub thread_id: i64,
     pub user_prompt: Arc<str>,
     pub agent_type: Arc<str>,
     pub cwd: Arc<str>,
     emit_task_events: bool,
-    updates_run_status: bool,
-    config: TaskExecutionConfig,
+    config: AgentRunConfig,
 
-    session: Arc<SessionContext>,
+    session: Arc<ThreadContext>,
     tool_registry: Arc<ToolRegistry>,
-    task_execution_runner: Arc<dyn TaskExecutionRunner>,
+    subagent_runner: Arc<dyn SubAgentRunner>,
     state_manager: Arc<StateManager>,
     checkpoint_service: Option<Arc<CheckpointService>>,
     active_checkpoint: Arc<RwLock<Option<ActiveCheckpoint>>>,
     workspace_changes: Arc<WorkspaceChangeJournal>,
     workspace_key: Arc<str>,
+    settings_manager: Arc<SettingsManager>,
 
     pub(crate) states: TaskStates,
 
@@ -122,19 +132,16 @@ pub struct TaskContext {
     pause_notify: Arc<Notify>,
 }
 
-impl TaskContext {
+impl AgentRunContext {
     /// Construct a fresh context for a new task.
-    pub async fn new(init: TaskContextInit) -> TaskExecutorResult<Self> {
-        let TaskContextInit {
-            task_id,
-            session_id,
+    pub async fn new(init: AgentRunContextInit) -> AgentRunResult<Self> {
+        let AgentRunContextInit {
             run_id,
-            node_id,
+            thread_id,
             user_prompt,
             agent_type,
             config,
             workspace_path,
-            updates_run_status,
             emit_task_events,
             progress_channel,
             deps,
@@ -154,7 +161,7 @@ impl TaskContext {
         let current_iteration = 0u32;
         let error_count = 0u32;
 
-        let mut task_state = TaskState::new(task_id.clone(), thresholds);
+        let mut task_state = TaskState::new(run_id.clone(), thresholds);
         task_state.iterations = current_iteration;
         task_state.consecutive_errors = error_count;
         task_state.task_status = map_status(&task_status);
@@ -163,9 +170,9 @@ impl TaskContext {
         let workspace_root = PathBuf::from(&normalized_workspace);
         let workspace_key: Arc<str> = Arc::from(normalized_workspace.as_str());
 
-        let session = Arc::new(SessionContext::new(
-            task_id.clone(),
-            session_id,
+        let session = Arc::new(ThreadContext::new(
+            run_id.clone(),
+            thread_id,
             workspace_root.clone(),
             user_prompt.clone(),
             config,
@@ -173,30 +180,37 @@ impl TaskContext {
             Arc::clone(&deps.agent_persistence),
         ));
 
+        ensure_thread_rollout(
+            deps.agent_persistence.as_ref(),
+            thread_id,
+            &workspace_root,
+            &user_prompt,
+            &agent_type,
+        )
+        .await?;
+
         let execution = ExecutionState::new(task_status);
         let react_runtime = ReactRuntime::new(runtime_config);
 
         let states = TaskStates::new(execution, react_runtime, progress_channel);
 
         Ok(Self {
-            task_id: Arc::from(task_id.as_str()),
-            session_id,
-            run_id,
-            node_id,
+            run_id: Arc::from(run_id.as_str()),
+            thread_id,
             user_prompt: Arc::from(user_prompt.as_str()),
             agent_type: Arc::from(agent_type.as_str()),
             cwd: Arc::from(normalized_workspace.as_str()),
             emit_task_events,
-            updates_run_status,
             config,
             session,
             tool_registry: deps.tool_registry,
-            task_execution_runner: deps.task_execution_runner,
+            subagent_runner: deps.subagent_runner,
             state_manager: Arc::new(StateManager::new(task_state)),
             checkpoint_service: deps.checkpoint_service,
             active_checkpoint: Arc::new(RwLock::new(None)),
             workspace_changes: deps.workspace_changes,
             workspace_key,
+            settings_manager: deps.settings_manager,
             states,
             pause_status: AtomicU8::new(0),
             pause_notify: Arc::new(Notify::new()),
@@ -219,24 +233,34 @@ impl TaskContext {
             .await;
     }
 
-    pub async fn progress_channel(&self) -> Option<Channel<TaskEvent>> {
+    pub async fn progress_channel(&self) -> Option<Channel<AgentRunEvent>> {
         self.states.progress_channel.lock().await.clone()
+    }
+
+    pub async fn current_assistant_message_id(&self) -> Option<i64> {
+        self.states
+            .messages
+            .lock()
+            .await
+            .assistant_message
+            .as_ref()
+            .map(|message| message.id)
     }
 
     pub fn checkpointing_enabled(&self) -> bool {
         self.checkpoint_service.is_some()
     }
 
-    pub async fn init_checkpoint(&self, message_id: i64) -> TaskExecutorResult<()> {
+    pub async fn init_checkpoint(&self, message_id: i64) -> AgentRunResult<()> {
         let service = match &self.checkpoint_service {
             Some(service) => Arc::clone(service),
             None => return Ok(()),
         };
 
         let checkpoint = service
-            .create_empty(self.session_id, message_id, Path::new(self.cwd.as_ref()))
+            .create_empty(self.thread_id, message_id, Path::new(self.cwd.as_ref()))
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         {
             let mut guard = self.active_checkpoint.write().await;
@@ -265,7 +289,7 @@ impl TaskContext {
         });
     }
 
-    pub async fn snapshot_file_before_edit(&self, path: &Path) -> TaskExecutorResult<()> {
+    pub async fn snapshot_file_before_edit(&self, path: &Path) -> AgentRunResult<()> {
         let service = match &self.checkpoint_service {
             Some(service) => Arc::clone(service),
             None => return Ok(()),
@@ -277,13 +301,13 @@ impl TaskContext {
             service
                 .snapshot_file_before_edit(checkpoint.id, path, &checkpoint.workspace_root)
                 .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
         }
 
         Ok(())
     }
 
-    pub fn session(&self) -> Arc<SessionContext> {
+    pub fn session(&self) -> Arc<ThreadContext> {
         Arc::clone(&self.session)
     }
 
@@ -299,15 +323,19 @@ impl TaskContext {
         Arc::clone(&self.tool_registry)
     }
 
-    pub fn task_execution_runner(&self) -> &dyn TaskExecutionRunner {
-        self.task_execution_runner.as_ref()
+    pub fn settings_manager(&self) -> Arc<SettingsManager> {
+        Arc::clone(&self.settings_manager)
+    }
+
+    pub fn subagent_runner(&self) -> &dyn SubAgentRunner {
+        self.subagent_runner.as_ref()
     }
 
     pub async fn status(&self) -> AgentTaskStatus {
         self.states.execution.read().await.runtime_status
     }
 
-    pub async fn set_status(&self, status: AgentTaskStatus) -> TaskExecutorResult<()> {
+    pub async fn set_status(&self, status: AgentTaskStatus) -> AgentRunResult<()> {
         let session_status = {
             let mut exec = self.states.execution.write().await;
             exec.runtime_status = status;
@@ -321,34 +349,10 @@ impl TaskContext {
         };
 
         self.agent_persistence()
-            .sessions()
-            .update_status(self.session_id, session_status)
+            .threads()
+            .update_status(self.thread_id, session_status)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        let run_status = match status {
-            AgentTaskStatus::Created | AgentTaskStatus::Paused => {
-                crate::agent::persistence::RunStatus::Queued
-            }
-            AgentTaskStatus::Running => crate::agent::persistence::RunStatus::Running,
-            AgentTaskStatus::Completed => crate::agent::persistence::RunStatus::Completed,
-            AgentTaskStatus::Error => crate::agent::persistence::RunStatus::Error,
-            AgentTaskStatus::Cancelled => crate::agent::persistence::RunStatus::Cancelled,
-        };
-
-        self.agent_persistence()
-            .agent_nodes()
-            .update_status(self.node_id, run_status)
-            .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
-        if self.updates_run_status {
-            self.agent_persistence()
-                .runs()
-                .update_status(self.run_id, run_status)
-                .await
-                .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-        }
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         self.state_manager
             .update_task_status(map_status(&status), None)
@@ -357,7 +361,7 @@ impl TaskContext {
     }
 
     /// Increment iteration counter and sync to storage.
-    pub async fn increment_iteration(&self) -> TaskExecutorResult<u32> {
+    pub async fn increment_iteration(&self) -> AgentRunResult<u32> {
         let current = {
             let mut exec = self.states.execution.write().await;
             exec.current_iteration = exec.current_iteration.saturating_add(1);
@@ -374,7 +378,7 @@ impl TaskContext {
     }
 
     /// Increase error counter and persist.
-    pub async fn increment_error_count(&self) -> TaskExecutorResult<u32> {
+    pub async fn increment_error_count(&self) -> AgentRunResult<u32> {
         let count = {
             let mut exec = self.states.execution.write().await;
             exec.error_count = exec.error_count.saturating_add(1);
@@ -383,7 +387,7 @@ impl TaskContext {
         Ok(count)
     }
 
-    pub async fn reset_error_count(&self) -> TaskExecutorResult<()> {
+    pub async fn reset_error_count(&self) -> AgentRunResult<()> {
         {
             let mut exec = self.states.execution.write().await;
             exec.error_count = 0;
@@ -411,7 +415,7 @@ impl TaskContext {
     }
 
     /// Access the execution configuration (zero-cost access).
-    pub fn config(&self) -> &TaskExecutionConfig {
+    pub fn config(&self) -> &AgentRunConfig {
         &self.config
     }
 
@@ -436,9 +440,9 @@ impl TaskContext {
     }
 
     /// Asynchronously check if task is aborted (with pause waiting)
-    pub async fn check_aborted_async(&self, no_check_pause: bool) -> TaskExecutorResult<()> {
+    pub async fn check_aborted_async(&self, no_check_pause: bool) -> AgentRunResult<()> {
         if self.states.aborted.load(Ordering::SeqCst) || self.states.abort_token.is_cancelled() {
-            return Err(TaskExecutorError::TaskInterrupted);
+            return Err(AgentRunError::TaskInterrupted);
         }
         if no_check_pause {
             return Ok(());
@@ -446,7 +450,7 @@ impl TaskContext {
         while self.pause_status.load(Ordering::SeqCst) != 0 {
             tokio::select! {
                 _ = self.states.abort_token.cancelled() => {
-                    return Err(TaskExecutorError::TaskInterrupted);
+                    return Err(AgentRunError::TaskInterrupted);
                 }
                 _ = self.pause_notify.notified() => {}
             }
@@ -484,15 +488,12 @@ impl TaskContext {
         &self,
         _text: Option<String>,
         _tool_calls: Option<Vec<ContentBlock>>,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         Ok(())
     }
 
     /// No-op: tool results persisted via assistant_update_block; orchestrator reloads from DB.
-    pub async fn add_tool_results(
-        &self,
-        _results: Vec<AgentToolCallResult>,
-    ) -> TaskExecutorResult<()> {
+    pub async fn add_tool_results(&self, _results: Vec<AgentToolCallResult>) -> AgentRunResult<()> {
         Ok(())
     }
 
@@ -501,7 +502,23 @@ impl TaskContext {
     }
 
     pub async fn get_developer_context(&self) -> Vec<String> {
-        self.states.execution.read().await.developer_context.clone()
+        let exec = self.states.execution.read().await;
+        let mut ctx = exec.developer_context.clone();
+        ctx.extend(exec.per_turn_developer_context.iter().cloned());
+        ctx
+    }
+
+    pub async fn set_per_turn_developer_context(&self, items: Vec<String>) -> AgentRunResult<()> {
+        self.states
+            .execution
+            .write()
+            .await
+            .per_turn_developer_context = items
+            .into_iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect();
+        Ok(())
     }
 
     pub async fn get_system_prompt(&self) -> Option<SystemPrompt> {
@@ -514,7 +531,7 @@ impl TaskContext {
         }
     }
 
-    pub async fn add_user_message(&self, text: String) -> TaskExecutorResult<()> {
+    pub async fn add_user_message(&self, text: String) -> AgentRunResult<()> {
         self.add_user_message_with_images(text, None).await
     }
 
@@ -522,7 +539,7 @@ impl TaskContext {
         &self,
         text: String,
         images: Option<&[ImageAttachment]>,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         let content = if let Some(imgs) = images {
             // Build content blocks containing images and text
             let mut blocks: Vec<ContentBlock> = imgs
@@ -576,7 +593,7 @@ impl TaskContext {
         text: String,
         images: Option<&[ImageAttachment]>,
         system_reminders: &[String],
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         // Build the final text with system reminders prepended
         let final_text = if system_reminders.is_empty() {
             text
@@ -592,7 +609,7 @@ impl TaskContext {
         self.add_user_message_with_images(final_text, images).await
     }
 
-    pub async fn reset_message_state(&self) -> TaskExecutorResult<()> {
+    pub async fn reset_message_state(&self) -> AgentRunResult<()> {
         {
             let mut exec = self.states.execution.write().await;
             exec.messages.clear();
@@ -602,14 +619,14 @@ impl TaskContext {
     }
 
     /// Set system prompt in memory only; do not persist system message to DB.
-    pub async fn set_system_prompt(&self, prompt: String) -> TaskExecutorResult<()> {
+    pub async fn set_system_prompt(&self, prompt: String) -> AgentRunResult<()> {
         let mut exec = self.states.execution.write().await;
         exec.system_prompt = Some(SystemPrompt::Text(prompt));
         exec.system_prompt_overlay = None;
         Ok(())
     }
 
-    pub async fn set_developer_context(&self, items: Vec<String>) -> TaskExecutorResult<()> {
+    pub async fn set_developer_context(&self, items: Vec<String>) -> AgentRunResult<()> {
         self.states.execution.write().await.developer_context = items
             .into_iter()
             .map(|item| item.trim().to_string())
@@ -622,12 +639,12 @@ impl TaskContext {
     pub async fn set_system_prompt_overlay(
         &self,
         overlay: Option<SystemPrompt>,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         self.states.execution.write().await.system_prompt_overlay = overlay;
         Ok(())
     }
 
-    pub async fn restore_messages(&self, messages: Vec<MessageParam>) -> TaskExecutorResult<()> {
+    pub async fn restore_messages(&self, messages: Vec<MessageParam>) -> AgentRunResult<()> {
         let mut exec = self.states.execution.write().await;
         exec.messages.clear();
         for msg in messages {
@@ -637,20 +654,104 @@ impl TaskContext {
         Ok(())
     }
 
-    pub async fn emit_event(&self, event: TaskEvent) -> TaskExecutorResult<()> {
+    pub async fn emit_event(&self, event: AgentRunEvent) -> AgentRunResult<()> {
+        self.persist_rollout_item_for_event(&event).await?;
         let channel_guard = self.states.progress_channel.lock().await;
         match channel_guard.as_ref() {
             Some(channel) => {
-                channel
-                    .send(event)
-                    .map_err(TaskExecutorError::ChannelError)?;
+                channel.send(event).map_err(AgentRunError::ChannelError)?;
             }
             None => {
                 tracing::warn!(
-                    task_id = %self.task_id,
+                    run_id = %self.run_id,
                     "emit_event called but channel not initialized, event dropped"
                 );
             }
+        }
+        Ok(())
+    }
+
+    async fn persist_rollout_item_for_event(&self, event: &AgentRunEvent) -> AgentRunResult<()> {
+        let item = match event {
+            AgentRunEvent::AgentRunCreated {
+                run_id,
+                thread_id,
+                workspace_path,
+            } => Some(RolloutItem::AgentRunCreated {
+                run_id: run_id.clone(),
+                thread_id: *thread_id,
+                workspace_path: workspace_path.clone(),
+            }),
+            // Message lifecycle is already persisted by MessageRepository create/update.
+            AgentRunEvent::MessageCreated { .. }
+            | AgentRunEvent::BlockAppended { .. }
+            | AgentRunEvent::BlockUpdated { .. }
+            | AgentRunEvent::MessageFinished { .. } => None,
+            AgentRunEvent::AgentRunCompleted { run_id } => Some(RolloutItem::AgentRunCompleted {
+                run_id: run_id.clone(),
+            }),
+            AgentRunEvent::AgentRunError { run_id, error } => Some(RolloutItem::AgentRunError {
+                run_id: run_id.clone(),
+                error: error.clone(),
+            }),
+            AgentRunEvent::AgentRunCancelled { run_id } => Some(RolloutItem::AgentRunCancelled {
+                run_id: run_id.clone(),
+            }),
+            AgentRunEvent::ToolConfirmationRequested { .. } => None,
+            _ => None,
+        };
+
+        if let Some(item) = item {
+            self.agent_persistence()
+                .rollout_recorder()
+                .append(self.thread_id, item)
+                .await
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+        }
+        match event {
+            AgentRunEvent::AgentRunCreated { .. } => {
+                self.agent_persistence()
+                    .threads()
+                    .touch(self.thread_id, Some("idle"), None, None)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            }
+            AgentRunEvent::MessageCreated { message, .. } => {
+                let first_user_message = match message.role {
+                    UiMessageRole::User => message.blocks.iter().find_map(|block| match block {
+                        Block::UserText(text) => Some(text.content.as_str()),
+                        _ => None,
+                    }),
+                    UiMessageRole::Assistant => None,
+                };
+                self.agent_persistence()
+                    .threads()
+                    .touch(self.thread_id, Some("running"), None, first_user_message)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            }
+            AgentRunEvent::AgentRunCompleted { .. } => {
+                self.agent_persistence()
+                    .threads()
+                    .touch(self.thread_id, Some("completed"), None, None)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            }
+            AgentRunEvent::AgentRunCancelled { .. } => {
+                self.agent_persistence()
+                    .threads()
+                    .touch(self.thread_id, Some("cancelled"), None, None)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            }
+            AgentRunEvent::AgentRunError { .. } => {
+                self.agent_persistence()
+                    .threads()
+                    .touch(self.thread_id, Some("error"), None, None)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -660,7 +761,7 @@ impl TaskContext {
         user_prompt: &str,
         images: Option<&[ImageAttachment]>,
         internal_user_message: bool,
-    ) -> TaskExecutorResult<i64> {
+    ) -> AgentRunResult<i64> {
         let mut user_blocks = Vec::new();
 
         if let Some(images) = images {
@@ -674,7 +775,7 @@ impl TaskContext {
             .agent_persistence()
             .messages()
             .create(CreateMessageParams {
-                session_id: self.session_id,
+                thread_id: self.thread_id,
                 role: UiMessageRole::User,
                 status: MessageStatus::Completed,
                 blocks: user_blocks,
@@ -686,10 +787,10 @@ impl TaskContext {
                 provider_id: None,
             })
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-        self.emit_event(TaskEvent::MessageCreated {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::MessageCreated {
+            run_id: self.run_id.to_string(),
             message: user_message.clone(),
         })
         .await?;
@@ -698,7 +799,7 @@ impl TaskContext {
             .agent_persistence()
             .messages()
             .create(CreateMessageParams {
-                session_id: self.session_id,
+                thread_id: self.thread_id,
                 role: UiMessageRole::Assistant,
                 status: MessageStatus::Streaming,
                 blocks: Vec::new(),
@@ -710,15 +811,15 @@ impl TaskContext {
                 provider_id: None,
             })
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         {
             let mut msg_state = self.states.messages.lock().await;
             msg_state.assistant_message = Some(assistant_message.clone());
         }
 
-        self.emit_event(TaskEvent::MessageCreated {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::MessageCreated {
+            run_id: self.run_id.to_string(),
             message: assistant_message,
         })
         .await?;
@@ -726,7 +827,7 @@ impl TaskContext {
         Ok(user_message.id)
     }
 
-    pub async fn assistant_append_block(&self, block: Block) -> TaskExecutorResult<()> {
+    pub async fn assistant_append_block(&self, block: Block) -> AgentRunResult<i64> {
         let mut message = self
             .states
             .messages
@@ -735,7 +836,7 @@ impl TaskContext {
             .assistant_message
             .clone()
             .ok_or_else(|| {
-                TaskExecutorError::StatePersistenceFailed(
+                AgentRunError::StatePersistenceFailed(
                     "assistant message not initialized".to_string(),
                 )
             })?;
@@ -747,23 +848,21 @@ impl TaskContext {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         self.states.messages.lock().await.assistant_message = Some(message);
 
-        self.emit_event(TaskEvent::BlockAppended {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::BlockAppended {
+            run_id: self.run_id.to_string(),
             message_id,
             block,
         })
-        .await
+        .await?;
+
+        Ok(message_id)
     }
 
-    pub async fn assistant_update_block(
-        &self,
-        block_id: &str,
-        block: Block,
-    ) -> TaskExecutorResult<()> {
+    pub async fn assistant_update_block(&self, block_id: &str, block: Block) -> AgentRunResult<()> {
         let mut message = self
             .states
             .messages
@@ -772,13 +871,13 @@ impl TaskContext {
             .assistant_message
             .clone()
             .ok_or_else(|| {
-                TaskExecutorError::StatePersistenceFailed(
+                AgentRunError::StatePersistenceFailed(
                     "assistant message not initialized".to_string(),
                 )
             })?;
 
         let Some(index) = find_block_index(&message.blocks, block_id) else {
-            return Err(TaskExecutorError::StatePersistenceFailed(format!(
+            return Err(AgentRunError::StatePersistenceFailed(format!(
                 "block {block_id} not found for update"
             )));
         };
@@ -790,12 +889,12 @@ impl TaskContext {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         self.states.messages.lock().await.assistant_message = Some(message);
 
-        self.emit_event(TaskEvent::BlockUpdated {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::BlockUpdated {
+            run_id: self.run_id.to_string(),
             message_id,
             block_id: block_id.to_string(),
             block,
@@ -803,14 +902,13 @@ impl TaskContext {
         .await
     }
 
-    pub async fn assistant_upsert_block(&self, block: Block) -> TaskExecutorResult<()> {
+    pub async fn assistant_upsert_block(&self, block: Block) -> AgentRunResult<()> {
         let block_id = match &block {
             Block::Thinking(b) => b.id.clone(),
             Block::Text(b) => b.id.clone(),
             Block::Tool(b) => b.id.clone(),
-            Block::Subtask(b) => b.id.clone(),
             _ => {
-                return Err(TaskExecutorError::StatePersistenceFailed(
+                return Err(AgentRunError::StatePersistenceFailed(
                     "block type does not support upsert".to_string(),
                 ))
             }
@@ -824,44 +922,73 @@ impl TaskContext {
             .assistant_message
             .clone()
             .ok_or_else(|| {
-                TaskExecutorError::StatePersistenceFailed(
+                AgentRunError::StatePersistenceFailed(
                     "assistant message not initialized".to_string(),
                 )
             })?;
 
-        let message_id = message.id;
         let index_opt = find_block_index(&message.blocks, &block_id);
-        let existed = index_opt.is_some();
+
         if let Some(index) = index_opt {
             message.blocks[index] = block.clone();
-        } else {
-            message.blocks.push(block.clone());
+            let message_id = message.id;
+            self.agent_persistence()
+                .messages()
+                .update(&message)
+                .await
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+            self.states.messages.lock().await.assistant_message = Some(message);
+            return self
+                .emit_event(AgentRunEvent::BlockUpdated {
+                    run_id: self.run_id.to_string(),
+                    message_id,
+                    block_id,
+                    block,
+                })
+                .await;
         }
 
+        let all_messages = self
+            .agent_persistence()
+            .messages()
+            .list_by_thread(self.thread_id)
+            .await
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+
+        for mut msg in all_messages {
+            if let Some(idx) = find_block_index(&msg.blocks, &block_id) {
+                msg.blocks[idx] = block.clone();
+                let msg_id = msg.id;
+                self.agent_persistence()
+                    .messages()
+                    .update(&msg)
+                    .await
+                    .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+                return self
+                    .emit_event(AgentRunEvent::BlockUpdated {
+                        run_id: self.run_id.to_string(),
+                        message_id: msg_id,
+                        block_id,
+                        block,
+                    })
+                    .await;
+            }
+        }
+
+        message.blocks.push(block.clone());
+        let message_id = message.id;
         self.agent_persistence()
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
-
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
         self.states.messages.lock().await.assistant_message = Some(message);
-
-        if existed {
-            self.emit_event(TaskEvent::BlockUpdated {
-                task_id: self.task_id.to_string(),
-                message_id,
-                block_id,
-                block,
-            })
-            .await
-        } else {
-            self.emit_event(TaskEvent::BlockAppended {
-                task_id: self.task_id.to_string(),
-                message_id,
-                block,
-            })
-            .await
-        }
+        self.emit_event(AgentRunEvent::BlockAppended {
+            run_id: self.run_id.to_string(),
+            message_id,
+            block,
+        })
+        .await
     }
 
     /// Calculate current session's context usage
@@ -923,7 +1050,7 @@ impl TaskContext {
         status: MessageStatus,
         token_usage: Option<TokenUsage>,
         context_usage: Option<crate::agent::types::ContextUsage>,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         let mut message = self
             .states
             .messages
@@ -932,7 +1059,7 @@ impl TaskContext {
             .assistant_message
             .clone()
             .ok_or_else(|| {
-                TaskExecutorError::StatePersistenceFailed(
+                AgentRunError::StatePersistenceFailed(
                     "assistant message not initialized".to_string(),
                 )
             })?;
@@ -953,13 +1080,13 @@ impl TaskContext {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         let message_id = message.id;
         self.states.messages.lock().await.assistant_message = Some(message);
 
-        self.emit_event(TaskEvent::MessageFinished {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::MessageFinished {
+            run_id: self.run_id.to_string(),
             message_id,
             status,
             finished_at,
@@ -970,7 +1097,7 @@ impl TaskContext {
         .await
     }
 
-    pub async fn fail_assistant_message(&self, error: ErrorBlock) -> TaskExecutorResult<()> {
+    pub async fn fail_assistant_message(&self, error: ErrorBlock) -> AgentRunResult<()> {
         let Some(mut message) = self.states.messages.lock().await.assistant_message.clone() else {
             return Ok(());
         };
@@ -1007,15 +1134,6 @@ impl TaskContext {
                         changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
                     }
                 }
-                Block::Subtask(b) => {
-                    if matches!(b.status, SubtaskStatus::Running | SubtaskStatus::Pending) {
-                        b.status = SubtaskStatus::Error;
-                        if b.summary.is_none() {
-                            b.summary = Some("Parent task failed".to_string());
-                        }
-                        changed_blocks.push((b.id.clone(), Block::Subtask(b.clone())));
-                    }
-                }
                 _ => {}
             }
         }
@@ -1032,13 +1150,13 @@ impl TaskContext {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         let message_id = message.id;
         self.states.messages.lock().await.assistant_message = Some(message.clone());
 
-        self.emit_event(TaskEvent::BlockAppended {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::BlockAppended {
+            run_id: self.run_id.to_string(),
             message_id,
             block: appended,
         })
@@ -1046,8 +1164,8 @@ impl TaskContext {
 
         for (block_id, block) in changed_blocks {
             if let Err(err) = self
-                .emit_event(TaskEvent::BlockUpdated {
-                    task_id: self.task_id.to_string(),
+                .emit_event(AgentRunEvent::BlockUpdated {
+                    run_id: self.run_id.to_string(),
                     message_id,
                     block_id,
                     block,
@@ -1061,8 +1179,8 @@ impl TaskContext {
             }
         }
 
-        self.emit_event(TaskEvent::MessageFinished {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::MessageFinished {
+            run_id: self.run_id.to_string(),
             message_id,
             status: MessageStatus::Error,
             finished_at: now,
@@ -1078,7 +1196,7 @@ impl TaskContext {
         Ok(())
     }
 
-    pub async fn cancel_assistant_message(&self) -> TaskExecutorResult<()> {
+    pub async fn cancel_assistant_message(&self) -> AgentRunResult<()> {
         let Some(mut message) = self.states.messages.lock().await.assistant_message.clone() else {
             return Ok(());
         };
@@ -1112,15 +1230,6 @@ impl TaskContext {
                         changed_blocks.push((b.id.clone(), Block::Tool(b.clone())));
                     }
                 }
-                Block::Subtask(b) => {
-                    if matches!(b.status, SubtaskStatus::Running | SubtaskStatus::Pending) {
-                        b.status = SubtaskStatus::Cancelled;
-                        if b.summary.is_none() {
-                            b.summary = Some("Parent task cancelled".to_string());
-                        }
-                        changed_blocks.push((b.id.clone(), Block::Subtask(b.clone())));
-                    }
-                }
                 _ => {}
             }
         }
@@ -1137,14 +1246,14 @@ impl TaskContext {
             .messages()
             .update(&message)
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         self.states.messages.lock().await.assistant_message = Some(message.clone());
 
         for (block_id, block) in changed_blocks {
             if let Err(err) = self
-                .emit_event(TaskEvent::BlockUpdated {
-                    task_id: self.task_id.to_string(),
+                .emit_event(AgentRunEvent::BlockUpdated {
+                    run_id: self.run_id.to_string(),
                     message_id: message.id,
                     block_id,
                     block,
@@ -1158,8 +1267,8 @@ impl TaskContext {
             }
         }
 
-        self.emit_event(TaskEvent::MessageFinished {
-            task_id: self.task_id.to_string(),
+        self.emit_event(AgentRunEvent::MessageFinished {
+            run_id: self.run_id.to_string(),
             message_id: message.id,
             status: MessageStatus::Cancelled,
             finished_at: now,
@@ -1176,20 +1285,57 @@ impl TaskContext {
     }
 }
 
+async fn ensure_thread_rollout(
+    persistence: &AgentPersistence,
+    thread_id: i64,
+    workspace_root: &Path,
+    user_prompt: &str,
+    agent_type: &str,
+) -> AgentRunResult<()> {
+    let title = truncate_title(user_prompt);
+    let created_at = Utc::now();
+    let meta = ThreadMeta {
+        thread_id,
+        workspace_path: workspace_root.to_string_lossy().to_string(),
+        title: title.clone(),
+        agent_type: agent_type.to_string(),
+        parent_thread_id: None,
+        spawned_by_tool_call_id: None,
+        model_id: None,
+        provider_id: None,
+        created_at,
+    };
+    let rollout_path = persistence
+        .rollout_recorder()
+        .ensure_thread_rollout(&meta)
+        .await
+        .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+    persistence
+        .threads()
+        .update_rollout_path(thread_id, &rollout_path.to_string_lossy())
+        .await
+        .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+    Ok(())
+}
+
+fn truncate_title(value: &str) -> String {
+    value.trim().chars().take(100).collect()
+}
+
 #[derive(Clone)]
 struct ActiveCheckpoint {
     id: i64,
     workspace_root: PathBuf,
 }
 
-fn map_status(status: &AgentTaskStatus) -> TaskStatus {
+fn map_status(status: &AgentTaskStatus) -> AgentRunStatus {
     match status {
-        AgentTaskStatus::Created => TaskStatus::Init,
-        AgentTaskStatus::Running => TaskStatus::Running,
-        AgentTaskStatus::Paused => TaskStatus::Paused,
-        AgentTaskStatus::Completed => TaskStatus::Done,
-        AgentTaskStatus::Error => TaskStatus::Error,
-        AgentTaskStatus::Cancelled => TaskStatus::Aborted,
+        AgentTaskStatus::Created => AgentRunStatus::Init,
+        AgentTaskStatus::Running => AgentRunStatus::Running,
+        AgentTaskStatus::Paused => AgentRunStatus::Paused,
+        AgentTaskStatus::Completed => AgentRunStatus::Done,
+        AgentTaskStatus::Error => AgentRunStatus::Error,
+        AgentTaskStatus::Cancelled => AgentRunStatus::Aborted,
     }
 }
 
@@ -1253,7 +1399,6 @@ fn find_block_index(blocks: &[Block], block_id: &str) -> Option<usize> {
         Block::Thinking(b) => b.id == block_id,
         Block::Text(b) => b.id == block_id,
         Block::Tool(b) => b.id == block_id,
-        Block::Subtask(b) => b.id == block_id,
         _ => false,
     })
 }

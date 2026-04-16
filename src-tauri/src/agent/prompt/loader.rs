@@ -84,8 +84,8 @@ impl BuiltinPrompts {
         include_str!("../../../prompts/system/compaction_user.md")
     }
 
-    pub fn system_subtask_summary_user() -> &'static str {
-        include_str!("../../../prompts/system/subtask_summary_user.md")
+    pub fn system_subagent_summary_user() -> &'static str {
+        include_str!("../../../prompts/system/subagent_summary_user.md")
     }
 
     pub fn system_conversation_summary() -> &'static str {
@@ -148,7 +148,7 @@ impl PromptLoader {
         // Try loading from workspace
         if let Some(ref workspace) = self.workspace_path {
             let workspace_file = Path::new(workspace)
-                .join(".opencodex")
+                .join(".orbitx")
                 .join("prompts")
                 .join(category)
                 .join(format!("{name}.md"));
@@ -187,8 +187,8 @@ impl PromptLoader {
             ("reminders", "max_steps") => Some(BuiltinPrompts::reminder_max_steps()),
             ("system", "env") => Some(BuiltinPrompts::system_env()),
             ("system", "compaction") => Some(BuiltinPrompts::system_compaction()),
-            ("system", "subtask_summary_user") => {
-                Some(BuiltinPrompts::system_subtask_summary_user())
+            ("system", "subagent_summary_user") => {
+                Some(BuiltinPrompts::system_subagent_summary_user())
             }
             ("system", "conversation_summary") => {
                 Some(BuiltinPrompts::system_conversation_summary())

@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::metadata::ExecutionMode;
 use super::registry::ToolRegistry;
 use super::ToolResult;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 
 /// Maximum concurrency to prevent resource exhaustion
 const MAX_CONCURRENCY: usize = 8;
@@ -36,7 +36,7 @@ pub struct BatchToolResult {
 /// Grouping strategy: consecutive parallelizable tools are grouped together for concurrent execution; sequential tools start a new group
 pub async fn execute_batch(
     registry: &ToolRegistry,
-    context: &TaskContext,
+    context: &AgentRunContext,
     calls: Vec<ToolCall>,
 ) -> Vec<BatchToolResult> {
     if calls.is_empty() {
@@ -112,7 +112,7 @@ async fn get_execution_mode(registry: &ToolRegistry, name: &str) -> ExecutionMod
 /// Execute a single group
 async fn execute_group(
     registry: &ToolRegistry,
-    context: &TaskContext,
+    context: &AgentRunContext,
     (start_idx, is_parallel, calls): Group<'_>,
 ) -> Vec<BatchToolResult> {
     if is_parallel && calls.len() > 1 {
@@ -125,7 +125,7 @@ async fn execute_group(
 /// Parallel execution (with concurrency limit)
 async fn execute_parallel(
     registry: &ToolRegistry,
-    context: &TaskContext,
+    context: &AgentRunContext,
     _start_idx: usize,
     calls: Vec<&ToolCall>,
 ) -> Vec<BatchToolResult> {
@@ -155,7 +155,7 @@ async fn execute_parallel(
 /// Sequential execution
 async fn execute_sequential(
     registry: &ToolRegistry,
-    context: &TaskContext,
+    context: &AgentRunContext,
     _start_idx: usize,
     calls: Vec<&ToolCall>,
 ) -> Vec<BatchToolResult> {

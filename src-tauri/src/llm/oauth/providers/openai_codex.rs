@@ -259,7 +259,7 @@ impl OAuthProvider for OpenAiCodexProvider {
         }
 
         // Add originator
-        request = request.header("originator", "OpenCodex");
+        request = request.header("originator", "OrbitX");
         request = request.header("Content-Type", "application/json");
 
         Ok(request)

@@ -30,6 +30,11 @@ export class NodeApi {
     return invoke('node_list_versions')
   }
 
+  // Get the currently active Node version (from system, without needing a terminal)
+  getCurrentVersion = async (): Promise<string | null> => {
+    return invoke('node_get_current_version')
+  }
+
   // Generate version switch command
   getSwitchCommand = async (manager: string, version: string): Promise<string> => {
     return invoke('node_get_switch_command', { manager, version })

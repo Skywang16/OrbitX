@@ -1,12 +1,12 @@
-# OpenCodex
+# OrbitX
 
 中文 | [English](./README.md)
 
 **开源的 AI Coding Agent，拥有精美的桌面界面。**
 
-![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OpenCodex/ci.yml?branch=main&label=CI)
+![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OrbitX/ci.yml?branch=main&label=CI)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Release](https://img.shields.io/github/v/release/Skywang16/OpenCodex)](https://github.com/Skywang16/OpenCodex/releases)
+[![Release](https://img.shields.io/github/v/release/Skywang16/OrbitX)](https://github.com/Skywang16/OrbitX/releases)
 
 > 平台支持：当前仅适配 macOS（Windows/Linux 正在适配中）
 
@@ -22,7 +22,7 @@
 
 ## 子代理
 
-OpenCodex 使用子代理来处理复杂任务：
+OrbitX 使用子代理来处理复杂任务：
 
 - **General** - 通用子代理，用于复杂搜索和多步任务
 - **Plan** - 只读子代理，用于代码分析和规划
@@ -32,20 +32,20 @@ OpenCodex 使用子代理来处理复杂任务：
 
 ### 下载桌面应用
 
-可直接从 [发布页](https://github.com/Skywang16/OpenCodex/releases) 下载。
+可直接从 [发布页](https://github.com/Skywang16/OrbitX/releases) 下载。
 
 | 平台                  | 下载文件                      |
 | --------------------- | ----------------------------- |
-| macOS (Apple Silicon) | `OpenCodex_x.x.x_aarch64.dmg` |
-| macOS (Intel)         | `OpenCodex_x.x.x_x64.dmg`     |
+| macOS (Apple Silicon) | `OrbitX_x.x.x_aarch64.dmg` |
+| macOS (Intel)         | `OrbitX_x.x.x_x64.dmg`     |
 | Windows               | 即将推出                      |
 | Linux                 | 即将推出                      |
 
 ### 从源码构建
 
 ```bash
-git clone https://github.com/Skywang16/OpenCodex.git
-cd OpenCodex
+git clone https://github.com/Skywang16/OrbitX.git
+cd OrbitX
 npm install
 npm run tauri build
 ```
@@ -71,7 +71,7 @@ npm run tauri dev
 ## 配置
 
 - 主题: `config/themes/*.json`
-- 工作区设置: `.opencodex/settings.json`
+- 工作区设置: `.orbitx/settings.json`
 
 ## 常见问题
 
@@ -98,6 +98,6 @@ npm run tauri dev
 
 ---
 
-**联系**: 如有问题和建议，请创建 [Issue](https://github.com/Skywang16/OpenCodex/issues)。
+**联系**: 如有问题和建议，请创建 [Issue](https://github.com/Skywang16/OrbitX/issues)。
 
 ⭐ 如果这个项目对你有帮助，请给它一个 star！

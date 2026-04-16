@@ -1,10 +1,10 @@
 [package]
-name = "opencodex"
+name = "orbitx"
 version = "0.1.0"
-description = "OpenCodex - The open source AI coding agent"
+description = "OrbitX - The open source AI coding agent"
 authors = ["you"]
 edition = "2021"
-default-run = "opencodex"
+default-run = "orbitx"
 license = "GPL-3.0-or-later"
 autobins = false
 
@@ -23,7 +23,7 @@ doctest = false
 
 # 排除工具二进制文件，避免在打包时出现问题
 [[bin]]
-name = "opencodex"
+name = "orbitx"
 path = "src/main.rs"
 
 [build-dependencies]

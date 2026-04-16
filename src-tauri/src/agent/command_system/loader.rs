@@ -40,7 +40,7 @@ static BUILTIN_COMMANDS: LazyLock<HashMap<String, CommandConfig>> = LazyLock::ne
                     _ => "coder".to_string(),
                 }),
                 model: None,
-                subtask: false,
+                delegated: false,
                 template: template.trim().to_string(),
             },
         );
@@ -65,7 +65,7 @@ impl CommandConfigLoader {
             name: cfg.name.clone(),
             agent: cfg.agent.clone(),
             model: cfg.model.clone(),
-            subtask: cfg.subtask,
+            delegated: cfg.delegated,
             prompt,
         }
     }
@@ -76,7 +76,7 @@ impl CommandConfigLoader {
             description: cfg.description.clone(),
             agent: cfg.agent.clone(),
             model: cfg.model.clone(),
-            subtask: cfg.subtask,
+            delegated: cfg.delegated,
         }
     }
 }

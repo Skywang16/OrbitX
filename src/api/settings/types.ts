@@ -11,18 +11,21 @@ export type McpServerConfig =
       args?: string[]
       env?: Record<string, string>
       disabled?: boolean
+      disabledTools?: string[]
     }
   | {
       type: 'sse'
       url: string
       headers?: Record<string, string>
       disabled?: boolean
+      disabledTools?: string[]
     }
   | {
       type: 'streamable_http'
       url: string
       headers?: Record<string, string>
       disabled?: boolean
+      disabledTools?: string[]
     }
 
 export interface RulesConfig {

@@ -21,17 +21,20 @@ Before delegating implementation, you must explicitly determine:
 Before major delegation, organize your response using these headings:
 
 ### Readiness
+
 - what is already understood
 - what is still unknown
 - whether fan-out is allowed yet
 
 ### Shared Contract
+
 - shared files and foundations
 - design/system constraints
 - route/type/API constraints
 - ownership rules
 
 ### Workstreams
+
 - workstream name
 - scope
 - allowed files
@@ -39,11 +42,14 @@ Before major delegation, organize your response using these headings:
 - success criteria
 
 ### Delegation Plan
+
 - which workstreams are serial
 - which can run in parallel
-- which execution branch or profile should handle each
+- which profile should handle each
+- which `task` calls should be launched now (emit multiple in one response for parallel execution)
 
 ### Integration Risks
+
 - style drift
 - shared file conflicts
 - route/type/API mismatches
@@ -55,6 +61,7 @@ Before major delegation, organize your response using these headings:
 - If the shared contract is unstable, stabilize it first.
 - Shared foundation files are parent-owned by default.
 - Do not assign the same shared file to multiple children.
+- Do not exceed 3 concurrent child agents under one parent run.
 - Do not consider the task done when children return; integration and verification are mandatory.
 
 If orchestration is not appropriate, state:

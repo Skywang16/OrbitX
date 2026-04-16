@@ -63,7 +63,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
-          releaseName: 'OpenCodex v__VERSION__'
+          releaseName: 'OrbitX v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
           prerelease: false

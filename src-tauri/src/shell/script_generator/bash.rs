@@ -5,18 +5,18 @@ use super::ShellIntegrationConfig;
 /// Node.js version detection script (compatible with Bash and Zsh)
 const NODE_VERSION_DETECTION: &str = r#"
     # Node.js version detection
-    __opencodex_last_node_version=""
+    __orbitx_last_node_version=""
 
-    __opencodex_detect_node_version() {
+    __orbitx_detect_node_version() {
         if command -v node >/dev/null 2>&1; then
             local current_version=$(node -v 2>/dev/null | tr -d '\n')
-            if [[ -n "$current_version" && "$current_version" != "$__opencodex_last_node_version" ]]; then
-                __opencodex_last_node_version="$current_version"
-                printf '\e]1337;OpenCodexNodeVersion=%s\e\\' "$current_version"
+            if [[ -n "$current_version" && "$current_version" != "$__orbitx_last_node_version" ]]; then
+                __orbitx_last_node_version="$current_version"
+                printf '\e]1337;OrbitXNodeVersion=%s\e\\' "$current_version"
             fi
-        elif [[ -n "$__opencodex_last_node_version" ]]; then
-            __opencodex_last_node_version=""
-            printf '\e]1337;OpenCodexNodeVersion=\e\\'
+        elif [[ -n "$__orbitx_last_node_version" ]]; then
+            __orbitx_last_node_version=""
+            printf '\e]1337;OrbitXNodeVersion=\e\\'
         fi
     }
 "#;
@@ -27,14 +27,14 @@ pub fn generate_script(config: &ShellIntegrationConfig) -> String {
 
     script.push_str(
         r#"
-# OpenCodex Integration Start
-if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
-    export OPENCODEX_SHELL_INTEGRATION=1
-    export OPENCODEX_INTEGRATION_LOADED=1
+# OrbitX Integration Start
+if [[ -z "$ORBITX_SHELL_INTEGRATION" ]]; then
+    export ORBITX_SHELL_INTEGRATION=1
+    export ORBITX_INTEGRATION_LOADED=1
 
     # Original PS1 backup
-    if [[ -z "$OPENCODEX_ORIGINAL_PS1" ]]; then
-        export OPENCODEX_ORIGINAL_PS1="$PS1"
+    if [[ -z "$ORBITX_ORIGINAL_PS1" ]]; then
+        export ORBITX_ORIGINAL_PS1="$PS1"
     fi
 "#,
     );
@@ -47,13 +47,13 @@ if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
         script.push_str(
             r#"
     # Shell Integration support - OSC 133 markers
-    __opencodex_preexec() {
+    __orbitx_preexec() {
         # C: Command execution start, carries command content
         # $1 is BASH_COMMAND passed through DEBUG trap
         printf '\e]133;C;%s\e\\' "$1" >/dev/tty
     }
 
-    __opencodex_precmd() {
+    __orbitx_precmd() {
         local exit_code=$?
         # D: Command finished, includes exit code
         printf '\e]133;D;%d\e\\' "$exit_code" >/dev/tty
@@ -61,7 +61,7 @@ if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
         printf '\e]133;A\e\\' >/dev/tty
         # B: Command input area start
         printf '\e]133;B\e\\' >/dev/tty
-        __opencodex_detect_node_version
+        __orbitx_detect_node_version
     }
 "#,
         );
@@ -71,17 +71,17 @@ if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
     if config.enable_command_tracking {
         script.push_str(
             r#"
-    if [[ -z "$OPENCODEX_PREEXEC_INSTALLED" ]]; then
-        export OPENCODEX_PREEXEC_INSTALLED=1
+    if [[ -z "$ORBITX_PREEXEC_INSTALLED" ]]; then
+        export ORBITX_PREEXEC_INSTALLED=1
 
         # Use DEBUG trap to simulate preexec
-        trap '__opencodex_preexec "$BASH_COMMAND"' DEBUG
+        trap '__orbitx_preexec "$BASH_COMMAND"' DEBUG
 
         # Run precmd before prompt rendering
         if [[ -z "$PROMPT_COMMAND" ]]; then
-            PROMPT_COMMAND="__opencodex_precmd"
+            PROMPT_COMMAND="__orbitx_precmd"
         else
-            PROMPT_COMMAND="$PROMPT_COMMAND; __opencodex_precmd"
+            PROMPT_COMMAND="$PROMPT_COMMAND; __orbitx_precmd"
         fi
     fi
 "#,
@@ -106,9 +106,9 @@ if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
             r#"
     # Node version detection (when command tracking is disabled)
     if [[ -z "$PROMPT_COMMAND" ]]; then
-        PROMPT_COMMAND="__opencodex_detect_node_version"
+        PROMPT_COMMAND="__orbitx_detect_node_version"
     else
-        PROMPT_COMMAND="$PROMPT_COMMAND; __opencodex_detect_node_version"
+        PROMPT_COMMAND="$PROMPT_COMMAND; __orbitx_detect_node_version"
     fi
 "#,
         );
@@ -117,10 +117,10 @@ if [[ -z "$OPENCODEX_SHELL_INTEGRATION" ]]; then
     script.push_str(
         r#"
     # Immediately detect Node version on initialization
-    __opencodex_detect_node_version 2>/dev/null || true
+    __orbitx_detect_node_version 2>/dev/null || true
 
 fi
-# OpenCodex Integration End
+# OrbitX Integration End
 "#,
     );
 
@@ -137,10 +137,10 @@ mod tests {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
 
-        assert!(script.contains("# OpenCodex Integration Start"));
-        assert!(script.contains("# OpenCodex Integration End"));
-        assert!(script.contains("OPENCODEX_INTEGRATION_LOADED"));
-        assert!(script.contains("__opencodex_detect_node_version"));
+        assert!(script.contains("# OrbitX Integration Start"));
+        assert!(script.contains("# OrbitX Integration End"));
+        assert!(script.contains("ORBITX_INTEGRATION_LOADED"));
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]
@@ -151,10 +151,10 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("__opencodex_preexec"));
-        assert!(script.contains("__opencodex_precmd"));
+        assert!(script.contains("__orbitx_preexec"));
+        assert!(script.contains("__orbitx_precmd"));
         assert!(script.contains("PROMPT_COMMAND"));
-        assert!(script.contains("trap '__opencodex_preexec"));
+        assert!(script.contains("trap '__orbitx_preexec"));
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         };
         let script = generate_script(&config);
         // After simplification, CWD is not synced via alias, but should still include node version detection logic
-        assert!(script.contains("__opencodex_detect_node_version"));
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]
@@ -176,13 +176,13 @@ mod tests {
         };
         let script = generate_script(&config);
         // After simplification, window title is not updated, but should still include node version detection logic
-        assert!(script.contains("__opencodex_detect_node_version"));
+        assert!(script.contains("__orbitx_detect_node_version"));
     }
 
     #[test]
     fn test_custom_env_vars() {
         let mut custom_vars = HashMap::new();
-        custom_vars.insert("OPENCODEX_CUSTOM".to_string(), "test_value".to_string());
+        custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
         custom_vars.insert("ANOTHER_VAR".to_string(), "another_value".to_string());
 
         let config = ShellIntegrationConfig {
@@ -191,7 +191,7 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("export OPENCODEX_CUSTOM=\"test_value\""));
+        assert!(script.contains("export ORBITX_CUSTOM=\"test_value\""));
         assert!(script.contains("export ANOTHER_VAR=\"another_value\""));
     }
 
@@ -206,13 +206,13 @@ mod tests {
         let script = generate_script(&config);
 
         // Should still contain basic structure
-        assert!(script.contains("# OpenCodex Integration Start"));
-        assert!(script.contains("# OpenCodex Integration End"));
-        assert!(script.contains("OPENCODEX_INTEGRATION_LOADED"));
+        assert!(script.contains("# OrbitX Integration Start"));
+        assert!(script.contains("# OrbitX Integration End"));
+        assert!(script.contains("ORBITX_INTEGRATION_LOADED"));
 
         // Should not contain disabled features
-        assert!(!script.contains("opencodex_preexec"));
-        assert!(!script.contains("opencodex_cd"));
-        assert!(!script.contains("opencodex_update_title"));
+        assert!(!script.contains("orbitx_preexec"));
+        assert!(!script.contains("orbitx_cd"));
+        assert!(!script.contains("orbitx_update_title"));
     }
 }

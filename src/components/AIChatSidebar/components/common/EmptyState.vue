@@ -1,7 +1,7 @@
 <template>
   <div class="empty-state">
-    <div class="empty-text">No active tasks</div>
-    <div class="empty-subtitle">Tasks will appear here when AI starts working</div>
+    <div class="empty-text">No active agent runs</div>
+    <div class="empty-subtitle">Agent runs will appear here when AI starts working</div>
   </div>
 </template>
 

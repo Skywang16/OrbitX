@@ -4,6 +4,7 @@ export * from './checkpoint'
 export * from './reasoning'
 export * from './shortcuts'
 export * from './storage'
+export * from './subagent'
 export * from './terminal'
 export * from './ui'
 

@@ -163,7 +163,7 @@ impl ShellIntegrationManager {
                         self.broadcast_event(pane_id, event);
                     }
                 }
-                OscSequence::OpenCodexNodeVersion { version } => {
+                OscSequence::OrbitXNodeVersion { version } => {
                     if let Some(event) = self.apply_node_version(pane_id, version) {
                         self.broadcast_event(pane_id, event);
                     }

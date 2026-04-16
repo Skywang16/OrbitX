@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::metadata::ToolMetadata;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 
 /// Context for dynamic tool description generation
@@ -15,7 +15,7 @@ use crate::agent::error::ToolExecutorResult;
 pub struct ToolDescriptionContext {
     pub cwd: String,
     pub agent_type: Option<String>,
-    pub allowed_task_profiles: Vec<String>,
+    pub allowed_subagent_types: Vec<String>,
 }
 
 /// Context for checking tool availability at registration time
@@ -90,18 +90,22 @@ pub trait RunnableTool: Send + Sync {
     }
 
     /// Optional lifecycle hooks
-    async fn before_run(&self, _context: &TaskContext, _args: &Value) -> ToolExecutorResult<()> {
+    async fn before_run(
+        &self,
+        _context: &AgentRunContext,
+        _args: &Value,
+    ) -> ToolExecutorResult<()> {
         Ok(())
     }
     async fn after_run(
         &self,
-        _context: &TaskContext,
+        _context: &AgentRunContext,
         _result: &ToolResult,
     ) -> ToolExecutorResult<()> {
         Ok(())
     }
 
-    async fn run(&self, context: &TaskContext, args: Value) -> ToolExecutorResult<ToolResult>;
+    async fn run(&self, context: &AgentRunContext, args: Value) -> ToolExecutorResult<ToolResult>;
 
     /// Default: build ToolSchema from basic fields
     fn schema(&self) -> ToolSchema {

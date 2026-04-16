@@ -82,17 +82,17 @@ impl ConfigManager {
 }
 
 fn resolve_app_dir() -> ConfigResult<PathBuf> {
-    match std::env::var("OPENCODEX_DATA_DIR") {
+    match std::env::var("ORBITX_DATA_DIR") {
         Ok(dir) => return Ok(PathBuf::from(dir)),
         Err(std::env::VarError::NotPresent) => {}
         Err(err) => {
-            tracing::warn!("Failed to read OPENCODEX_DATA_DIR: {}", err);
+            tracing::warn!("Failed to read ORBITX_DATA_DIR: {}", err);
         }
     }
     let Some(data_dir) = dirs::data_dir() else {
         return Err(ConfigError::Internal("system data_dir unavailable".into()));
     };
-    Ok(data_dir.join("OpenCodex"))
+    Ok(data_dir.join("OrbitX"))
 }
 
 async fn read_json(path: &Path) -> ConfigResult<AppConfig> {

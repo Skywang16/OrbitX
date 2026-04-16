@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::mcp::client::McpClient;
 use crate::agent::mcp::types::McpToolDefinition;
@@ -47,7 +47,7 @@ impl RunnableTool for McpToolAdapter {
             .with_tags(vec!["mcp".into(), self.client.name().into()])
     }
 
-    async fn run(&self, _ctx: &TaskContext, args: Value) -> ToolExecutorResult<ToolResult> {
+    async fn run(&self, _ctx: &AgentRunContext, args: Value) -> ToolExecutorResult<ToolResult> {
         let res = self.client.call_tool(&self.tool_def.name, args).await;
         match res {
             Ok(call) => {

@@ -159,7 +159,7 @@ fn get_cache_path() -> Option<PathBuf> {
     };
 
     // Use data directory for cache storage
-    let cache_dir = data_dir.join("OpenCodex").join("cache");
+    let cache_dir = data_dir.join("OrbitX").join("cache");
 
     // Ensure directory exists
     if !cache_dir.exists() {
@@ -263,7 +263,7 @@ async fn fetch_from_api() -> Result<HashMap<String, ProviderDef>, String> {
 
     let response = client
         .get(MODELS_DEV_URL)
-        .header("User-Agent", "OpenCodex/0.2.0")
+        .header("User-Agent", "OrbitX/0.2.0")
         .send()
         .await
         .map_err(|e| format!("Failed to fetch models: {e}"))?;

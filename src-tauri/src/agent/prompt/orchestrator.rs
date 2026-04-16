@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use crate::agent::agents::AgentConfigLoader;
 use crate::agent::context::ProjectContextLoader;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{AgentRunError, AgentRunResult};
 use crate::agent::prompt::{BuiltinPrompts, PromptBuilder, SystemPromptParts};
+use crate::agent::rollout::replay_rollout;
 use crate::agent::tools::ToolRegistry;
 use crate::settings::SettingsManager;
 use crate::storage::repositories::AppPreferences;
@@ -41,12 +42,12 @@ impl PromptOrchestrator {
     async fn load_rules(
         &self,
         workspace_path: &str,
-    ) -> TaskExecutorResult<(Option<String>, Option<String>)> {
+    ) -> AgentRunResult<(Option<String>, Option<String>)> {
         let effective = self
             .settings_manager
             .get_effective_settings(Some(std::path::PathBuf::from(workspace_path)))
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         let global_rules = {
             let rules = effective.rules_content.trim();
@@ -61,7 +62,7 @@ impl PromptOrchestrator {
         let project_rules = prefs
             .get("workspace.project_rules")
             .await
-            .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
         if let Err(err) = self.cache.set_global_rules(global_rules.clone()).await {
             tracing::warn!("Failed to sync global rules cache: {}", err);
@@ -73,21 +74,30 @@ impl PromptOrchestrator {
         Ok((global_rules, project_rules))
     }
 
-    async fn has_agent_messages(
+    async fn has_agent_thread_messages(
         &self,
-        session_id: i64,
+        thread_id: i64,
         agent_type: &str,
-    ) -> TaskExecutorResult<bool> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(1) FROM messages WHERE session_id = ? AND agent_type = ? LIMIT 1",
-        )
-        .bind(session_id)
-        .bind(agent_type)
-        .fetch_one(self.database.pool())
-        .await
-        .map_err(|e| TaskExecutorError::StatePersistenceFailed(e.to_string()))?;
+    ) -> AgentRunResult<bool> {
+        let rollout_path: Option<String> =
+            sqlx::query_scalar("SELECT rollout_path FROM threads WHERE id = ?")
+                .bind(thread_id)
+                .fetch_optional(self.database.pool())
+                .await
+                .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
 
-        Ok(count > 0)
+        let Some(rollout_path) = rollout_path else {
+            return Ok(false);
+        };
+
+        let replayed = replay_rollout(Path::new(&rollout_path))
+            .await
+            .map_err(|e| AgentRunError::StatePersistenceFailed(e.to_string()))?;
+
+        Ok(replayed
+            .messages
+            .iter()
+            .any(|message| message.agent_type == agent_type))
     }
 
     fn get_reminder(&self, agent_type: &str, has_plan_history: bool) -> Option<String> {
@@ -200,20 +210,20 @@ impl PromptOrchestrator {
 
     pub async fn build_task_prompts(
         &self,
-        session_id: i64,
+        thread_id: i64,
         _task_id: String,
         user_prompt: &str,
         agent_type: &str,
         workspace_path: &str,
         _tool_registry: &ToolRegistry,
         model_id: Option<&str>,
-    ) -> TaskExecutorResult<TaskPrompts> {
+    ) -> AgentRunResult<TaskPrompts> {
         let cwd = workspace_path;
 
         // Load agent configuration
         let agent_configs = AgentConfigLoader::load_for_workspace(&std::path::PathBuf::from(cwd))
             .await
-            .map_err(|err| TaskExecutorError::ConfigurationError(err.to_string()))?;
+            .map_err(|err| AgentRunError::ConfigurationError(err.to_string()))?;
 
         let agent_cfg = agent_configs.get(agent_type);
 
@@ -240,7 +250,7 @@ impl PromptOrchestrator {
         };
 
         // Get reminder
-        let has_plan_history = self.has_agent_messages(session_id, "plan").await?;
+        let has_plan_history = self.has_agent_thread_messages(thread_id, "plan").await?;
         let reminder = self.get_reminder(agent_type, has_plan_history);
 
         // Build environment info with directory listing and git status

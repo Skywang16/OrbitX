@@ -52,7 +52,7 @@
       layoutStore.openSettings()
     } else if (action === 'feedback') {
       // Use Tauri's opener plugin to open GitHub Issues page in external browser
-      await openUrl('https://github.com/Skywang16/OpenCodex/issues')
+      await openUrl('https://github.com/Skywang16/OrbitX/issues')
     }
   }
 

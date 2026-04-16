@@ -7,7 +7,7 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::context::FileRecordSource;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
@@ -81,7 +81,7 @@ Usage:
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: WriteFileArgs = serde_json::from_value(args)?;
@@ -170,7 +170,7 @@ fn error_result(message: impl Into<String>) -> ToolResult {
 }
 
 async fn snapshot_before_edit(
-    context: &TaskContext,
+    context: &AgentRunContext,
     tool_name: &str,
     path: &Path,
 ) -> ToolExecutorResult<()> {

@@ -8,11 +8,11 @@ pub fn generate_script(config: &ShellIntegrationConfig) -> String {
 
     script.push_str(
         r#"
-# OpenCodex Shell Integration for Fish
-if set -q OPENCODEX_SHELL_INTEGRATION_LOADED
+# OrbitX Shell Integration for Fish
+if set -q ORBITX_SHELL_INTEGRATION_LOADED
     exit 0
 end
-set -g OPENCODEX_SHELL_INTEGRATION_LOADED 1
+set -g ORBITX_SHELL_INTEGRATION_LOADED 1
 "#,
     );
 
@@ -21,7 +21,7 @@ set -g OPENCODEX_SHELL_INTEGRATION_LOADED 1
         script.push_str(
             r#"
 # CWD sync function
-function __opencodex_update_cwd --on-variable PWD
+function __orbitx_update_cwd --on-variable PWD
     printf '\e]7;file://%s%s\e\\' (hostname) (pwd)
 end
 "#,
@@ -33,22 +33,22 @@ end
         script.push_str(
             r#"
 # Shell Integration support (OSC 133)
-function __opencodex_preexec --on-event fish_preexec
+function __orbitx_preexec --on-event fish_preexec
     # $argv[1] is the command line in fish preexec
     printf '\e]133;C;%s\e\\' "$argv[1]"
 end
 
-function __opencodex_postcmd --on-event fish_postexec
+function __orbitx_postcmd --on-event fish_postexec
     printf '\e]133;D;%d\e\\' $status
-    __opencodex_update_cwd
+    __orbitx_update_cwd
     printf '\e]133;A\e\\'
 end
 
-function __opencodex_prompt_start --on-event fish_prompt
+function __orbitx_prompt_start --on-event fish_prompt
     printf '\e]133;A\e\\'
 end
 
-function __opencodex_prompt_end --on-event fish_preexec
+function __orbitx_prompt_end --on-event fish_preexec
     printf '\e]133;B\e\\'
 end
 "#,
@@ -56,7 +56,7 @@ end
     } else if config.enable_cwd_sync {
         // Fish's PWD change monitoring is already handled in the CWD sync function
         script.push_str(
-            "# CWD sync is already enabled in the __opencodex_update_cwd function above\n",
+            "# CWD sync is already enabled in the __orbitx_update_cwd function above\n",
         );
     }
 
@@ -65,7 +65,7 @@ end
         script.push_str(
             r#"
 # Window title update
-function __opencodex_update_title --on-variable PWD
+function __orbitx_update_title --on-variable PWD
     set -l title "$USER@"(hostname)":"(string replace -r "^$HOME" "~" (pwd))
     printf '\e]2;%s\e\\' "$title"
 end
@@ -84,9 +84,9 @@ end
     script.push_str(
         r#"
 # Initialize CWD and title
-__opencodex_update_cwd 2>/dev/null; or true
-if functions -q __opencodex_update_title
-    __opencodex_update_title 2>/dev/null; or true
+__orbitx_update_cwd 2>/dev/null; or true
+if functions -q __orbitx_update_title
+    __orbitx_update_title 2>/dev/null; or true
 end
 "#,
     );
@@ -104,8 +104,8 @@ mod tests {
         let config = ShellIntegrationConfig::default();
         let script = generate_script(&config);
 
-        assert!(script.contains("# OpenCodex Shell Integration for Fish"));
-        assert!(script.contains("OPENCODEX_SHELL_INTEGRATION_LOADED"));
+        assert!(script.contains("# OrbitX Shell Integration for Fish"));
+        assert!(script.contains("ORBITX_SHELL_INTEGRATION_LOADED"));
         assert!(script.contains("set -g"));
     }
 
@@ -117,8 +117,8 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("__opencodex_preexec"));
-        assert!(script.contains("__opencodex_postcmd"));
+        assert!(script.contains("__orbitx_preexec"));
+        assert!(script.contains("__orbitx_postcmd"));
         assert!(script.contains("fish_preexec"));
         assert!(script.contains("fish_postexec"));
     }
@@ -131,7 +131,7 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("__opencodex_update_cwd"));
+        assert!(script.contains("__orbitx_update_cwd"));
         assert!(script.contains("--on-variable PWD"));
     }
 
@@ -143,14 +143,14 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("__opencodex_update_title"));
+        assert!(script.contains("__orbitx_update_title"));
         assert!(script.contains("--on-variable PWD"));
     }
 
     #[test]
     fn test_custom_env_vars() {
         let mut custom_vars = HashMap::new();
-        custom_vars.insert("OPENCODEX_CUSTOM".to_string(), "test_value".to_string());
+        custom_vars.insert("ORBITX_CUSTOM".to_string(), "test_value".to_string());
 
         let config = ShellIntegrationConfig {
             custom_env_vars: custom_vars,
@@ -158,6 +158,6 @@ mod tests {
         };
         let script = generate_script(&config);
 
-        assert!(script.contains("set -gx OPENCODEX_CUSTOM \"test_value\""));
+        assert!(script.contains("set -gx ORBITX_CUSTOM \"test_value\""));
     }
 }

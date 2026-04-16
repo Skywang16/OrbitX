@@ -1,32 +1,26 @@
 use std::sync::Arc;
 
+use crate::agent::rollout::{RolloutRecorder, ThreadRepository};
 use crate::storage::database::DatabaseManager;
 
-use super::repositories::{
-    AgentNodeRepository, MessageRepository, RunRepository, SessionRepository,
-    ToolExecutionRepository, WorkspaceRepository,
-};
+use super::repositories::{MessageRepository, WorkspaceRepository};
 
 /// Facade that wires all persistence repositories together for the agent backend.
 #[derive(Debug)]
 pub struct AgentPersistence {
     database: Arc<DatabaseManager>,
+    threads: ThreadRepository,
+    rollout_recorder: RolloutRecorder,
     workspaces: WorkspaceRepository,
-    sessions: SessionRepository,
-    runs: RunRepository,
-    agent_nodes: AgentNodeRepository,
     messages: MessageRepository,
-    tool_executions: ToolExecutionRepository,
 }
 
 impl AgentPersistence {
     pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self {
-            tool_executions: ToolExecutionRepository::new(Arc::clone(&database)),
+            threads: ThreadRepository::new(Arc::clone(&database)),
+            rollout_recorder: RolloutRecorder::new(Arc::clone(&database)),
             workspaces: WorkspaceRepository::new(Arc::clone(&database)),
-            sessions: SessionRepository::new(Arc::clone(&database)),
-            runs: RunRepository::new(Arc::clone(&database)),
-            agent_nodes: AgentNodeRepository::new(Arc::clone(&database)),
             messages: MessageRepository::new(Arc::clone(&database)),
             database,
         }
@@ -40,23 +34,15 @@ impl AgentPersistence {
         &self.workspaces
     }
 
-    pub fn sessions(&self) -> &SessionRepository {
-        &self.sessions
+    pub fn threads(&self) -> &ThreadRepository {
+        &self.threads
     }
 
-    pub fn runs(&self) -> &RunRepository {
-        &self.runs
-    }
-
-    pub fn agent_nodes(&self) -> &AgentNodeRepository {
-        &self.agent_nodes
+    pub fn rollout_recorder(&self) -> &RolloutRecorder {
+        &self.rollout_recorder
     }
 
     pub fn messages(&self) -> &MessageRepository {
         &self.messages
-    }
-
-    pub fn tool_executions(&self) -> &ToolExecutionRepository {
-        &self.tool_executions
     }
 }

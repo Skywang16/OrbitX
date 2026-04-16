@@ -147,10 +147,7 @@ export class APIClient {
         return await this.invoke<T>(command, args, options)
       } catch (error) {
         lastError = error as Error
-        console.warn(
-          `[API Retry] command=${command} attempt=${attempt + 1}/${maxRetries + 1} error=`,
-          error
-        )
+        console.warn(`[API Retry] command=${command} attempt=${attempt + 1}/${maxRetries + 1} error=`, error)
 
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryDelay))

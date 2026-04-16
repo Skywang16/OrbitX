@@ -4,34 +4,34 @@
 @import './settings.css';
 @import './highlight.css';
 
-body.opencodex-tab-dragging,
-body.opencodex-tab-dragging * {
+body.orbitx-tab-dragging,
+body.orbitx-tab-dragging * {
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
 /* Dragging/resizing panels: prevent accidental text selection (especially xterm selection) */
-body.opencodex-resizing,
-body.opencodex-resizing * {
+body.orbitx-resizing,
+body.orbitx-resizing * {
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
-body.opencodex-resizing.opencodex-resize-col,
-body.opencodex-resizing.opencodex-resize-col * {
+body.orbitx-resizing.orbitx-resize-col,
+body.orbitx-resizing.orbitx-resize-col * {
   cursor: col-resize !important;
 }
 
-body.opencodex-resizing.opencodex-resize-row,
-body.opencodex-resizing.opencodex-resize-row * {
+body.orbitx-resizing.orbitx-resize-row,
+body.orbitx-resizing.orbitx-resize-row * {
   cursor: ns-resize !important;
 }
 
-body.opencodex-resizing .terminal-container {
+body.orbitx-resizing .terminal-container {
   pointer-events: none !important;
 }
 
-.opencodex-drag-preview {
+.orbitx-drag-preview {
   position: fixed;
   top: 0;
   left: 0;
@@ -46,6 +46,6 @@ body.opencodex-resizing .terminal-container {
   filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
 }
 
-.opencodex-drag-preview .tab {
+.orbitx-drag-preview .tab {
   margin: 0 !important;
 }

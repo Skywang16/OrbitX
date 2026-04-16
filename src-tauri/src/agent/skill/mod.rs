@@ -4,7 +4,7 @@
 //!
 //! ## Workflow
 //!
-//! 1. **Discovery phase**: Scan `.claude/skills/` and `.opencodex/skills/`, load metadata for all skills
+//! 1. **Discovery phase**: Scan `.claude/skills/` and `.orbitx/skills/`, load metadata for all skills
 //! 2. **Activation phase**: Based on user prompt and matching mode, load full content of selected skills
 //! 3. **Execution phase**: Agent can load reference files on demand during execution (scripts/, references/, assets/)
 //!
@@ -21,7 +21,7 @@
 //! ## Usage Example
 //!
 //! ```rust,no_run
-//! use opencodex_agent::skill_system::SkillManager;
+//! use orbitx_agent::skill_system::SkillManager;
 //! use std::path::Path;
 //!
 //! # async fn example() -> anyhow::Result<()> {

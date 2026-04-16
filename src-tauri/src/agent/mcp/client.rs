@@ -36,6 +36,7 @@ impl McpClient {
                 args,
                 env,
                 disabled,
+                ..
             } => {
                 if *disabled {
                     return Err(McpError::Disabled);
@@ -50,6 +51,7 @@ impl McpClient {
                 url,
                 headers,
                 disabled,
+                ..
             } => {
                 if *disabled {
                     return Err(McpError::Disabled);
@@ -122,7 +124,7 @@ impl McpClient {
                 "initialize",
                 Some(json!({
                     "protocolVersion": "2025-11-25",
-                    "clientInfo": { "name": "OpenCodex", "version": env!("CARGO_PKG_VERSION") },
+                    "clientInfo": { "name": "OrbitX", "version": env!("CARGO_PKG_VERSION") },
                     "capabilities": {}
                 })),
             ))

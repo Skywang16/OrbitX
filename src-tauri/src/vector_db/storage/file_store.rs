@@ -27,7 +27,7 @@ pub struct FileStore {
 impl FileStore {
     /// Create new file storage
     pub fn new(project_root: &Path) -> Result<Self> {
-        let root_path = project_root.join(".opencodex").join("index");
+        let root_path = project_root.join(".orbitx").join("index");
         let vectors_path = root_path.join("vectors");
         let metadata_path = root_path.join("metadata");
         let cache_path = root_path.join("cache");

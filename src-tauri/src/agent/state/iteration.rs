@@ -1,14 +1,14 @@
 use chrono::{DateTime, Utc};
 
 use crate::agent::core::context::AgentToolCallResult;
-use crate::agent::state::session::SessionContext;
+use crate::agent::state::session::ThreadContext;
 use crate::llm::anthropic_types::MessageParam;
 use std::sync::Arc;
 
 pub struct IterationContext {
     pub iteration_num: u32,
     pub started_at: DateTime<Utc>,
-    session: Arc<SessionContext>,
+    session: Arc<ThreadContext>,
     current_messages: Vec<MessageParam>,
     pending_tools: Vec<(String, String, serde_json::Value)>,
     tool_results: Vec<AgentToolCallResult>,
@@ -18,7 +18,7 @@ pub struct IterationContext {
 }
 
 impl IterationContext {
-    pub fn new(iteration_num: u32, session: Arc<SessionContext>) -> Self {
+    pub fn new(iteration_num: u32, session: Arc<ThreadContext>) -> Self {
         Self {
             iteration_num,
             started_at: Utc::now(),
@@ -32,7 +32,7 @@ impl IterationContext {
         }
     }
 
-    pub fn session(&self) -> Arc<SessionContext> {
+    pub fn session(&self) -> Arc<ThreadContext> {
         Arc::clone(&self.session)
     }
 

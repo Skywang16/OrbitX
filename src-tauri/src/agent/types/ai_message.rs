@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Message - a complete message from user or assistant
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
     pub id: i64,
-    pub session_id: i64,
+    #[serde(rename = "threadId")]
+    pub thread_id: i64,
     pub role: MessageRole,
     pub agent_type: String,
     pub parent_message_id: Option<i64>,
@@ -24,14 +25,14 @@ pub struct Message {
     pub context_usage: Option<ContextUsage>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     User,
     Assistant,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageStatus {
     Streaming,
@@ -40,7 +41,7 @@ pub enum MessageStatus {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenUsage {
     pub input_tokens: i64,
@@ -50,7 +51,7 @@ pub struct TokenUsage {
 }
 
 /// Context usage information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextUsage {
     /// Current number of tokens used
@@ -59,8 +60,60 @@ pub struct ContextUsage {
     pub context_window: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SubagentStatus {
+    Pending,
+    Running,
+    Completed,
+    Cancelled,
+    Error,
+}
+
+impl SubagentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Error => "error",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Self {
+        match value {
+            "pending" => Self::Pending,
+            "running" => Self::Running,
+            "completed" => Self::Completed,
+            "cancelled" => Self::Cancelled,
+            "error" => Self::Error,
+            _ => Self::Error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentRecord {
+    pub id: String,
+    pub parent_thread_id: i64,
+    pub child_thread_id: i64,
+    pub parent_message_id: i64,
+    pub name: String,
+    pub profile: String,
+    pub task_title: String,
+    pub status: SubagentStatus,
+    pub latest_activity: Option<String>,
+    pub final_summary: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+}
+
 /// Content block - building unit of a message
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Block {
     UserText(UserTextBlock),
@@ -69,17 +122,16 @@ pub enum Block {
     Text(TextBlock),
     Tool(ToolBlock),
     AgentSwitch(AgentSwitchBlock),
-    Subtask(SubtaskBlock),
     Error(ErrorBlock),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UserTextBlock {
     pub content: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UserImageBlock {
     pub data_url: String,
@@ -88,7 +140,7 @@ pub struct UserImageBlock {
     pub file_size: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ThinkingBlock {
     pub id: String,
@@ -98,7 +150,7 @@ pub struct ThinkingBlock {
     pub metadata: Option<crate::llm::anthropic_types::ReasoningBlockMetadata>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TextBlock {
     pub id: String,
@@ -106,7 +158,7 @@ pub struct TextBlock {
     pub is_streaming: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolBlock {
     pub id: String,
@@ -121,7 +173,7 @@ pub struct ToolBlock {
     pub duration_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolStatus {
     Pending,
@@ -131,7 +183,7 @@ pub enum ToolStatus {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolOutput {
     pub content: Value,
@@ -140,7 +192,7 @@ pub struct ToolOutput {
     pub cancel_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSwitchBlock {
     pub from_agent: String,
@@ -148,28 +200,7 @@ pub struct AgentSwitchBlock {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubtaskBlock {
-    pub id: String,
-    pub child_session_id: i64,
-    pub agent_type: String,
-    pub description: String,
-    pub status: SubtaskStatus,
-    pub summary: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SubtaskStatus {
-    Pending,
-    Running,
-    Completed,
-    Cancelled,
-    Error,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorBlock {
     pub code: String,
@@ -177,30 +208,43 @@ pub struct ErrorBlock {
     pub details: Option<String>,
 }
 
-/// Task progress event (sole input from frontend)
+/// Agent run progress event streamed to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum TaskEvent {
+pub enum AgentRunEvent {
     #[serde(rename_all = "camelCase")]
-    TaskCreated {
-        task_id: String,
-        session_id: i64,
+    #[serde(rename = "agent_run_created")]
+    AgentRunCreated {
+        run_id: String,
+        thread_id: i64,
         workspace_path: String,
     },
 
     #[serde(rename_all = "camelCase")]
-    MessageCreated { task_id: String, message: Message },
+    MessageCreated { run_id: String, message: Message },
+
+    #[serde(rename_all = "camelCase")]
+    SubagentCreated {
+        run_id: String,
+        subagent: SubagentRecord,
+    },
+
+    #[serde(rename_all = "camelCase")]
+    SubagentUpdated {
+        run_id: String,
+        subagent: SubagentRecord,
+    },
 
     #[serde(rename_all = "camelCase")]
     BlockAppended {
-        task_id: String,
+        run_id: String,
         message_id: i64,
         block: Block,
     },
 
     #[serde(rename_all = "camelCase")]
     BlockUpdated {
-        task_id: String,
+        run_id: String,
         message_id: i64,
         block_id: String,
         block: Block,
@@ -208,7 +252,7 @@ pub enum TaskEvent {
 
     #[serde(rename_all = "camelCase")]
     MessageFinished {
-        task_id: String,
+        run_id: String,
         message_id: i64,
         status: MessageStatus,
         finished_at: DateTime<Utc>,
@@ -218,18 +262,21 @@ pub enum TaskEvent {
     },
 
     #[serde(rename_all = "camelCase")]
-    TaskCompleted { task_id: String },
+    #[serde(rename = "agent_run_completed")]
+    AgentRunCompleted { run_id: String },
 
     #[serde(rename_all = "camelCase")]
-    TaskError { task_id: String, error: ErrorBlock },
+    #[serde(rename = "agent_run_error")]
+    AgentRunError { run_id: String, error: ErrorBlock },
 
     #[serde(rename_all = "camelCase")]
-    TaskCancelled { task_id: String },
+    #[serde(rename = "agent_run_cancelled")]
+    AgentRunCancelled { run_id: String },
 
     /// Tool execution confirmation request (frontend needs to show dialog and return decision)
     #[serde(rename_all = "camelCase")]
     ToolConfirmationRequested {
-        task_id: String,
+        run_id: String,
         request_id: String,
         workspace_path: String,
         tool_name: String,
@@ -238,8 +285,9 @@ pub enum TaskEvent {
 
     /// LLM request is being retried (connection/rate-limit/server error)
     #[serde(rename_all = "camelCase")]
-    TaskRetrying {
-        task_id: String,
+    #[serde(rename = "agent_run_retrying")]
+    AgentRunRetrying {
+        run_id: String,
         attempt: u32,
         max_attempts: u32,
         reason: String,

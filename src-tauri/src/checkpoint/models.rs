@@ -54,7 +54,7 @@ fn timestamp_to_datetime(ts: i64) -> DateTime<Utc> {
 pub struct Checkpoint {
     pub id: i64,
     pub workspace_path: String,
-    pub session_id: i64,
+    pub thread_id: i64,
     pub message_id: i64,
     pub parent_id: Option<i64>,
     pub created_at: DateTime<Utc>,
@@ -66,7 +66,7 @@ impl Checkpoint {
         Ok(Self {
             id: row.try_get("id")?,
             workspace_path: row.try_get("workspace_path")?,
-            session_id: row.try_get("session_id")?,
+            thread_id: row.try_get("thread_id")?,
             message_id: row.try_get("message_id")?,
             parent_id: row.try_get("parent_id")?,
             created_at: timestamp_to_datetime(row.try_get("created_at")?),
@@ -80,7 +80,7 @@ impl Checkpoint {
 pub struct CheckpointSummary {
     pub id: i64,
     pub workspace_path: String,
-    pub session_id: i64,
+    pub thread_id: i64,
     pub message_id: i64,
     pub parent_id: Option<i64>,
     pub created_at: DateTime<Utc>,
@@ -94,7 +94,7 @@ impl CheckpointSummary {
         Ok(Self {
             id: row.try_get("id")?,
             workspace_path: row.try_get("workspace_path")?,
-            session_id: row.try_get("session_id")?,
+            thread_id: row.try_get("thread_id")?,
             message_id: row.try_get("message_id")?,
             parent_id: row.try_get("parent_id")?,
             created_at: timestamp_to_datetime(row.try_get("created_at")?),
@@ -188,7 +188,7 @@ pub struct RollbackResult {
 #[derive(Debug, Clone)]
 pub struct NewCheckpoint {
     pub workspace_path: String,
-    pub session_id: i64,
+    pub thread_id: i64,
     pub message_id: i64,
     pub parent_id: Option<i64>,
 }

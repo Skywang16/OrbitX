@@ -3,7 +3,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::file_utils::lenient;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::terminal::AgentTerminalManager;
 use crate::agent::tools::{
@@ -77,7 +77,7 @@ Note: This is NOT for reading source files - use read_file instead."#
 
     async fn run(
         &self,
-        _context: &TaskContext,
+        _context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ReadTerminalArgs = serde_json::from_value(args)?;

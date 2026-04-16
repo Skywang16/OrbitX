@@ -13,7 +13,7 @@ use crate::storage::error::RepositoryError;
 #[derive(Error, Debug)]
 pub enum AgentError {
     #[error(transparent)]
-    TaskExecutor(#[from] TaskExecutorError),
+    AgentRunExecutor(#[from] AgentRunError),
     #[error(transparent)]
     ToolExecutor(#[from] ToolExecutorError),
     #[error(transparent)]
@@ -56,10 +56,10 @@ impl From<xmltree::Error> for AgentError {
     }
 }
 
-// ==================== TaskExecutor submodule errors ====================
+// ==================== AgentRunExecutor submodule errors ====================
 
 #[derive(Error, Debug)]
-pub enum TaskExecutorError {
+pub enum AgentRunError {
     #[error("Task not found: {0}")]
     TaskNotFound(String),
 
@@ -108,11 +108,11 @@ pub enum TaskExecutorError {
     #[error("Too many active tasks globally: {current}/{limit}")]
     TooManyActiveTasksGlobal { current: usize, limit: usize },
 
-    #[error("Too many active subtasks globally: {current}/{limit}")]
-    TooManyActiveSubtasksGlobal { current: usize, limit: usize },
+    #[error("Too many active subagents globally: {current}/{limit}")]
+    TooManyActiveSubagentsGlobal { current: usize, limit: usize },
 
-    #[error("Too many active subtasks for parent task {parent_task_id}: {current}/{limit}")]
-    TooManyActiveSubtasksPerParent {
+    #[error("Too many active subagents for parent task {parent_task_id}: {current}/{limit}")]
+    TooManyActiveSubagentsPerParent {
         parent_task_id: String,
         current: usize,
         limit: usize,
@@ -125,59 +125,59 @@ pub enum TaskExecutorError {
     InternalError(String),
 }
 
-impl TaskExecutorError {
+impl AgentRunError {
     pub fn is_recoverable(&self) -> bool {
         match self {
-            TaskExecutorError::TaskNotFound(_) => false,
-            TaskExecutorError::TaskAlreadyCompleted(_) => false,
-            TaskExecutorError::TaskCancelled(_) => false,
-            TaskExecutorError::MaxIterationsReached { .. } => false,
-            TaskExecutorError::TooManyErrors { .. } => false,
-            TaskExecutorError::LLMCallFailed(_) => true,
-            TaskExecutorError::ToolExecutionFailed { .. } => true,
-            TaskExecutorError::StatePersistenceFailed(_) => true,
-            TaskExecutorError::ContextRecoveryFailed(_) => false,
-            TaskExecutorError::ChannelError(_) => true,
-            TaskExecutorError::ConfigurationError(_) => false,
-            TaskExecutorError::JsonError(_) => false,
-            TaskExecutorError::DatabaseError(_) => true,
-            TaskExecutorError::RepositoryError(_) => true,
-            TaskExecutorError::TaskInterrupted => true,
-            TaskExecutorError::TooManyActiveTasksGlobal { .. } => false,
-            TaskExecutorError::TooManyActiveSubtasksGlobal { .. } => false,
-            TaskExecutorError::TooManyActiveSubtasksPerParent { .. } => false,
-            TaskExecutorError::InvalidStateTransition { .. } => false,
-            TaskExecutorError::InternalError(_) => false,
+            AgentRunError::TaskNotFound(_) => false,
+            AgentRunError::TaskAlreadyCompleted(_) => false,
+            AgentRunError::TaskCancelled(_) => false,
+            AgentRunError::MaxIterationsReached { .. } => false,
+            AgentRunError::TooManyErrors { .. } => false,
+            AgentRunError::LLMCallFailed(_) => true,
+            AgentRunError::ToolExecutionFailed { .. } => true,
+            AgentRunError::StatePersistenceFailed(_) => true,
+            AgentRunError::ContextRecoveryFailed(_) => false,
+            AgentRunError::ChannelError(_) => true,
+            AgentRunError::ConfigurationError(_) => false,
+            AgentRunError::JsonError(_) => false,
+            AgentRunError::DatabaseError(_) => true,
+            AgentRunError::RepositoryError(_) => true,
+            AgentRunError::TaskInterrupted => true,
+            AgentRunError::TooManyActiveTasksGlobal { .. } => false,
+            AgentRunError::TooManyActiveSubagentsGlobal { .. } => false,
+            AgentRunError::TooManyActiveSubagentsPerParent { .. } => false,
+            AgentRunError::InvalidStateTransition { .. } => false,
+            AgentRunError::InternalError(_) => false,
         }
     }
 
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            TaskExecutorError::TaskNotFound(_) => ErrorSeverity::Warning,
-            TaskExecutorError::TaskAlreadyCompleted(_) => ErrorSeverity::Info,
-            TaskExecutorError::TaskCancelled(_) => ErrorSeverity::Info,
-            TaskExecutorError::MaxIterationsReached { .. } => ErrorSeverity::Warning,
-            TaskExecutorError::TooManyErrors { .. } => ErrorSeverity::Error,
-            TaskExecutorError::LLMCallFailed(_) => ErrorSeverity::Error,
-            TaskExecutorError::ToolExecutionFailed { .. } => ErrorSeverity::Warning,
-            TaskExecutorError::StatePersistenceFailed(_) => ErrorSeverity::Error,
-            TaskExecutorError::ContextRecoveryFailed(_) => ErrorSeverity::Error,
-            TaskExecutorError::ChannelError(_) => ErrorSeverity::Warning,
-            TaskExecutorError::ConfigurationError(_) => ErrorSeverity::Error,
-            TaskExecutorError::JsonError(_) => ErrorSeverity::Error,
-            TaskExecutorError::DatabaseError(_) => ErrorSeverity::Error,
-            TaskExecutorError::RepositoryError(_) => ErrorSeverity::Error,
-            TaskExecutorError::TaskInterrupted => ErrorSeverity::Info,
-            TaskExecutorError::TooManyActiveTasksGlobal { .. } => ErrorSeverity::Warning,
-            TaskExecutorError::TooManyActiveSubtasksGlobal { .. } => ErrorSeverity::Warning,
-            TaskExecutorError::TooManyActiveSubtasksPerParent { .. } => ErrorSeverity::Warning,
-            TaskExecutorError::InvalidStateTransition { .. } => ErrorSeverity::Error,
-            TaskExecutorError::InternalError(_) => ErrorSeverity::Critical,
+            AgentRunError::TaskNotFound(_) => ErrorSeverity::Warning,
+            AgentRunError::TaskAlreadyCompleted(_) => ErrorSeverity::Info,
+            AgentRunError::TaskCancelled(_) => ErrorSeverity::Info,
+            AgentRunError::MaxIterationsReached { .. } => ErrorSeverity::Warning,
+            AgentRunError::TooManyErrors { .. } => ErrorSeverity::Error,
+            AgentRunError::LLMCallFailed(_) => ErrorSeverity::Error,
+            AgentRunError::ToolExecutionFailed { .. } => ErrorSeverity::Warning,
+            AgentRunError::StatePersistenceFailed(_) => ErrorSeverity::Error,
+            AgentRunError::ContextRecoveryFailed(_) => ErrorSeverity::Error,
+            AgentRunError::ChannelError(_) => ErrorSeverity::Warning,
+            AgentRunError::ConfigurationError(_) => ErrorSeverity::Error,
+            AgentRunError::JsonError(_) => ErrorSeverity::Error,
+            AgentRunError::DatabaseError(_) => ErrorSeverity::Error,
+            AgentRunError::RepositoryError(_) => ErrorSeverity::Error,
+            AgentRunError::TaskInterrupted => ErrorSeverity::Info,
+            AgentRunError::TooManyActiveTasksGlobal { .. } => ErrorSeverity::Warning,
+            AgentRunError::TooManyActiveSubagentsGlobal { .. } => ErrorSeverity::Warning,
+            AgentRunError::TooManyActiveSubagentsPerParent { .. } => ErrorSeverity::Warning,
+            AgentRunError::InvalidStateTransition { .. } => ErrorSeverity::Error,
+            AgentRunError::InternalError(_) => ErrorSeverity::Critical,
         }
     }
 }
 
-pub type TaskExecutorResult<T> = Result<T, TaskExecutorError>;
+pub type AgentRunResult<T> = Result<T, AgentRunError>;
 
 // ==================== ToolExecutor submodule errors ====================
 
@@ -278,26 +278,26 @@ impl From<reqwest::Error> for ToolExecutorError {
     }
 }
 
-impl From<AgentError> for TaskExecutorError {
+impl From<AgentError> for AgentRunError {
     fn from(error: AgentError) -> Self {
         match error {
-            AgentError::TaskExecutor(e) => e,
-            AgentError::ToolExecutor(e) => TaskExecutorError::ToolExecutionFailed {
+            AgentError::AgentRunExecutor(e) => e,
+            AgentError::ToolExecutor(e) => AgentRunError::ToolExecutionFailed {
                 tool_name: "unknown".to_string(),
                 error: e.to_string(),
             },
-            AgentError::Repository(e) => TaskExecutorError::RepositoryError(e),
-            AgentError::Json(e) => TaskExecutorError::JsonError(e),
-            AgentError::Database(e) => TaskExecutorError::DatabaseError(e.to_string()),
-            AgentError::Io(e) => TaskExecutorError::InternalError(e.to_string()),
-            AgentError::Utf8(e) => TaskExecutorError::InternalError(e.to_string()),
+            AgentError::Repository(e) => AgentRunError::RepositoryError(e),
+            AgentError::Json(e) => AgentRunError::JsonError(e),
+            AgentError::Database(e) => AgentRunError::DatabaseError(e.to_string()),
+            AgentError::Io(e) => AgentRunError::InternalError(e.to_string()),
+            AgentError::Utf8(e) => AgentRunError::InternalError(e.to_string()),
             AgentError::XmlParse(e)
             | AgentError::XmlSerialize(e)
             | AgentError::TemplateRender(e)
             | AgentError::Parse(e)
             | AgentError::Internal(e)
             | AgentError::InvalidSkillFormat(e)
-            | AgentError::SkillNotFound(e) => TaskExecutorError::InternalError(e),
+            | AgentError::SkillNotFound(e) => AgentRunError::InternalError(e),
         }
     }
 }
@@ -308,7 +308,7 @@ impl From<AgentError> for ToolExecutorError {
             AgentError::ToolExecutor(e) => e,
             AgentError::Json(e) => ToolExecutorError::JsonError(e),
             AgentError::Io(e) => ToolExecutorError::IoError(e),
-            AgentError::TaskExecutor(e) => ToolExecutorError::InternalError(e.to_string()),
+            AgentError::AgentRunExecutor(e) => ToolExecutorError::InternalError(e.to_string()),
             AgentError::Repository(e) => ToolExecutorError::InternalError(e.to_string()),
             AgentError::Database(e) => ToolExecutorError::InternalError(e.to_string()),
             AgentError::Utf8(e) => ToolExecutorError::InternalError(e.to_string()),

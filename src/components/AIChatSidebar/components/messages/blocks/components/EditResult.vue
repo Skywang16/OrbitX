@@ -100,8 +100,8 @@
 <style scoped>
   .edit-result {
     margin: 6px 0;
-    border: 1px solid var(--border-300);
-    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-200);
+    border-radius: 10px;
     overflow: hidden;
     background: var(--bg-200);
   }
@@ -189,7 +189,8 @@
 
   .diff-wrapper.expanded {
     max-height: 600px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .diff-content {
@@ -231,7 +232,9 @@
     margin: 0;
     font-family: var(--font-family-mono);
     color: var(--text-400);
-    white-space: pre;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-width: 0;
   }
 
   .diff-line.removed .line-code {

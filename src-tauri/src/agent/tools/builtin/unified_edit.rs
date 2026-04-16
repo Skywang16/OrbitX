@@ -13,7 +13,7 @@ use tokio::fs;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::context::FileRecordSource;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
@@ -609,7 +609,7 @@ Parameters:
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: EditFileArgs = serde_json::from_value(args)?;
@@ -726,7 +726,7 @@ pub(crate) async fn load_file_text(path: &Path) -> Result<String, ToolResult> {
     }
 }
 
-pub(crate) async fn track_edit(context: &TaskContext, path: &Path) -> ToolExecutorResult<()> {
+pub(crate) async fn track_edit(context: &AgentRunContext, path: &Path) -> ToolExecutorResult<()> {
     context
         .file_tracker()
         .track_file_operation(FileOperationRecord::new(
@@ -761,7 +761,7 @@ pub(crate) fn error_result(message: impl Into<String>) -> ToolResult {
 }
 
 pub(crate) async fn snapshot_before_edit(
-    context: &TaskContext,
+    context: &AgentRunContext,
     tool_name: &str,
     path: &Path,
 ) -> ToolExecutorResult<()> {

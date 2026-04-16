@@ -23,12 +23,12 @@ use tracing_subscriber::{self, EnvFilter};
 fn resolve_app_data_dir() -> SetupResult<std::path::PathBuf> {
     use std::env;
 
-    match env::var("OPENCODEX_DATA_DIR") {
+    match env::var("ORBITX_DATA_DIR") {
         Ok(dir) => {
             let trimmed = dir.trim();
             if trimmed.is_empty() {
                 return Err(SetupError::Environment(
-                    "OPENCODEX_DATA_DIR is set but empty".to_string(),
+                    "ORBITX_DATA_DIR is set but empty".to_string(),
                 ));
             }
             Ok(std::path::PathBuf::from(trimmed))
@@ -37,10 +37,10 @@ fn resolve_app_data_dir() -> SetupResult<std::path::PathBuf> {
             let data_dir = dirs::data_dir().ok_or_else(|| {
                 SetupError::Environment("system data_dir unavailable".to_string())
             })?;
-            Ok(data_dir.join("OpenCodex"))
+            Ok(data_dir.join("OrbitX"))
         }
         Err(err) => Err(SetupError::Environment(format!(
-            "Failed to read OPENCODEX_DATA_DIR: {err}"
+            "Failed to read ORBITX_DATA_DIR: {err}"
         ))),
     }
 }
@@ -49,7 +49,7 @@ pub fn init_logging() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         #[cfg(debug_assertions)]
         let default_level =
-            "debug,ignore=warn,globset=warn,hyper_util=info,hyper=info,reqwest=info";
+            "debug,ignore=warn,globset=warn,hyper_util=info,hyper=info,reqwest=info,html5ever=warn,markup5ever=warn,selectors=warn";
         #[cfg(not(debug_assertions))]
         let default_level = "info";
 
@@ -99,7 +99,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     })?;
     app.manage(shortcut_state);
 
-    // Initialize SettingsManager (settings.json / workspace .opencodex/settings.json)
+    // Initialize SettingsManager (settings.json / workspace .orbitx/settings.json)
     app.manage(Arc::new(SettingsManager::new()?));
     // Initialize MCP Registry (cache MCP clients by workspace)
     app.manage(Arc::new(crate::agent::mcp::McpRegistry::default()));
@@ -221,7 +221,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     };
     app.manage(oauth_manager);
 
-    // Initialize Checkpoint service (create early for TaskExecutor use)
+    // Initialize Checkpoint service (create early for agent run executor use)
     let checkpoint_service = {
         use crate::checkpoint::{
             BlobStore, CheckpointConfig, CheckpointService, CheckpointStorage,
@@ -249,7 +249,7 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
     );
     app.manage(std::sync::Arc::clone(&watcher));
 
-    // Initialize vector database state (and inject search_engine into TaskExecutor for agent's semantic_search tool)
+    // Initialize vector database state (and inject search_engine into the agent run executor for semantic_search)
     let vector_search_engine = {
         use crate::vector_db::commands::VectorDbState;
         use std::sync::Arc;
@@ -274,8 +274,8 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
         }
     };
 
-    // Initialize TaskExecutor state (with Checkpoint service)
-    let task_executor_state = {
+    // Initialize agent run executor state (with Checkpoint service)
+    let agent_run_executor_state = {
         let database_manager = app
             .state::<Arc<crate::storage::DatabaseManager>>()
             .inner()
@@ -297,23 +297,25 @@ pub fn initialize_app_states<R: tauri::Runtime>(app: &tauri::App<R>) -> SetupRes
             .clone();
         let lsp_manager = app.state::<Arc<crate::lsp::LspManager>>().inner().clone();
 
-        let executor = Arc::new(crate::agent::core::TaskExecutor::with_checkpoint_service(
-            crate::agent::core::executor::TaskExecutorServices {
-                database: Arc::clone(&database_manager),
-                cache: Arc::clone(&cache),
-                agent_persistence: Arc::clone(&agent_persistence),
-                settings_manager,
-                mcp_registry,
-                lsp_manager,
-                checkpoint_service: Some(Arc::clone(&checkpoint_service)),
-                workspace_changes: std::sync::Arc::clone(&workspace_changes),
-                vector_search_engine,
-            },
-        ));
+        let executor = Arc::new(
+            crate::agent::core::AgentRunExecutor::with_checkpoint_service(
+                crate::agent::core::executor::AgentRunExecutorServices {
+                    database: Arc::clone(&database_manager),
+                    cache: Arc::clone(&cache),
+                    agent_persistence: Arc::clone(&agent_persistence),
+                    settings_manager,
+                    mcp_registry,
+                    lsp_manager,
+                    checkpoint_service: Some(Arc::clone(&checkpoint_service)),
+                    workspace_changes: std::sync::Arc::clone(&workspace_changes),
+                    vector_search_engine,
+                },
+            ),
+        );
 
-        crate::agent::core::commands::TaskExecutorState::new(executor)
+        crate::agent::core::commands::AgentRunExecutorState::new(executor)
     };
-    app.manage(task_executor_state);
+    app.manage(agent_run_executor_state);
 
     let window_state = AppWindowState::new().map_err(SetupError::WindowState)?;
     app.manage(window_state);

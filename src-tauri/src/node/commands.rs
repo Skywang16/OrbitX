@@ -18,6 +18,12 @@ pub async fn node_get_version_manager() -> TauriApiResult<String> {
 }
 
 #[tauri::command]
+pub async fn node_get_current_version() -> TauriApiResult<Option<String>> {
+    let version = super::detector::get_current_version(None).unwrap_or(None);
+    Ok(api_success!(version))
+}
+
+#[tauri::command]
 pub async fn node_list_versions() -> TauriApiResult<Vec<NodeVersionInfo>> {
     let manager = detect_version_manager();
     match get_node_versions(&manager) {

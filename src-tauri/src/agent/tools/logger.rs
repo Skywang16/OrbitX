@@ -1,8 +1,8 @@
 /*!
- * Tool execution logger (Stage 2 update)
+ * Tool execution logger placeholder.
  *
- * Persists tool execution information to `tool_executions` table through new AgentPersistence interface,
- * while retaining original event output capability.
+ * The rollout-first refactor no longer persists tool execution rows in SQL.
+ * Tool lifecycle is captured through thread rollout events instead.
  */
 
 pub struct ToolExecutionLogger;

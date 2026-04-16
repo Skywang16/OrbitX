@@ -25,7 +25,7 @@ Before installation, review:
 
 Install the skill by:
 
-- Downloading skill files to `.opencodex/skills/[skill-name]/`
+- Downloading skill files to `.orbitx/skills/[skill-name]/`
 - Installing any required dependencies
 - Verifying file integrity
 - Setting appropriate permissions

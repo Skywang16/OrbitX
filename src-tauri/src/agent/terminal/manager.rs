@@ -21,6 +21,8 @@ pub struct AgentTerminalManager {
     terminals: RwLock<HashMap<TerminalId, AgentTerminalEntry>>,
     pane_index: RwLock<HashMap<u32, TerminalId>>,
     pending_completed: RwLock<HashMap<i64, Vec<TerminalId>>>,
+    /// One persistent pane per thread for blocking shell commands.
+    thread_panes: RwLock<HashMap<i64, PaneId>>,
     mux: Arc<TerminalMux>,
 }
 
@@ -28,25 +30,19 @@ static AGENT_TERMINAL_MANAGER: OnceLock<Arc<AgentTerminalManager>> = OnceLock::n
 
 impl AgentTerminalManager {
     pub fn init() -> Arc<Self> {
-        if let Some(manager) = AGENT_TERMINAL_MANAGER.get() {
-            return Arc::clone(manager);
-        }
-
-        let mux = get_mux();
-
-        let manager = Arc::new(Self {
-            terminals: RwLock::new(HashMap::new()),
-            pane_index: RwLock::new(HashMap::new()),
-            pending_completed: RwLock::new(HashMap::new()),
-            mux: Arc::clone(&mux),
+        let manager = AGENT_TERMINAL_MANAGER.get_or_init(|| {
+            let mux = get_mux();
+            let manager = Arc::new(Self {
+                terminals: RwLock::new(HashMap::new()),
+                pane_index: RwLock::new(HashMap::new()),
+                pending_completed: RwLock::new(HashMap::new()),
+                thread_panes: RwLock::new(HashMap::new()),
+                mux: Arc::clone(&mux),
+            });
+            manager.start_shell_event_loop();
+            manager
         });
-
-        if AGENT_TERMINAL_MANAGER.set(Arc::clone(&manager)).is_err() {
-            return manager;
-        }
-
-        manager.start_shell_event_loop();
-        manager
+        Arc::clone(manager)
     }
 
     pub fn global() -> Option<Arc<Self>> {
@@ -57,13 +53,21 @@ impl AgentTerminalManager {
         &self,
         command: String,
         mode: TerminalExecutionMode,
-        session_id: i64,
+        thread_id: i64,
         cwd: Option<String>,
         label: Option<String>,
     ) -> Result<AgentTerminal, String> {
         let terminal_id = Uuid::new_v4().to_string();
         let notify = Arc::new(Notify::new());
-        let pane_id = self.create_agent_pane(cwd.as_deref()).await?;
+
+        // Blocking commands reuse a single persistent pane per thread.
+        // Background commands always get their own fresh pane.
+        let pane_id = if mode == TerminalExecutionMode::Blocking {
+            self.get_or_create_thread_pane(thread_id, cwd.as_deref())
+                .await?
+        } else {
+            self.create_agent_pane(cwd.as_deref()).await?
+        };
 
         let now_ms_value = now_ms();
 
@@ -90,7 +94,7 @@ impl AgentTerminalManager {
                 pane_id: pane_id.as_u32(),
                 mode: mode.clone(),
                 status: TerminalStatus::Running,
-                session_id,
+                thread_id,
                 created_at_ms: now_ms_value,
                 completed_at_ms: None,
                 label: label.clone(),
@@ -134,7 +138,39 @@ impl AgentTerminalManager {
         Ok(terminal)
     }
 
-    pub fn list_terminals(&self, session_id: Option<i64>) -> Vec<AgentTerminal> {
+    /// Get the persistent pane for a thread, creating it if it doesn't exist yet.
+    async fn get_or_create_thread_pane(
+        &self,
+        thread_id: i64,
+        cwd: Option<&str>,
+    ) -> Result<PaneId, String> {
+        // Fast path: pane already exists.
+        {
+            let thread_panes = self
+                .thread_panes
+                .read()
+                .map_err(|_| "thread_panes poisoned".to_string())?;
+            if let Some(&pane_id) = thread_panes.get(&thread_id) {
+                // Verify the pane is still alive in the mux.
+                if self.mux.pane_exists(pane_id) {
+                    return Ok(pane_id);
+                }
+            }
+        }
+
+        // Slow path: create a new pane and register it.
+        let pane_id = self.create_agent_pane(cwd).await?;
+        {
+            let mut thread_panes = self
+                .thread_panes
+                .write()
+                .map_err(|_| "thread_panes poisoned".to_string())?;
+            thread_panes.insert(thread_id, pane_id);
+        }
+        Ok(pane_id)
+    }
+
+    pub fn list_terminals(&self, thread_id: Option<i64>) -> Vec<AgentTerminal> {
         let terminals = match self.terminals.read() {
             Ok(guard) => guard,
             Err(err) => {
@@ -146,8 +182,8 @@ impl AgentTerminalManager {
         let mut list: Vec<AgentTerminal> = terminals
             .values()
             .map(|entry| entry.terminal.clone())
-            .filter(|terminal| match session_id {
-                Some(id) => terminal.session_id == id,
+            .filter(|terminal| match thread_id {
+                Some(id) => terminal.thread_id == id,
                 None => true,
             })
             .collect();
@@ -243,101 +279,20 @@ impl AgentTerminalManager {
             .ok_or_else(|| "last command output is unavailable".to_string())
     }
 
-    pub fn abort_terminal(&self, terminal_id: &str) -> Result<(), String> {
-        let mut terminals = self
-            .terminals
-            .write()
-            .map_err(|_| "terminal map poisoned".to_string())?;
-        let entry = terminals
-            .get_mut(terminal_id)
-            .ok_or_else(|| "terminal not found".to_string())?;
-
-        if entry.terminal.status.is_terminal() {
-            return Ok(());
-        }
-
-        let pane_id = PaneId::new(entry.terminal.pane_id);
-        self.mux
-            .write_to_pane(pane_id, b"\x03")
-            .map_err(|err| format!("failed to send interrupt to terminal: {err}"))?;
-
-        entry.terminal.status = TerminalStatus::Aborted;
-        entry.terminal.completed_at_ms = Some(now_ms());
-
-        let mut pending = self
-            .pending_completed
-            .write()
-            .map_err(|_| "pending completion queue poisoned".to_string())?;
-        pending
-            .entry(entry.terminal.session_id)
-            .or_default()
-            .push(entry.terminal.id.clone());
-
-        entry.notify.notify_waiters();
-        Ok(())
-    }
-
-    pub fn remove_terminal(&self, terminal_id: &str) -> Result<(), String> {
-        let terminal = {
-            let terminals = self
-                .terminals
-                .read()
-                .map_err(|_| "terminal map poisoned".to_string())?;
-            terminals
-                .get(terminal_id)
-                .map(|entry| entry.terminal.clone())
-                .ok_or_else(|| "terminal not found".to_string())?
-        };
-
-        let pane_id = PaneId::new(terminal.pane_id);
-        self.mux
-            .remove_pane(pane_id)
-            .map_err(|err| format!("failed to remove terminal pane: {err}"))?;
-
-        {
-            let mut terminals = self
-                .terminals
-                .write()
-                .map_err(|_| "terminal map poisoned".to_string())?;
-            terminals.remove(terminal_id);
-        }
-        {
-            let mut pane_index = self
-                .pane_index
-                .write()
-                .map_err(|_| "pane index poisoned".to_string())?;
-            pane_index.remove(&terminal.pane_id);
-        }
-        {
-            let mut pending = self
-                .pending_completed
-                .write()
-                .map_err(|_| "pending completion queue poisoned".to_string())?;
-            if let Some(list) = pending.get_mut(&terminal.session_id) {
-                list.retain(|id| id != terminal_id);
-                if list.is_empty() {
-                    pending.remove(&terminal.session_id);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn drain_completed_notifications(&self, session_id: i64) -> Vec<AgentTerminal> {
+    pub fn drain_completed_notifications(&self, thread_id: i64) -> Vec<AgentTerminal> {
         let ids = {
             let mut pending = match self.pending_completed.write() {
                 Ok(guard) => guard,
                 Err(err) => {
                     tracing::error!(
                         "pending completion queue poisoned while draining session {}: {}",
-                        session_id,
+                        thread_id,
                         err
                     );
                     return Vec::new();
                 }
             };
-            pending.remove(&session_id).unwrap_or_default()
+            pending.remove(&thread_id).unwrap_or_default()
         };
 
         ids.into_iter()
@@ -345,9 +300,9 @@ impl AgentTerminalManager {
             .collect()
     }
 
-    pub fn build_prompt_overlay(&self, session_id: i64) -> Option<String> {
+    pub fn build_prompt_overlay(&self, thread_id: i64) -> Option<String> {
         let running_background: Vec<AgentTerminal> = self
-            .list_terminals(Some(session_id))
+            .list_terminals(Some(thread_id))
             .into_iter()
             .filter(|t| {
                 t.mode == TerminalExecutionMode::Background
@@ -355,7 +310,7 @@ impl AgentTerminalManager {
             })
             .collect();
 
-        let completed = self.drain_completed_notifications(session_id);
+        let completed = self.drain_completed_notifications(thread_id);
 
         if running_background.is_empty() && completed.is_empty() {
             return None;
@@ -466,7 +421,7 @@ impl AgentTerminalManager {
             match self.pending_completed.write() {
                 Ok(mut pending) => {
                     pending
-                        .entry(entry.terminal.session_id)
+                        .entry(entry.terminal.thread_id)
                         .or_default()
                         .push(terminal_id.clone());
                 }

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::prompt::PromptBuilder;
 use crate::agent::react::types::ReactIteration;
 
@@ -50,7 +50,7 @@ pub struct LoopDetector;
 impl LoopDetector {
     /// Detect loop pattern - identical tool calls with same parameters
     pub async fn detect_loop_pattern(
-        context: &TaskContext,
+        context: &AgentRunContext,
         current_iteration: u32,
     ) -> Option<String> {
         const LOOP_DETECTION_WINDOW: usize = 3;

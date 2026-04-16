@@ -95,10 +95,55 @@ impl I18nManager {
         Self::get_nested_value(messages, key)
     }
 
+    pub fn get_string_array(key: &str) -> Option<Vec<String>> {
+        let current_lang = LanguageManager::get_language().to_string();
+
+        if let Some(values) = Self::get_string_array_for_language(&current_lang, key) {
+            return Some(values);
+        }
+
+        if current_lang != "zh-CN" {
+            return Self::get_string_array_for_language("zh-CN", key);
+        }
+
+        None
+    }
+
+    fn get_string_array_for_language(lang_code: &str, key: &str) -> Option<Vec<String>> {
+        let i18n_messages = match I18N_MESSAGES.read() {
+            Ok(messages) => messages,
+            Err(err) => {
+                tracing::warn!("Failed to read i18n message store: {}", err);
+                return None;
+            }
+        };
+        let messages = i18n_messages.get(lang_code)?;
+
+        let value = Self::get_nested_json_value(messages, key)?;
+        let array = value.as_array()?;
+        let items = array
+            .iter()
+            .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+            .collect::<Vec<_>>();
+        (!items.is_empty()).then_some(items)
+    }
+
     /// Get value from nested structure
     ///
     /// Supports keys in "module.section.message" format
     fn get_nested_value(messages: &HashMap<String, Value>, key: &str) -> Option<String> {
+        let current = Self::get_nested_json_value(messages, key)?;
+
+        match current {
+            Value::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn get_nested_json_value<'a>(
+        messages: &'a HashMap<String, Value>,
+        key: &str,
+    ) -> Option<&'a Value> {
         let parts: Vec<&str> = key.split('.').collect();
         if parts.is_empty() {
             return None;
@@ -113,11 +158,7 @@ impl I18nManager {
         for &part in nested_parts {
             current = current.as_object()?.get(part)?;
         }
-
-        match current {
-            Value::String(s) => Some(s.clone()),
-            _ => None,
-        }
+        Some(current)
     }
 
     /// Parameter interpolation

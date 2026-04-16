@@ -35,8 +35,8 @@ pub enum OscSequence {
         title_type: WindowTitleType,
         title: String,
     },
-    /// OpenCodex custom protocol: Node version sync
-    OpenCodexNodeVersion {
+    /// OrbitX custom protocol: Node version sync
+    OrbitXNodeVersion {
         version: String,
     },
     Unknown {
@@ -143,7 +143,7 @@ impl OscParser {
                 title: rest.to_string(),
             }),
             "133" => parse_shell_integration(rest),
-            "1337" => parse_opencodex_custom(rest),
+            "1337" => parse_orbitx_custom(rest),
             _ => Some(OscSequence::Unknown {
                 command: cmd.to_string(),
                 params: rest.to_string(),
@@ -234,10 +234,10 @@ fn parse_shell_integration(data: &str) -> Option<OscSequence> {
     })
 }
 
-/// Parse OpenCodex custom protocol
-fn parse_opencodex_custom(data: &str) -> Option<OscSequence> {
-    if let Some(version) = data.strip_prefix("OpenCodexNodeVersion=") {
-        Some(OscSequence::OpenCodexNodeVersion {
+/// Parse OrbitX custom protocol
+fn parse_orbitx_custom(data: &str) -> Option<OscSequence> {
+    if let Some(version) = data.strip_prefix("OrbitXNodeVersion=") {
+        Some(OscSequence::OrbitXNodeVersion {
             version: version.to_string(),
         })
     } else {

@@ -42,4 +42,4 @@ pub const DATA_DIR_NAME: &str = "data";
 pub const BACKUPS_DIR_NAME: &str = "backups";
 
 // File names
-pub const DATABASE_FILE_NAME: &str = "opencodex.db";
+pub const DATABASE_FILE_NAME: &str = "orbitx.db";

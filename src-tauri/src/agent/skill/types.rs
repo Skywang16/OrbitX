@@ -124,13 +124,22 @@ pub struct SkillSummary {
 
 impl From<&SkillMetadata> for SkillSummary {
     fn from(metadata: &SkillMetadata) -> Self {
-        let path_str = metadata.skill_dir.to_string_lossy();
-        let source =
-            if path_str.contains(".opencodex/skills") || path_str.contains(".claude/skills") {
-                "workspace".to_string()
-            } else {
-                "global".to_string()
-            };
+        let skill_dir = &metadata.skill_dir;
+        let path_str = skill_dir.to_string_lossy();
+
+        let is_home_compatible_global = dirs::home_dir().is_some_and(|home| {
+            let home_claude = home.join(".claude").join("skills");
+            let home_codex = home.join(".codex").join("skills");
+            skill_dir.starts_with(&home_claude) || skill_dir.starts_with(&home_codex)
+        });
+
+        let source = if is_home_compatible_global {
+            "global".to_string()
+        } else if path_str.contains(".orbitx/skills") || path_str.contains(".claude/skills") {
+            "workspace".to_string()
+        } else {
+            "global".to_string()
+        };
 
         Self {
             name: Arc::clone(&metadata.name),

@@ -21,12 +21,12 @@ use uuid::Uuid;
 
 use crate::agent::agents::{visible_task_profiles, AgentConfigLoader};
 use crate::agent::compaction::{
-    CompactionConfig, CompactionService, CompactionTrigger, SessionMessageLoader,
+    CompactionConfig, CompactionService, CompactionTrigger, ThreadMessageLoader,
 };
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::core::iteration_outcome::IterationOutcome;
 use crate::agent::core::utils::should_render_tool_block;
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::error::{AgentRunError, AgentRunResult};
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::PromptBuilder;
 use crate::agent::state::iteration::{IterationContext, IterationSnapshot};
@@ -37,6 +37,7 @@ use crate::llm::anthropic_types::{
     ContentBlock, ContentBlockStart, ContentDelta, StreamEvent, SystemPrompt,
 };
 use crate::storage::DatabaseManager;
+use sqlx::Row;
 
 /// Content block accumulator (for streaming assembly)
 enum BlockAccumulator {
@@ -74,10 +75,10 @@ impl ReactOrchestrator {
     /// The compiler generates specialized code for each H type, fully inlined
     pub async fn run_react_loop<H>(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         model_id: &str,
         handler: &H,
-    ) -> TaskExecutorResult<()>
+    ) -> AgentRunResult<()>
     where
         H: crate::agent::core::executor::ReactHandler,
     {
@@ -94,7 +95,7 @@ impl ReactOrchestrator {
             // meant to influence the *next* step only, not permanently replace the base prompt.
             context.set_system_prompt_overlay(None).await?;
             if let Some(manager) = AgentTerminalManager::global() {
-                if let Some(overlay) = manager.build_prompt_overlay(context.session_id) {
+                if let Some(overlay) = manager.build_prompt_overlay(context.thread_id) {
                     if let Err(err) = context
                         .set_system_prompt_overlay(Some(SystemPrompt::Text(overlay)))
                         .await
@@ -118,7 +119,7 @@ impl ReactOrchestrator {
                 .get_tool_schemas_with_context(&ToolDescriptionContext {
                     cwd: context.cwd.to_string(),
                     agent_type: Some(context.agent_type.to_string()),
-                    allowed_task_profiles: load_allowed_task_profiles(
+                    allowed_subagent_types: load_allowed_task_profiles(
                         context.cwd.as_ref(),
                         context.agent_type.as_ref(),
                     )
@@ -138,22 +139,34 @@ impl ReactOrchestrator {
                 crate::agent::utils::get_model_context_window(&self.database, model_id)
                     .await
                     .ok_or_else(|| {
-                        TaskExecutorError::ConfigurationError(
+                        AgentRunError::ConfigurationError(
                             "Missing model option `maxContextTokens` for compaction".to_string(),
                         )
                     })?;
             self.maybe_compact_session(context, model_id, context_window)
                 .await?;
 
-            let loader = SessionMessageLoader::new(Arc::clone(&self.agent_persistence));
+            let loader = ThreadMessageLoader::new(Arc::clone(&self.agent_persistence));
             let mut final_messages = loader
-                .load_for_llm(context.session_id)
+                .load_for_llm(context.thread_id)
                 .await
-                .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+                .map_err(|e| AgentRunError::InternalError(e.to_string()))?;
 
             if let Some(file_msg) = builder.build_file_context_message(&recent_iterations).await {
                 final_messages.push(file_msg);
             }
+
+            // ===== Per-turn: inject fresh active subagents into developer context =====
+            // Codex pattern: subagents list belongs in the environment/developer context layer,
+            // NOT as a user message in the conversation stream. This ensures:
+            // 1. The model treats it as authoritative environment state
+            // 2. It won't be lost during compaction
+            // 3. It doesn't break user→assistant message alternation
+            let subagents_sections =
+                build_subagents_developer_context(&self.database, context.thread_id).await;
+            context
+                .set_per_turn_developer_context(subagents_sections)
+                .await?;
 
             // ===== DEBUG: dump full message context sent to LLM =====
             {
@@ -282,7 +295,7 @@ impl ReactOrchestrator {
                             .is_some_and(crate::llm::retry::is_retryable_error);
 
                         if !retryable || attempt >= max_attempts {
-                            return Err(TaskExecutorError::InternalError(format!(
+                            return Err(AgentRunError::InternalError(format!(
                                 "LLM stream call failed: {e}"
                             )));
                         }
@@ -302,8 +315,8 @@ impl ReactOrchestrator {
                         );
 
                         if let Err(err) = context
-                            .emit_event(crate::agent::types::TaskEvent::TaskRetrying {
-                                task_id: context.task_id.to_string(),
+                            .emit_event(crate::agent::types::AgentRunEvent::AgentRunRetrying {
+                                run_id: context.run_id.to_string(),
                                 attempt,
                                 max_attempts,
                                 reason: reason.to_string(),
@@ -338,7 +351,7 @@ impl ReactOrchestrator {
             // ===== Phase 3: Process Anthropic StreamEvent =====
             while let Some(item) = stream.next().await {
                 if context.is_aborted() {
-                    return Err(TaskExecutorError::TaskInterrupted);
+                    return Err(AgentRunError::TaskInterrupted);
                 }
                 context.check_aborted_async(true).await?;
 
@@ -556,12 +569,12 @@ impl ReactOrchestrator {
                                                 .into_iter::<Value>();
                                         de.next()
                                             .ok_or_else(|| {
-                                                TaskExecutorError::InternalError(
+                                                AgentRunError::InternalError(
                                                     "Empty tool input JSON from stream".to_string(),
                                                 )
                                             })?
                                             .map_err(|err| {
-                                                TaskExecutorError::InternalError(format!(
+                                                AgentRunError::InternalError(format!(
                                                     "Invalid tool input JSON from stream: {err}"
                                                 ))
                                             })?
@@ -654,17 +667,17 @@ impl ReactOrchestrator {
                     }
                     Ok(StreamEvent::Ping) => {}
                     Ok(StreamEvent::Error { error }) => {
-                        return Err(TaskExecutorError::InternalError(error.message));
+                        return Err(AgentRunError::InternalError(error.message));
                     }
                     Ok(StreamEvent::Unknown) => {}
                     Err(e) => {
-                        return Err(TaskExecutorError::InternalError(e.to_string()));
+                        return Err(AgentRunError::InternalError(e.to_string()));
                     }
                 }
             }
 
             if context.is_aborted() {
-                return Err(TaskExecutorError::TaskInterrupted);
+                return Err(AgentRunError::TaskInterrupted);
             }
 
             // ===== Phase 4: Write accumulated content to context =====
@@ -691,7 +704,7 @@ impl ReactOrchestrator {
                             continue;
                         }
 
-                        return Err(TaskExecutorError::InternalError(format!(
+                        return Err(AgentRunError::InternalError(format!(
                             "LLM output contained fabricated tool results (count={fabricated_tool_output_count})"
                         )));
                     }
@@ -917,7 +930,7 @@ impl ReactOrchestrator {
         Ok(())
     }
 
-    async fn update_session_stats(context: &TaskContext, snapshot: &IterationSnapshot) {
+    async fn update_session_stats(context: &AgentRunContext, snapshot: &IterationSnapshot) {
         let tool_calls = snapshot.tools_used.len() as u32;
         let files = snapshot.files_touched.len() as u32;
         context
@@ -932,10 +945,10 @@ impl ReactOrchestrator {
 
     async fn maybe_compact_session(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         model_id: &str,
         context_window: u32,
-    ) -> TaskExecutorResult<()> {
+    ) -> AgentRunResult<()> {
         let service = CompactionService::new(
             Arc::clone(&self.database),
             Arc::clone(&self.agent_persistence),
@@ -943,17 +956,17 @@ impl ReactOrchestrator {
         );
 
         let prepared = service
-            .prepare_compaction(context.session_id, context_window, CompactionTrigger::Auto)
+            .prepare_compaction(context.thread_id, context_window, CompactionTrigger::Auto)
             .await
-            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+            .map_err(|e| AgentRunError::InternalError(e.to_string()))?;
 
         let Some(job) = prepared.summary_job else {
             return Ok(());
         };
 
         context
-            .emit_event(crate::agent::types::TaskEvent::MessageCreated {
-                task_id: context.task_id.to_string(),
+            .emit_event(crate::agent::types::AgentRunEvent::MessageCreated {
+                run_id: context.run_id.to_string(),
                 message: job.summary_message.clone(),
             })
             .await?;
@@ -961,12 +974,12 @@ impl ReactOrchestrator {
         let completed = service
             .complete_summary_job(job, model_id)
             .await
-            .map_err(|e| TaskExecutorError::InternalError(e.to_string()))?;
+            .map_err(|e| AgentRunError::InternalError(e.to_string()))?;
 
         let context_usage = context.calculate_context_usage(model_id).await;
         context
-            .emit_event(crate::agent::types::TaskEvent::MessageFinished {
-                task_id: context.task_id.to_string(),
+            .emit_event(crate::agent::types::AgentRunEvent::MessageFinished {
+                run_id: context.run_id.to_string(),
                 message_id: completed.message_id,
                 status: completed.status,
                 finished_at: completed.finished_at,
@@ -1026,6 +1039,70 @@ fn contains_fabricated_tool_output(text: &str, tool_names: &HashSet<String>) -> 
         }
     }
     false
+}
+
+/// Build developer-context sections describing active subagents.
+///
+/// Codex injects this as part of `EnvironmentContext` (developer context layer),
+/// not as a conversation message. The model sees it as authoritative environment
+/// state that persists across compaction and doesn't pollute the message stream.
+async fn build_subagents_developer_context(
+    database: &DatabaseManager,
+    parent_thread_id: i64,
+) -> Vec<String> {
+    let rows = match sqlx::query(
+        "SELECT name, profile, task_title, status, latest_activity, final_summary, error_message
+         FROM subagents
+         WHERE parent_thread_id = ?
+         ORDER BY created_at ASC, id ASC",
+    )
+    .bind(parent_thread_id)
+    .fetch_all(database.pool())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return Vec::new(),
+    };
+
+    if rows.is_empty() {
+        return Vec::new();
+    }
+
+    let mut lines = Vec::new();
+    lines.push("<subagents>".to_string());
+    for row in &rows {
+        let name: String = row.try_get("name").unwrap_or_default();
+        let profile: String = row.try_get("profile").unwrap_or_default();
+        let task_title: String = row.try_get("task_title").unwrap_or_default();
+        let status: String = row.try_get("status").unwrap_or_default();
+        let latest_activity: Option<String> = row.try_get("latest_activity").ok().flatten();
+        let final_summary: Option<String> = row.try_get("final_summary").ok().flatten();
+        let error_message: Option<String> = row.try_get("error_message").ok().flatten();
+        lines.push(format!("  - {}: {}", name.trim(), task_title.trim()));
+        lines.push(format!("    profile={} status={}", profile, status));
+        if let Some(summary) = final_summary
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("    summary={summary}"));
+        } else if let Some(activity) = latest_activity
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("    activity={activity}"));
+        } else if let Some(error) = error_message
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("    error={error}"));
+        }
+    }
+    lines.push("</subagents>".to_string());
+
+    vec![lines.join("\n")]
 }
 
 // Compaction business rules live in `agent/compaction/*` (not in the orchestrator).

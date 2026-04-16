@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::fs;
 
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
@@ -68,7 +68,7 @@ impl RunnableTool for SyntaxDiagnosticsTool {
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: SyntaxDiagnosticsArgs = serde_json::from_value(args)?;

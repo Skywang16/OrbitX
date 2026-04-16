@@ -10,6 +10,7 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::json;
 use std::net::IpAddr;
@@ -19,7 +20,7 @@ use tokio::net::lookup_host;
 use url::Url;
 
 use crate::agent::common::llm_text::extract_text_from_llm_message;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::{ToolExecutorError, ToolExecutorResult};
 use crate::agent::tools::{
     BackoffStrategy, RateLimitConfig, RunnableTool, ToolCategory, ToolMetadata, ToolPriority,
@@ -37,7 +38,7 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent("OpenCodex-Agent/1.0")
+        .user_agent("OrbitX-Agent/1.0")
         .pool_max_idle_per_host(4)
         .build()
         .expect("failed to build shared HTTP client")
@@ -49,6 +50,7 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const MAX_CACHE_ENTRIES: usize = 64;
 const MAX_CONTENT_BYTES: usize = 100 * 1024; // 100 KB (same as Claude Code)
+const MAX_HTML_INPUT_BYTES: usize = 512 * 1024;
 
 struct CachedPage {
     markdown: String,
@@ -56,6 +58,23 @@ struct CachedPage {
 }
 
 static PAGE_CACHE: Lazy<DashMap<String, CachedPage>> = Lazy::new(DashMap::new);
+static SCRIPT_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<script\b[^>]*>.*?</script>").expect("valid script regex"));
+static STYLE_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<style\b[^>]*>.*?</style>").expect("valid style regex"));
+static NOSCRIPT_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?is)<noscript\b[^>]*>.*?</noscript>").expect("valid noscript regex")
+});
+static SVG_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<svg\b[^>]*>.*?</svg>").expect("valid svg regex"));
+static COMMENT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<!--.*?-->").expect("valid html comment regex"));
+static MAIN_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<main\b[^>]*>(.*?)</main>").expect("valid main regex"));
+static ARTICLE_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<article\b[^>]*>(.*?)</article>").expect("valid article regex"));
+static BODY_BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<body\b[^>]*>(.*?)</body>").expect("valid body regex"));
 
 fn cache_get(url: &str) -> Option<String> {
     if let Some(entry) = PAGE_CACHE.get(url) {
@@ -185,7 +204,7 @@ Examples:
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         use tracing::{debug, info};
@@ -209,13 +228,19 @@ Examples:
         }
 
         let started = Instant::now();
+        let mut fetch_ms: Option<u64> = None;
+        let mut body_read_ms: Option<u64> = None;
+        let mut convert_ms: Option<u64> = None;
+        let mut cache_hit = false;
 
         // --- Fetch (with cache) ---
         let markdown = if let Some(cached) = cache_get(&url_str) {
             debug!("Cache hit for {}", url_str);
+            cache_hit = true;
             cached
         } else {
             debug!("Cache miss, fetching {}", url_str);
+            let fetch_started = Instant::now();
             let resp = match fetch_follow_redirects(&HTTP_CLIENT, parsed_url.clone(), 10).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -228,6 +253,7 @@ Examples:
                     });
                 }
             };
+            fetch_ms = Some(fetch_started.elapsed().as_millis() as u64);
 
             let status = resp.status().as_u16();
             if !(200..300).contains(&status) {
@@ -256,17 +282,23 @@ Examples:
                 Err(err) => return Ok(validation_error(err)),
             };
 
+            let body_started = Instant::now();
             let raw = match tokio::time::timeout(Duration::from_secs(30), resp.text()).await {
                 Ok(Ok(t)) => t,
                 Ok(Err(e)) => return Ok(validation_error(format!("Body read error: {e}"))),
                 Err(_) => return Ok(validation_error("Body read timeout")),
             };
+            body_read_ms = Some(body_started.elapsed().as_millis() as u64);
 
             let md = if content_type.contains("text/html") {
-                html_to_markdown(&raw).map_err(|err| ToolExecutorError::ExecutionFailed {
-                    tool_name: "web_fetch".to_string(),
-                    error: err,
-                })?
+                let convert_started = Instant::now();
+                let converted =
+                    html_to_markdown(&raw).map_err(|err| ToolExecutorError::ExecutionFailed {
+                        tool_name: "web_fetch".to_string(),
+                        error: err,
+                    })?;
+                convert_ms = Some(convert_started.elapsed().as_millis() as u64);
+                converted
             } else {
                 raw
             };
@@ -283,24 +315,56 @@ Examples:
                 status: ToolResultStatus::Success,
                 cancel_reason: None,
                 execution_time_ms: Some(started.elapsed().as_millis() as u64),
-                ext_info: Some(json!({ "source": url_str, "summarized": false })),
+                ext_info: Some(json!({
+                    "source": url_str,
+                    "summarized": false,
+                    "cacheHit": cache_hit,
+                    "timings": {
+                        "fetchMs": fetch_ms,
+                        "bodyReadMs": body_read_ms,
+                        "convertMs": convert_ms
+                    }
+                })),
             });
         }
 
         // --- LLM summarization (Claude Code style) ---
+        let summarize_started = Instant::now();
         let summary = summarize_with_llm(context, &markdown, &user_query)
             .await
             .map_err(|e| ToolExecutorError::ExecutionFailed {
                 tool_name: "web_fetch".to_string(),
                 error: format!("summarization failed: {e}"),
             })?;
+        let summarize_ms = Some(summarize_started.elapsed().as_millis() as u64);
+
+        info!(
+            "WebFetch timings: url={} cache_hit={} fetch_ms={:?} body_ms={:?} convert_ms={:?} summarize_ms={:?} total_ms={}",
+            url_str,
+            cache_hit,
+            fetch_ms,
+            body_read_ms,
+            convert_ms,
+            summarize_ms,
+            started.elapsed().as_millis()
+        );
 
         Ok(ToolResult {
             content: vec![ToolResultContent::Success(summary)],
             status: ToolResultStatus::Success,
             cancel_reason: None,
             execution_time_ms: Some(started.elapsed().as_millis() as u64),
-            ext_info: Some(json!({ "source": url_str, "summarized": true })),
+            ext_info: Some(json!({
+                "source": url_str,
+                "summarized": true,
+                "cacheHit": cache_hit,
+                "timings": {
+                    "fetchMs": fetch_ms,
+                    "bodyReadMs": body_read_ms,
+                    "convertMs": convert_ms,
+                    "summarizeMs": summarize_ms
+                }
+            })),
         })
     }
 }
@@ -309,29 +373,70 @@ Examples:
 // HTML → Markdown conversion (htmd, Turndown-style)
 // ---------------------------------------------------------------------------
 fn html_to_markdown(html: &str) -> Result<String, String> {
-    htmd::convert(html).map_err(|err| format!("HTML to Markdown conversion failed: {err}"))
+    let preprocessed = preprocess_html_for_markdown(html);
+    htmd::convert(&preprocessed).map_err(|err| format!("HTML to Markdown conversion failed: {err}"))
+}
+
+fn preprocess_html_for_markdown(html: &str) -> String {
+    let mut candidate = extract_html_focus_region(html);
+
+    if candidate.len() > MAX_HTML_INPUT_BYTES {
+        candidate =
+            crate::agent::utils::truncate_at_char_boundary(&candidate, MAX_HTML_INPUT_BYTES)
+                .to_string();
+    }
+
+    let candidate = SCRIPT_BLOCK_RE.replace_all(&candidate, "");
+    let candidate = STYLE_BLOCK_RE.replace_all(&candidate, "");
+    let candidate = NOSCRIPT_BLOCK_RE.replace_all(&candidate, "");
+    let candidate = SVG_BLOCK_RE.replace_all(&candidate, "");
+    let candidate = COMMENT_RE.replace_all(&candidate, "");
+
+    candidate.into_owned()
+}
+
+fn extract_html_focus_region(html: &str) -> String {
+    if let Some(captures) = MAIN_BLOCK_RE.captures(html) {
+        if let Some(main) = captures.get(1) {
+            return main.as_str().to_string();
+        }
+    }
+
+    if let Some(captures) = ARTICLE_BLOCK_RE.captures(html) {
+        if let Some(article) = captures.get(1) {
+            return article.as_str().to_string();
+        }
+    }
+
+    if let Some(captures) = BODY_BLOCK_RE.captures(html) {
+        if let Some(body) = captures.get(1) {
+            return body.as_str().to_string();
+        }
+    }
+
+    html.to_string()
 }
 
 // ---------------------------------------------------------------------------
 // LLM summarization — mirrors Claude Code's WebFetch prompt design
 // ---------------------------------------------------------------------------
 async fn summarize_with_llm(
-    context: &TaskContext,
+    context: &AgentRunContext,
     content: &str,
     user_query: &str,
 ) -> Result<String, String> {
     let db = context.repositories();
 
-    // Resolve model_id from the current session
+    // Resolve model_id from the current thread
     let model_id = {
-        let session = context
+        let thread = context
             .agent_persistence()
-            .sessions()
-            .get(context.session_id)
+            .threads()
+            .get(context.thread_id)
             .await
-            .map_err(|e| format!("session lookup: {e}"))?
-            .ok_or("session not found")?;
-        session.model_id.ok_or("no model_id on session")?
+            .map_err(|e| format!("thread lookup: {e}"))?
+            .ok_or("thread not found")?;
+        thread.model_id.ok_or("no model_id on thread")?
     };
 
     // Trim content to avoid blowing up the context window.

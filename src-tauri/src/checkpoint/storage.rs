@@ -34,11 +34,11 @@ impl CheckpointStorage {
     pub async fn insert(&self, checkpoint: &NewCheckpoint) -> CheckpointResult<i64> {
         let now = now_timestamp();
         let result = sqlx::query(
-            "INSERT INTO checkpoints (workspace_path, session_id, message_id, parent_id, created_at)
+            "INSERT INTO checkpoints (workspace_path, thread_id, message_id, parent_id, created_at)
              VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&checkpoint.workspace_path)
-        .bind(checkpoint.session_id)
+        .bind(checkpoint.thread_id)
         .bind(checkpoint.message_id)
         .bind(checkpoint.parent_id)
         .bind(now)
@@ -50,7 +50,7 @@ impl CheckpointStorage {
 
     pub async fn find_by_id(&self, id: i64) -> CheckpointResult<Option<Checkpoint>> {
         let row = sqlx::query(
-            "SELECT id, workspace_path, session_id, message_id, parent_id, created_at
+            "SELECT id, workspace_path, thread_id, message_id, parent_id, created_at
              FROM checkpoints WHERE id = ?",
         )
         .bind(id)
@@ -65,7 +65,7 @@ impl CheckpointStorage {
         message_id: i64,
     ) -> CheckpointResult<Option<Checkpoint>> {
         let row = sqlx::query(
-            "SELECT id, workspace_path, session_id, message_id, parent_id, created_at
+            "SELECT id, workspace_path, thread_id, message_id, parent_id, created_at
              FROM checkpoints WHERE message_id = ?",
         )
         .bind(message_id)
@@ -75,19 +75,19 @@ impl CheckpointStorage {
         row.map(|r| Checkpoint::from_row(&r)).transpose()
     }
 
-    pub async fn find_latest_by_session(
+    pub async fn find_latest_by_thread(
         &self,
-        session_id: i64,
+        thread_id: i64,
         workspace_path: &str,
     ) -> CheckpointResult<Option<Checkpoint>> {
         let row = sqlx::query(
-            "SELECT id, workspace_path, session_id, message_id, parent_id, created_at
+            "SELECT id, workspace_path, thread_id, message_id, parent_id, created_at
              FROM checkpoints
-             WHERE session_id = ? AND workspace_path = ?
+             WHERE thread_id = ? AND workspace_path = ?
              ORDER BY created_at DESC
              LIMIT 1",
         )
-        .bind(session_id)
+        .bind(thread_id)
         .bind(workspace_path)
         .fetch_optional(&self.pool)
         .await?;
@@ -95,23 +95,23 @@ impl CheckpointStorage {
         row.map(|r| Checkpoint::from_row(&r)).transpose()
     }
 
-    pub async fn list_summaries_by_session(
+    pub async fn list_summaries_by_thread(
         &self,
-        session_id: i64,
+        thread_id: i64,
         workspace_path: &str,
     ) -> CheckpointResult<Vec<CheckpointSummary>> {
         let rows = sqlx::query(
             "SELECT
-                c.id, c.workspace_path, c.session_id, c.message_id, c.parent_id, c.created_at,
+                c.id, c.workspace_path, c.thread_id, c.message_id, c.parent_id, c.created_at,
                 COUNT(f.id) as file_count,
                 COALESCE(SUM(f.file_size), 0) as total_size
              FROM checkpoints c
              LEFT JOIN checkpoint_file_snapshots f ON c.id = f.checkpoint_id
-             WHERE c.session_id = ? AND c.workspace_path = ?
+             WHERE c.thread_id = ? AND c.workspace_path = ?
              GROUP BY c.id
              ORDER BY c.created_at DESC",
         )
-        .bind(session_id)
+        .bind(thread_id)
         .bind(workspace_path)
         .fetch_all(&self.pool)
         .await?;
@@ -220,7 +220,7 @@ mod tests {
             "CREATE TABLE checkpoints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workspace_path TEXT NOT NULL,
-                session_id INTEGER NOT NULL,
+                thread_id INTEGER NOT NULL,
                 message_id INTEGER NOT NULL,
                 parent_id INTEGER,
                 created_at INTEGER NOT NULL
@@ -256,7 +256,7 @@ mod tests {
 
         let checkpoint = NewCheckpoint {
             workspace_path: "/tmp/project".to_string(),
-            session_id: 1,
+            thread_id: 1,
             message_id: 100,
             parent_id: None,
         };
@@ -265,7 +265,7 @@ mod tests {
         let found = storage.find_by_id(id).await.unwrap().unwrap();
 
         assert_eq!(found.id, id);
-        assert_eq!(found.session_id, 1);
+        assert_eq!(found.thread_id, 1);
         assert_eq!(found.message_id, 100);
         assert_eq!(found.workspace_path, "/tmp/project");
     }
@@ -277,7 +277,7 @@ mod tests {
 
         let checkpoint = NewCheckpoint {
             workspace_path: "/tmp/project".to_string(),
-            session_id: 1,
+            thread_id: 1,
             message_id: 200,
             parent_id: None,
         };

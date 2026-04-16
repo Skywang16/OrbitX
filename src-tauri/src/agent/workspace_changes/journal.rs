@@ -217,6 +217,10 @@ async fn record_observed_change(state: &mut WorkspaceState, change: ObservedChan
         return;
     }
 
+    if should_ignore_observed_path(&change.abs_path) {
+        return;
+    }
+
     let Some(relative) = relative_path(&state.workspace_root, &change.abs_path) else {
         return;
     };
@@ -290,6 +294,26 @@ fn normalize_abs_path_str(path: &str) -> String {
     path.replace('\\', "/")
 }
 
+fn should_ignore_observed_path(abs_path: &str) -> bool {
+    let path = Path::new(abs_path);
+
+    if path.components().any(|component| match component {
+        std::path::Component::Normal(value) => value == "__pycache__",
+        _ => false,
+    }) {
+        return true;
+    }
+
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "pyc" | "pyo"))
+        .unwrap_or(false)
+        || path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.contains(".pyc."))
+}
+
 fn infer_workspace_root_from_path(abs_path: &Path) -> PathBuf {
     if abs_path.is_dir() {
         return abs_path.to_path_buf();
@@ -320,7 +344,9 @@ async fn compute_patch_from_snapshot(
     state: &mut WorkspaceState,
     abs_path: &str,
 ) -> Option<(Option<String>, bool)> {
-    let old = state.snapshots.get(abs_path).cloned()?;
+    let Some(old) = state.snapshots.get(abs_path).cloned() else {
+        return Some((None, false));
+    };
     let path = PathBuf::from(abs_path);
     let meta = match tokio::fs::metadata(&path).await {
         Ok(metadata) => metadata,

@@ -4,13 +4,13 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
 
-use crate::agent::config::TaskExecutionConfig;
+use crate::agent::config::AgentRunConfig;
 use crate::agent::context::FileContextTracker;
 use crate::agent::persistence::AgentPersistence;
 use crate::storage::DatabaseManager;
 
 #[derive(Debug, Clone, Default)]
-pub struct SessionStats {
+pub struct ThreadStats {
     pub total_iterations: u32,
     pub total_tool_calls: u32,
     pub total_tokens_used: u64,
@@ -19,28 +19,28 @@ pub struct SessionStats {
     pub files_modified: u32,
 }
 
-pub struct SessionContext {
-    pub task_id: String,
-    pub session_id: i64,
+pub struct ThreadContext {
+    pub run_id: String,
+    pub thread_id: i64,
     pub workspace: PathBuf,
     pub initial_request: String,
     pub created_at: DateTime<Utc>,
-    pub config: TaskExecutionConfig,
+    pub config: AgentRunConfig,
 
     file_tracker: Arc<FileContextTracker>,
     repositories: Arc<DatabaseManager>,
     agent_persistence: Arc<AgentPersistence>,
-    stats: Arc<RwLock<SessionStats>>,
+    stats: Arc<RwLock<ThreadStats>>,
 }
 
-impl SessionContext {
+impl ThreadContext {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        task_id: String,
-        session_id: i64,
+        run_id: String,
+        thread_id: i64,
         workspace: PathBuf,
         initial_request: String,
-        config: TaskExecutionConfig,
+        config: AgentRunConfig,
         repositories: Arc<DatabaseManager>,
         agent_persistence: Arc<AgentPersistence>,
     ) -> Self {
@@ -53,8 +53,8 @@ impl SessionContext {
         );
 
         Self {
-            task_id,
-            session_id,
+            run_id,
+            thread_id,
             workspace,
             initial_request,
             created_at: Utc::now(),
@@ -62,7 +62,7 @@ impl SessionContext {
             file_tracker: tracker,
             repositories,
             agent_persistence,
-            stats: Arc::new(RwLock::new(SessionStats::default())),
+            stats: Arc::new(RwLock::new(ThreadStats::default())),
         }
     }
 
@@ -78,19 +78,19 @@ impl SessionContext {
         Arc::clone(&self.file_tracker)
     }
 
-    pub fn config(&self) -> &TaskExecutionConfig {
+    pub fn config(&self) -> &AgentRunConfig {
         &self.config
     }
 
     pub async fn update_stats<F>(&self, updater: F)
     where
-        F: FnOnce(&mut SessionStats),
+        F: FnOnce(&mut ThreadStats),
     {
         let mut stats = self.stats.write().await;
         updater(&mut stats);
     }
 
-    pub async fn stats(&self) -> SessionStats {
+    pub async fn stats(&self) -> ThreadStats {
         self.stats.read().await.clone()
     }
 }

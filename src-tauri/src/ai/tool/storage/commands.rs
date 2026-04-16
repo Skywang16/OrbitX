@@ -14,7 +14,7 @@ use crate::agent::terminal::{
     AgentTerminal, AgentTerminalManager, TerminalExecutionMode, TerminalStatus,
 };
 use crate::storage::types::{
-    TaskTerminalMode, TaskTerminalStatus, TerminalRuntimeKind, TerminalRuntimeState,
+    AgentTerminalMode, AgentTerminalStatus, TerminalRuntimeKind, TerminalRuntimeState,
 };
 
 /// Extract the process name from a command line string.
@@ -115,20 +115,20 @@ fn compute_display_title(
     }
 }
 
-fn map_task_terminal_mode(mode: &TerminalExecutionMode) -> TaskTerminalMode {
+fn map_agent_terminal_mode(mode: &TerminalExecutionMode) -> AgentTerminalMode {
     match mode {
-        TerminalExecutionMode::Blocking => TaskTerminalMode::Blocking,
-        TerminalExecutionMode::Background => TaskTerminalMode::Background,
+        TerminalExecutionMode::Blocking => AgentTerminalMode::Blocking,
+        TerminalExecutionMode::Background => AgentTerminalMode::Background,
     }
 }
 
-fn map_task_terminal_status(status: &TerminalStatus) -> TaskTerminalStatus {
+fn map_agent_terminal_status(status: &TerminalStatus) -> AgentTerminalStatus {
     match status {
-        TerminalStatus::Initializing => TaskTerminalStatus::Initializing,
-        TerminalStatus::Running => TaskTerminalStatus::Running,
-        TerminalStatus::Completed { .. } => TaskTerminalStatus::Completed,
-        TerminalStatus::Failed { .. } => TaskTerminalStatus::Failed,
-        TerminalStatus::Aborted => TaskTerminalStatus::Aborted,
+        TerminalStatus::Initializing => AgentTerminalStatus::Initializing,
+        TerminalStatus::Running => AgentTerminalStatus::Running,
+        TerminalStatus::Completed { .. } => AgentTerminalStatus::Completed,
+        TerminalStatus::Failed { .. } => AgentTerminalStatus::Failed,
+        TerminalStatus::Aborted => AgentTerminalStatus::Aborted,
     }
 }
 
@@ -137,14 +137,14 @@ fn build_terminal_runtime_state(
     cwd: String,
     shell: String,
     computed_display_title: String,
-    task_terminal: Option<AgentTerminal>,
+    agent_terminal: Option<AgentTerminal>,
 ) -> TerminalRuntimeState {
-    let is_task_terminal = task_terminal.is_some();
-    let source_label = task_terminal
+    let is_agent_terminal = agent_terminal.is_some();
+    let source_label = agent_terminal
         .as_ref()
         .and_then(|terminal| terminal.label.clone())
         .filter(|label| !label.trim().is_empty());
-    let display_title = if is_task_terminal {
+    let display_title = if is_agent_terminal {
         match source_label.clone() {
             Some(label) => label,
             None => computed_display_title,
@@ -158,20 +158,20 @@ fn build_terminal_runtime_state(
         cwd,
         shell,
         display_title,
-        kind: if is_task_terminal {
-            TerminalRuntimeKind::Task
+        kind: if is_agent_terminal {
+            TerminalRuntimeKind::Agent
         } else {
             TerminalRuntimeKind::Workspace
         },
-        session_id: task_terminal.as_ref().map(|terminal| terminal.session_id),
-        task_terminal_id: task_terminal.as_ref().map(|terminal| terminal.id.clone()),
+        thread_id: agent_terminal.as_ref().map(|terminal| terminal.thread_id),
+        agent_terminal_id: agent_terminal.as_ref().map(|terminal| terminal.id.clone()),
         source_label,
-        task_mode: task_terminal
+        agent_mode: agent_terminal
             .as_ref()
-            .map(|terminal| map_task_terminal_mode(&terminal.mode)),
-        task_status: task_terminal
+            .map(|terminal| map_agent_terminal_mode(&terminal.mode)),
+        agent_status: agent_terminal
             .as_ref()
-            .map(|terminal| map_task_terminal_status(&terminal.status)),
+            .map(|terminal| map_agent_terminal_status(&terminal.status)),
     }
 }
 
@@ -204,7 +204,7 @@ pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<TerminalRuntime
 
             let display_title =
                 compute_display_title(&cwd, &shell, window_title, current_process.as_deref());
-            let task_terminal = terminal_manager
+            let agent_terminal = terminal_manager
                 .as_ref()
                 .and_then(|manager| manager.get_terminal_by_pane_id(pane_id.as_u32()));
 
@@ -213,7 +213,7 @@ pub async fn storage_get_terminals_state() -> TauriApiResult<Vec<TerminalRuntime
                 cwd,
                 shell,
                 display_title,
-                task_terminal,
+                agent_terminal,
             ))
         })
         .collect();
@@ -253,7 +253,7 @@ pub async fn storage_get_terminal_state(
 
     let display_title =
         compute_display_title(&cwd, &shell, window_title, current_process.as_deref());
-    let task_terminal = terminal_manager
+    let agent_terminal = terminal_manager
         .as_ref()
         .and_then(|manager| manager.get_terminal_by_pane_id(pane_id.as_u32()));
 
@@ -262,7 +262,7 @@ pub async fn storage_get_terminal_state(
         cwd,
         shell,
         display_title,
-        task_terminal,
+        agent_terminal,
     ))))
 }
 

@@ -26,7 +26,7 @@ storage/
 
 **统一内存缓存管理**
 
-- ✅ 命名空间隔离（Rules、Session、UI、Agent、Completion、Terminal）
+- ✅ 命名空间隔离（Rules、Thread、UI、Agent、Completion、Terminal）
 - ✅ TTL 支持
 - ✅ 自动序列化/反序列化
 - ✅ 访问统计
@@ -48,7 +48,7 @@ cache.set_global_rules(Some(rules)).await?;
 let rules = cache.get_global_rules().await;
 
 // 命名空间管理
-cache.clear_namespace(CacheNamespace::Session).await;
+cache.clear_namespace(CacheNamespace::Thread).await;
 let keys = cache.keys_in_namespace(CacheNamespace::Rules).await;
 ```
 

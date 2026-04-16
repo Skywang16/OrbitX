@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 
@@ -18,12 +18,12 @@ use super::types::{SkillContent, SkillMetadata};
 /// # Examples
 ///
 /// ```no_run
-/// use opencodex::agent::skill::{SkillManager, SkillMatchingMode};
+/// use orbitx::agent::skill::{SkillManager, SkillMatchingMode};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let manager = SkillManager::new();
-/// let global_skills = Path::new("~/.config/opencodex/skills");
+/// let global_skills = Path::new("~/.config/orbitx/skills");
 /// let workspace = Path::new("/path/to/workspace");
 ///
 /// // Discover skills (global + workspace)
@@ -52,15 +52,31 @@ impl SkillManager {
     /// Discovery phase: scan global and workspace and load metadata for all skills
     ///
     /// Directory scan priority (latter overrides former):
-    /// 1. Global: ~/.config/opencodex/skills/
-    /// 2. Workspace: workspace/.opencodex/skills/
-    /// 3. Claude compatible: workspace/.claude/skills/
+    /// 1. Global: OrbitX app data `skills/`
+    /// 2. Home compatibility: `~/.claude/skills/`
+    /// 3. Home compatibility: `~/.codex/skills/.system/`
+    /// 4. Workspace: `workspace/.orbitx/skills/`
+    /// 5. Workspace compatibility: `workspace/.claude/skills/`
     ///
     /// Returns metadata for all discovered skills
     pub async fn discover_skills(
         &self,
         global_skills_dir: Option<&Path>,
         workspace: Option<&Path>,
+    ) -> AgentResult<Vec<SkillMetadata>> {
+        self.discover_skills_from_dirs(
+            global_skills_dir,
+            workspace,
+            &Self::compatible_global_skill_dirs(),
+        )
+        .await
+    }
+
+    async fn discover_skills_from_dirs(
+        &self,
+        global_skills_dir: Option<&Path>,
+        workspace: Option<&Path>,
+        compatible_global_dirs: &[PathBuf],
     ) -> AgentResult<Vec<SkillMetadata>> {
         // Clear old registry
         self.registry.clear();
@@ -75,9 +91,17 @@ impl SkillManager {
             }
         }
 
-        // 2. Scan workspace directory (higher priority, can override global)
+        // 2. Scan home-level compatible directories
+        for compatible_dir in compatible_global_dirs {
+            if compatible_dir.exists() {
+                self.scan_skills_directory(compatible_dir, &mut all_metadata)
+                    .await?;
+            }
+        }
+
+        // 3. Scan workspace directory (higher priority, can override global)
         if let Some(workspace_root) = workspace {
-            for skill_dir_name in &[".opencodex/skills", ".claude/skills"] {
+            for skill_dir_name in &[".orbitx/skills", ".claude/skills"] {
                 let skills_dir = workspace_root.join(skill_dir_name);
                 if skills_dir.exists() {
                     self.scan_skills_directory(&skills_dir, &mut all_metadata)
@@ -86,6 +110,18 @@ impl SkillManager {
             }
         }
         Ok(all_metadata)
+    }
+
+    fn compatible_global_skill_dirs() -> Vec<PathBuf> {
+        let Some(home) = dirs::home_dir() else {
+            return Vec::new();
+        };
+
+        vec![
+            home.join(".claude").join("skills"),
+            home.join(".codex").join("skills"),
+            home.join(".codex").join("skills").join(".system"),
+        ]
     }
 
     /// Scan all skills in the specified directory
@@ -201,15 +237,15 @@ mod tests {
         let workspace = temp_dir.path();
 
         // Create workspace skills
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
 
-        let skill1_dir = opencodex_skills.join("skill-1");
+        let skill1_dir = orbitx_skills.join("skill-1");
         create_test_skill(&skill1_dir, "skill-1").unwrap();
 
         let manager = SkillManager::new();
         let skills = manager
-            .discover_skills(None, Some(workspace))
+            .discover_skills_from_dirs(None, Some(workspace), &[])
             .await
             .unwrap();
 
@@ -229,14 +265,14 @@ mod tests {
 
         // Create workspace skills
         let workspace = temp_dir.path().join("workspace");
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
-        let workspace_skill1 = opencodex_skills.join("skill-workspace");
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
+        let workspace_skill1 = orbitx_skills.join("skill-workspace");
         create_test_skill(&workspace_skill1, "skill-workspace").unwrap();
 
         let manager = SkillManager::new();
         let skills = manager
-            .discover_skills(Some(&global_dir), Some(&workspace))
+            .discover_skills_from_dirs(Some(&global_dir), Some(&workspace), &[])
             .await
             .unwrap();
 
@@ -254,9 +290,9 @@ mod tests {
         create_test_skill(&global_skill, "shared-skill").unwrap();
 
         let workspace = temp_dir.path().join("workspace");
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
-        let workspace_skill = opencodex_skills.join("shared-skill");
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
+        let workspace_skill = orbitx_skills.join("shared-skill");
         create_test_skill(&workspace_skill, "shared-skill").unwrap();
 
         let manager = SkillManager::new();
@@ -278,10 +314,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let workspace = temp_dir.path();
 
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
 
-        let skill_dir = opencodex_skills.join("pdf-processing");
+        let skill_dir = orbitx_skills.join("pdf-processing");
         create_test_skill(&skill_dir, "pdf-processing").unwrap();
 
         let manager = SkillManager::new();
@@ -301,12 +337,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let workspace = temp_dir.path();
 
-        let opencodex_skills = workspace.join(".opencodex/skills");
-        std_fs::create_dir_all(&opencodex_skills).unwrap();
+        let orbitx_skills = workspace.join(".orbitx/skills");
+        std_fs::create_dir_all(&orbitx_skills).unwrap();
 
         for i in 1..=3 {
             let name = format!("skill-{i}");
-            let skill_dir = opencodex_skills.join(&name);
+            let skill_dir = orbitx_skills.join(&name);
             create_test_skill(&skill_dir, &name).unwrap();
         }
 

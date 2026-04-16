@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::agent::context::FileOperationRecord;
 use crate::agent::context::FileRecordSource;
-use crate::agent::core::context::TaskContext;
+use crate::agent::core::context::AgentRunContext;
 use crate::agent::error::ToolExecutorResult;
 use crate::agent::tools::{
     RunnableTool, ToolCategory, ToolMetadata, ToolPriority, ToolResult, ToolResultContent,
@@ -98,7 +98,7 @@ Examples:
 
     async fn run(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         args: serde_json::Value,
     ) -> ToolExecutorResult<ToolResult> {
         let args: ListFilesArgs = serde_json::from_value(args)?;

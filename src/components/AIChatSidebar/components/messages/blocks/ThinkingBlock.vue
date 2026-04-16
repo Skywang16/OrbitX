@@ -189,7 +189,7 @@
   .result-wrapper {
     max-height: 300px;
     overflow-y: auto;
-    overflow-x: auto;
+    overflow-x: hidden;
     padding: 0;
     scrollbar-width: none;
   }
@@ -213,7 +213,7 @@
 
   .expand-enter-active,
   .expand-leave-active {
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
   }
 

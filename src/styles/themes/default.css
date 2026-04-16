@@ -30,7 +30,7 @@
   --text-500: #a3a3a3;
 
   /* Primary colors */
-  --color-primary: #2959F7;
+  --color-primary: #2959f7;
   --color-primary-hover: #1f43dc;
   --color-primary-alpha: rgba(41, 89, 247, 0.1);
   --color-success: #22c55e;
@@ -41,7 +41,7 @@
   /* Interactive colors */
   --color-hover: rgba(0, 0, 0, 0.05);
   --color-active: rgba(0, 0, 0, 0.1);
-  --color-focus: #2959F7;
+  --color-focus: #2959f7;
   --color-selection: rgba(41, 89, 247, 0.2);
 
   /* Shadows */

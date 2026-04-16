@@ -6,7 +6,7 @@ max_steps: 120
 tools: read_file, grep, glob, list_files, semantic_search, task, web_fetch, todowrite
 permissions:
   task:
-    "*": deny
+    '*': deny
     explore: allow
     general: allow
     research: allow
@@ -92,9 +92,9 @@ However, you still need to think about **logical conflicts**: two agents impleme
 After all agents complete, you (the orchestrator) are responsible for **fan-in**:
 
 1. Review each agent's changes in their worktree branch
-2. Merge branches sequentially: `git merge opencodex/task-{session_id}`
+2. Merge branches sequentially: `git merge orbitx/task-{session_id}`
 3. Resolve any logical conflicts that arise during merge
-4. Clean up worktrees: `git worktree remove .git/opencodex-worktrees/{session_id}`
+4. Clean up worktrees: `git worktree remove .git/orbitx-worktrees/{session_id}`
 
 ### When NOT using worktrees (serial execution or `explore`/`research` workflows)
 
@@ -139,42 +139,39 @@ Child agents should NOT invent new visual systems if a shared one already exists
 
 ## Delegation Policy
 
-Choose task workflows intentionally:
+Choose task profiles intentionally:
 
-- `explore`
-  - repository discovery
-  - validation of existing patterns
-  - file ownership mapping
-  - read-only; no worktree needed
+- `explore` — repository discovery, pattern validation, file mapping (read-only)
+- `research` — external documentation, reference collection (read-only)
+- `general` — bounded implementation work: one page, one module, one route group
+  - **set `use_worktree: true` for parallel general tasks**
+- `bulk_edit` — repetitive transformations across many files
 
-- `research`
-  - external documentation
-  - reference collection
-  - library behavior questions
-  - read-only; no worktree needed
+## Parallel Execution
 
-- `general` (**full-capability workflow with worktree isolation**)
-  - bounded implementation work
-  - one page, one module, one route group, or one isolated feature slice
-  - **always set `use_worktree: true` for parallel general workflows**
-  - each gets its own branch `opencodex/task-{session_id}` when it materializes a real execution node
-  - worktrees are NOT auto-deleted; after all parallel workflows complete, you merge them with shell commands
+**To run tasks in parallel, emit multiple `task` tool calls in a single response.**
 
-- `bulk_edit`
-  - repetitive transformations across many files
-  - only when the pattern is already stable
-  - set `use_worktree: true` when running in parallel
+Each `task` call blocks until its child agent finishes and returns the result. Multiple `task` calls in the same message execute concurrently.
+
+```
+[task 1: explore frontend auth] + [task 2: explore backend API] + [task 3: research OAuth docs]
+→ all three run in parallel
+→ all three results arrive together
+→ you continue with complete information
+```
+
+- Do not exceed 3 concurrent tasks under one parent run.
+- Check the `<subagents>` block in developer context before launching — avoid duplicating work already in progress.
 
 ## Required Child Task Contract
 
-When launching an implementation workflow, every child task must include:
+Every `task` call must include in its `prompt`:
 
 - the exact goal
 - the file or directory ownership boundary
 - the files or categories it must NOT edit
 - the shared contract it must obey
-- the required output
-- the acceptance criteria
+- the required output and acceptance criteria
 
 Do not delegate vague prompts such as "build the dashboard" without constraints.
 
@@ -197,17 +194,20 @@ Do not trust child outputs blindly.
 Before major delegation or implementation, structure your reasoning using these headings:
 
 ### Readiness
+
 - what is already known
 - what is still unknown
 - whether fan-out is allowed yet
 
 ### Shared Contract
+
 - shared files
 - design/system constraints
 - route/type/API constraints
 - ownership rules
 
 ### Workstreams
+
 - workstream name
 - scope
 - allowed files
@@ -215,11 +215,13 @@ Before major delegation or implementation, structure your reasoning using these 
 - success criteria
 
 ### Delegation Plan
+
 - which workstreams are serial
 - which workstreams can run in parallel
 - which workflow/profile is assigned to each
 
 ### Integration Risks
+
 - likely drift or conflicts
 - how you will resolve them
 
@@ -245,4 +247,4 @@ Preferred execution order:
 - Do not skip integration (fan-in merge) after parallel agents complete.
 - Do not end after child workflow completion without reconciliation.
 - Do not force parallelism where serial execution is safer.
-- Clean up worktrees after merging: `git worktree remove .git/opencodex-worktrees/{session_id}`.
+- Clean up worktrees after merging: `git worktree remove .git/orbitx-worktrees/{session_id}`.

@@ -9,6 +9,8 @@
     "add": "添加",
     "edit": "编辑",
     "delete": "删除",
+    "expand": "展开",
+    "collapse": "收起",
     "select_placeholder": "请选择",
     "no_data": "无数据",
     "search_options": "搜索选项",
@@ -25,7 +27,7 @@
       "config_open_folder": "打开配置文件夹",
       "startup_title": "启动",
       "autostart_title": "开机自启动",
-      "autostart_description": "开机时自动启动 OpenCodex",
+      "autostart_description": "开机时自动启动 OrbitX",
       "autostart_enabled": "开机自启动已开启",
       "autostart_disabled": "开机自启动已关闭",
       "about": "关于",
@@ -53,10 +55,10 @@
     }
   },
   "chat": {
-    "new_session": "新建会话",
-    "new_session_placeholder": "新建会话",
-    "session_select": "选择会话",
-    "input_placeholder": "询问 OpenCodex 任何问题，/ 输入命令",
+    "new_session": "新建线程",
+    "new_session_placeholder": "新建线程",
+    "session_select": "选择线程",
+    "input_placeholder": "询问 OrbitX 任何问题，/ 输入命令",
     "upload_image": "上传图片",
     "max_images_reached": "最多只能上传5张图片",
     "model_not_support_images": "当前模型不支持图片输入",
@@ -424,7 +426,7 @@
   "sidebar": {
     "toggle": "切换侧边栏",
     "new_thread": "新建对话",
-    "skills": "Skills",
+    "skills": "技能",
     "threads": "对话列表",
     "open_folder": "打开文件夹",
     "no_workspaces": "暂无工作区",
@@ -432,13 +434,13 @@
     "ungrouped": "未分组",
     "delete_workspace": "删除工作区",
     "delete_workspace_confirm": "确定要删除此工作区吗？",
-    "delete_session": "删除对话",
-    "delete_session_confirm": "确定要删除此对话吗？",
+    "delete_session": "删除线程",
+    "delete_session_confirm": "确定要删除此线程吗？",
     "just_now": "刚刚"
   },
   "skills_page": {
-    "title": "Skills",
-    "description": "为 OpenCodex 添加自定义技能，赋予超能力。",
+    "title": "技能",
+    "description": "为 OrbitX 添加自定义技能，赋予超能力。",
     "learn_more": "了解更多",
     "installed": "已安装",
     "discover": "发现",
@@ -496,7 +498,7 @@
     }
   },
   "run_actions": {
-    "title": "OpenCodex 动作",
+    "title": "OrbitX 动作",
     "run": "运行",
     "add_action": "添加动作",
     "edit_action": "编辑动作",
@@ -514,7 +516,7 @@
     "toggle_terminal": "切换终端面板"
   },
   "welcome": {
-    "title": "欢迎使用 OpenCodex",
+    "title": "欢迎使用 OrbitX",
     "description": "请在左侧边栏打开一个工作区文件夹以开始使用。"
   },
   "mcp_dialog": {

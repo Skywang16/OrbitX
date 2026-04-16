@@ -182,7 +182,7 @@ impl OAuthCallbackServer {
         r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>OpenCodex - Authorization Successful</title>
+    <title>OrbitX - Authorization Successful</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
         .container { text-align: center; padding: 2rem; }
@@ -193,7 +193,7 @@ impl OAuthCallbackServer {
 <body>
     <div class="container">
         <h1>✓ Authorization Successful</h1>
-        <p>You can close this window and return to OpenCodex.</p>
+        <p>You can close this window and return to OrbitX.</p>
     </div>
     <script>setTimeout(() => window.close(), 2000);</script>
 </body>
@@ -205,7 +205,7 @@ impl OAuthCallbackServer {
         let template = r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>OpenCodex - Authorization Failed</title>
+    <title>OrbitX - Authorization Failed</title>
     <style>
         body {{ font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }}
         .container {{ text-align: center; padding: 2rem; }}

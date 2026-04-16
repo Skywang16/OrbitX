@@ -1,22 +1,22 @@
 /*!
- * Task status query and management
+ * Agent run status query and management
  */
 
 use std::sync::Arc;
 
 use chrono::Utc;
 
-use crate::agent::core::executor::{TaskExecutor, TaskSummary};
-use crate::agent::error::{TaskExecutorError, TaskExecutorResult};
+use crate::agent::core::executor::{AgentRunExecutor, AgentRunSummary};
+use crate::agent::error::{AgentRunError, AgentRunResult};
 
-impl TaskExecutor {
-    /// Get task summary information
-    pub async fn get_task_summary(&self, task_id: &str) -> TaskExecutorResult<TaskSummary> {
+impl AgentRunExecutor {
+    /// Get agent run summary information
+    pub async fn get_run_summary(&self, run_id: &str) -> AgentRunResult<AgentRunSummary> {
         let ctx = self
-            .active_tasks()
-            .get(task_id)
+            .active_runs()
+            .get(run_id)
             .map(|entry| Arc::clone(entry.value()))
-            .ok_or_else(|| TaskExecutorError::TaskNotFound(task_id.to_string()))?;
+            .ok_or_else(|| AgentRunError::TaskNotFound(run_id.to_string()))?;
 
         let (status, current_iteration, error_count, created_at, updated_at) = ctx
             .batch_read_state(|exec| {
@@ -30,9 +30,9 @@ impl TaskExecutor {
             })
             .await;
 
-        Ok(TaskSummary {
-            task_id: task_id.to_string(),
-            session_id: ctx.session_id,
+        Ok(AgentRunSummary {
+            run_id: run_id.to_string(),
+            thread_id: ctx.thread_id,
             status: format!("{status:?}").to_lowercase(),
             current_iteration: current_iteration as i32,
             error_count: error_count as i32,
@@ -41,30 +41,30 @@ impl TaskExecutor {
         })
     }
 
-    /// Get total task count statistics
-    pub fn get_stats(&self) -> TaskExecutorStats {
-        TaskExecutorStats {
-            active_tasks: self.active_tasks().len(),
+    /// Get total active run count statistics
+    pub fn get_stats(&self) -> AgentRunExecutorStats {
+        AgentRunExecutorStats {
+            active_tasks: self.active_runs().len(),
         }
     }
 
-    /// Task list: new design only exposes active tasks in memory (does not persist task records).
-    pub async fn list_tasks(
+    /// Agent run list: new design only exposes active runs in memory.
+    pub async fn list_runs(
         &self,
-        session_id: Option<i64>,
+        thread_id: Option<i64>,
         status_filter: Option<String>,
-    ) -> TaskExecutorResult<Vec<TaskSummary>> {
+    ) -> AgentRunResult<Vec<AgentRunSummary>> {
         let mut summaries = Vec::new();
 
-        for entry in self.active_tasks().iter() {
+        for entry in self.active_runs().iter() {
             let ctx = entry.value();
-            if let Some(target_session) = session_id {
-                if ctx.session_id != target_session {
+            if let Some(target_session) = thread_id {
+                if ctx.thread_id != target_session {
                     continue;
                 }
             }
 
-            let summary = self.get_task_summary(entry.key()).await?;
+            let summary = self.get_run_summary(entry.key()).await?;
             if let Some(filter) = &status_filter {
                 if summary.status != *filter {
                     continue;
@@ -77,8 +77,8 @@ impl TaskExecutor {
     }
 }
 
-/// Task executor statistics
+/// Agent run executor statistics
 #[derive(Debug, Clone)]
-pub struct TaskExecutorStats {
+pub struct AgentRunExecutorStats {
     pub active_tasks: usize,
 }

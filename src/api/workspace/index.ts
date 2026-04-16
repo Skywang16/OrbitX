@@ -1,66 +1,52 @@
-/**
- * Workspace management API
- *
- * Unified workspace-related functionality including:
- * - Workspace CRUD operations
- * - Session management
- * - Recent workspace tracking
- * - Project rules management
- */
-
-import type { Message } from '@/types'
+import type { Message, SubagentRecord } from '@/types'
 import { invoke } from '@/utils/request'
-
-export interface RecentWorkspace {
-  id: number
-  path: string
-  last_accessed_at: number
-}
 
 export interface WorkspaceRecord {
   path: string
   displayName?: string | null
-  activeSessionId?: number | null
+  activeThreadId?: number | null
   selectedRunActionId?: string | null
   createdAt: number
   updatedAt: number
   lastAccessedAt: number
 }
 
-export interface SessionRecord {
+export interface ThreadRecord {
   id: number
   workspacePath: string
-  parentId?: number | null
-  title?: string | null
+  parentThreadId?: number | null
+  title: string
   messageCount: number
+  status: 'idle' | 'running' | 'completed' | 'error' | 'cancelled'
+  agentType: string
   createdAt: number
   updatedAt: number
 }
 
 export interface ExecutionNodeRecord {
   id: number
-  backingSessionId?: number | null
-  role: 'root' | 'fork' | 'branch'
+  backingThreadId?: number | null
+  role: 'root' | 'branch'
   profile: string
   title: string
-  status: 'queued' | 'running' | 'completed' | 'error' | 'cancelled'
+  status: 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'idle'
   startedAt?: number | null
   finishedAt?: number | null
   children: ExecutionNodeRecord[]
 }
 
-export interface SessionViewRecord {
-  session: SessionRecord
-  timeline: SessionTimelineItemRecord[]
+export interface ThreadViewRecord {
+  thread: ThreadRecord
+  timeline: ThreadTimelineItemRecord[]
   executionTree: ExecutionNodeRecord[]
 }
 
-export interface SessionTimelineItemRecord {
+export interface ThreadTimelineItemRecord {
   id: string
   messageId: number
   title: string
   createdAt: number
-  status?: 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | null
+  status?: 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'idle' | null
 }
 
 export interface RunActionRecord {
@@ -71,12 +57,7 @@ export interface RunActionRecord {
   sortOrder: number
 }
 
-/**
- * Unified Workspace API
- */
 export class WorkspaceApi {
-  // ===== Workspace operations =====
-
   getOrCreate = async (path: string): Promise<WorkspaceRecord> => {
     return invoke<WorkspaceRecord>('workspace_get_or_create', { path })
   }
@@ -85,39 +66,41 @@ export class WorkspaceApi {
     await invoke('workspace_remove_recent', { path })
   }
 
-  // ===== Session operations =====
-
-  listSessionViews = async (path: string): Promise<SessionViewRecord[]> => {
-    return invoke<SessionViewRecord[]>('workspace_list_session_views', { path })
+  listThreadViews = async (path: string): Promise<ThreadViewRecord[]> => {
+    return invoke<ThreadViewRecord[]>('workspace_list_thread_views', { path })
   }
 
-  createSession = async (path: string, title?: string): Promise<SessionRecord> => {
-    return invoke<SessionRecord>('workspace_create_session', { path, title })
+  createThread = async (path: string, title?: string): Promise<ThreadRecord> => {
+    return invoke<ThreadRecord>('workspace_create_thread', { path, title })
   }
 
-  deleteSession = async (sessionId: number): Promise<void> => {
-    await invoke('workspace_delete_session', { sessionId })
+  deleteThread = async (threadId: number): Promise<void> => {
+    await invoke('workspace_delete_thread', { threadId })
   }
 
-  getActiveSession = async (path: string): Promise<SessionRecord> => {
-    return invoke<SessionRecord>('workspace_get_active_session', { path })
+  getActiveThread = async (path: string): Promise<ThreadRecord> => {
+    return invoke<ThreadRecord>('workspace_get_active_thread', { path })
   }
 
-  setActiveSession = async (path: string, sessionId: number): Promise<void> => {
-    await invoke('workspace_set_active_session', { path, sessionId })
+  getThread = async (threadId: number): Promise<ThreadRecord> => {
+    return invoke<ThreadRecord>('workspace_get_thread', { threadId })
   }
 
-  clearActiveSession = async (path: string): Promise<void> => {
-    await invoke('workspace_clear_active_session', { path })
+  setActiveThread = async (path: string, threadId: number): Promise<void> => {
+    await invoke('workspace_set_active_thread', { path, threadId })
   }
 
-  // ===== Message operations =====
-
-  getMessages = async (sessionId: number, limit?: number, beforeId?: number): Promise<Message[]> => {
-    return invoke<Message[]>('workspace_get_messages', { sessionId, limit, beforeId })
+  clearActiveThread = async (path: string): Promise<void> => {
+    await invoke('workspace_clear_active_thread', { path })
   }
 
-  // ===== Recent workspace management =====
+  getThreadMessages = async (threadId: number, limit?: number, beforeId?: number): Promise<Message[]> => {
+    return invoke<Message[]>('workspace_get_thread_messages', { threadId, limit, beforeId })
+  }
+
+  listSubagents = async (threadId: number): Promise<SubagentRecord[]> => {
+    return invoke<SubagentRecord[]>('workspace_list_subagents', { threadId })
+  }
 
   listRecent = async (limit?: number): Promise<WorkspaceRecord[]> => {
     return invoke<WorkspaceRecord[]>('workspace_get_recent', { limit })
@@ -131,8 +114,6 @@ export class WorkspaceApi {
     return invoke<[number, number]>('workspace_maintain')
   }
 
-  // ===== Project rules management =====
-
   getProjectRules = async (): Promise<string | null> => {
     return invoke<string | null>('workspace_get_project_rules')
   }
@@ -144,8 +125,6 @@ export class WorkspaceApi {
   listAvailableRulesFiles = async (cwd: string): Promise<string[]> => {
     return invoke<string[]>('workspace_list_rules_files', { cwd })
   }
-
-  // ===== Run Actions =====
 
   listRunActions = async (path: string): Promise<RunActionRecord[]> => {
     return invoke<RunActionRecord[]>('workspace_list_run_actions', { path })
@@ -166,8 +145,6 @@ export class WorkspaceApi {
   setSelectedRunAction = async (path: string, actionId: string | null): Promise<void> => {
     await invoke('workspace_set_selected_run_action', { path, actionId })
   }
-
-  // ===== Preferences =====
 
   getPreferences = async (keys: string[]): Promise<Record<string, string>> => {
     return invoke<Record<string, string>>('preferences_get_batch', { keys })

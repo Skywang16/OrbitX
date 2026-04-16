@@ -1,12 +1,12 @@
-# OpenCodex
+# OrbitX
 
 [中文](./README_zh.md) | English
 
 **The open source AI coding agent with a beautiful desktop interface.**
 
-![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OpenCodex/ci.yml?branch=main&label=CI)
+![CI](https://img.shields.io/github/actions/workflow/status/Skywang16/OrbitX/ci.yml?branch=main&label=CI)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Release](https://img.shields.io/github/v/release/Skywang16/OpenCodex)](https://github.com/Skywang16/OpenCodex/releases)
+[![Release](https://img.shields.io/github/v/release/Skywang16/OrbitX)](https://github.com/Skywang16/OrbitX/releases)
 
 > Platform Support: Currently macOS only (Windows/Linux support coming soon)
 
@@ -22,7 +22,7 @@
 
 ## Subagents
 
-OpenCodex uses subagents to handle complex tasks:
+OrbitX uses subagents to handle complex tasks:
 
 - **General** - General-purpose subagent for complex searches and multi-step tasks
 - **Plan** - Read-only subagent for code analysis and planning
@@ -32,20 +32,20 @@ OpenCodex uses subagents to handle complex tasks:
 
 ### Download Desktop App
 
-Download directly from the [releases page](https://github.com/Skywang16/OpenCodex/releases).
+Download directly from the [releases page](https://github.com/Skywang16/OrbitX/releases).
 
 | Platform              | Download                      |
 | --------------------- | ----------------------------- |
-| macOS (Apple Silicon) | `OpenCodex_x.x.x_aarch64.dmg` |
-| macOS (Intel)         | `OpenCodex_x.x.x_x64.dmg`     |
+| macOS (Apple Silicon) | `OrbitX_x.x.x_aarch64.dmg` |
+| macOS (Intel)         | `OrbitX_x.x.x_x64.dmg`     |
 | Windows               | Coming soon                   |
 | Linux                 | Coming soon                   |
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/Skywang16/OpenCodex.git
-cd OpenCodex
+git clone https://github.com/Skywang16/OrbitX.git
+cd OrbitX
 npm install
 npm run tauri build
 ```
@@ -71,7 +71,7 @@ npm run tauri dev
 ## Configuration
 
 - Themes: `config/themes/*.json`
-- Workspace settings: `.opencodex/settings.json`
+- Workspace settings: `.orbitx/settings.json`
 
 ## FAQ
 
@@ -98,6 +98,6 @@ This project is licensed under GPL-3.0-or-later. See the `LICENSE` file for deta
 
 ---
 
-**Contact**: For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OpenCodex/issues).
+**Contact**: For issues and suggestions, please create an [Issue](https://github.com/Skywang16/OrbitX/issues).
 
 ⭐ If this project helps you, please give it a star!

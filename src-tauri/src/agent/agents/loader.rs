@@ -1,7 +1,7 @@
 //! Agent configuration loader
 //!
 //! Load builtin agents from prompts/agents/*.md,
-//! load user custom agents from .opencodex/agents/*.md
+//! load user custom agents from .orbitx/agents/*.md
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -171,7 +171,7 @@ impl AgentConfigLoader {
             .collect();
 
         // Then load workspace custom (will override builtin with same name)
-        let dir = workspace_root.join(".opencodex").join("agents");
+        let dir = workspace_root.join(".orbitx").join("agents");
         let mut entries = match fs::read_dir(&dir).await {
             Ok(entries) => entries,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(configs),

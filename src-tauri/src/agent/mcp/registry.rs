@@ -17,6 +17,7 @@ struct ClientEntry {
     status: McpConnectionStatus,
     error: Option<String>,
     client: Option<Arc<McpClient>>,
+    disabled_tools: Vec<String>,
 }
 
 struct WorkspaceMcpState {
@@ -99,6 +100,7 @@ impl McpRegistry {
                             status: McpConnectionStatus::Connected,
                             error: None,
                             client: Some(Arc::new(client)),
+                            disabled_tools: get_disabled_tools(config),
                         },
                     );
                 }
@@ -113,6 +115,7 @@ impl McpRegistry {
                                 "Unsupported transport type (only stdio is supported)".to_string(),
                             ),
                             client: None,
+                            disabled_tools: get_disabled_tools(config),
                         },
                     );
                 }
@@ -125,6 +128,7 @@ impl McpRegistry {
                             status: McpConnectionStatus::Error,
                             error: Some(e.to_string()),
                             client: None,
+                            disabled_tools: get_disabled_tools(config),
                         },
                     );
                 }
@@ -151,6 +155,7 @@ impl McpRegistry {
                     client
                         .tools()
                         .iter()
+                        .filter(|tool| !entry.disabled_tools.iter().any(|name| name == &tool.name))
                         .cloned()
                         .map(|tool| McpToolAdapter::new(Arc::clone(client), tool)),
                 );
@@ -164,6 +169,7 @@ impl McpRegistry {
                     client
                         .tools()
                         .iter()
+                        .filter(|tool| !entry.disabled_tools.iter().any(|name| name == &tool.name))
                         .cloned()
                         .map(|tool| McpToolAdapter::new(Arc::clone(client), tool)),
                 );
@@ -234,5 +240,13 @@ fn is_disabled(config: &McpServerConfig) -> bool {
         McpServerConfig::Stdio { disabled, .. } => *disabled,
         McpServerConfig::Sse { disabled, .. } => *disabled,
         McpServerConfig::StreamableHttp { disabled, .. } => *disabled,
+    }
+}
+
+fn get_disabled_tools(config: &McpServerConfig) -> Vec<String> {
+    match config {
+        McpServerConfig::Stdio { disabled_tools, .. } => disabled_tools.clone(),
+        McpServerConfig::Sse { disabled_tools, .. } => disabled_tools.clone(),
+        McpServerConfig::StreamableHttp { disabled_tools, .. } => disabled_tools.clone(),
     }
 }

@@ -2,7 +2,7 @@
  * Executor Helpers - helper functions extracted from executor.rs
  */
 
-use crate::agent::core::context::{AgentToolCallResult, TaskContext};
+use crate::agent::core::context::{AgentRunContext, AgentToolCallResult};
 use crate::agent::tools::{ToolResult, ToolResultContent, ToolResultStatus};
 
 /// Deduplicate tool calls - detect duplicate calls within the same iteration
@@ -64,7 +64,7 @@ pub fn tool_call_result_to_outcome(result: &AgentToolCallResult) -> ToolResult {
     }
 }
 
-pub async fn should_render_tool_block(context: &TaskContext, tool_name: &str) -> bool {
+pub async fn should_render_tool_block(context: &AgentRunContext, tool_name: &str) -> bool {
     let Some(meta) = context.tool_registry().get_tool_metadata(tool_name).await else {
         return true;
     };

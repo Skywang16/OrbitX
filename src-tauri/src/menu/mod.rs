@@ -37,10 +37,10 @@ pub fn create_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     menu.build()
 }
 
-/// macOS application menu (OpenCodex)
+/// macOS application menu (OrbitX)
 #[cfg(target_os = "macos")]
 fn create_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Submenu<R>> {
-    SubmenuBuilder::new(app, "OpenCodex")
+    SubmenuBuilder::new(app, "OrbitX")
         .item(&PredefinedMenuItem::about(
             app,
             Some(&t("menu.about")),

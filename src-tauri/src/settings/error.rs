@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SettingsError {
-    #[error("OpenCodex app directory unavailable")]
+    #[error("OrbitX app directory unavailable")]
     AppDirUnavailable,
 
     #[error("Failed to create directory: {path}")]

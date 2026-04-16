@@ -64,6 +64,11 @@
         { "path": "$APPLOCALDATA/**" }
       ]
     },
+    "http:default",
+    "http:allow-fetch",
+    "http:allow-fetch-cancel",
+    "http:allow-fetch-send",
+    "http:allow-fetch-read-body",
     {
       "identifier": "http:default",
       "allow": [{ "url": "https://skillregistry.io/**" }]

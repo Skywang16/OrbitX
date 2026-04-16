@@ -113,7 +113,7 @@ impl LocalPane {
         // Add basic environment variables
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERM_PROGRAM", "OpenCodex");
+        cmd.env("TERM_PROGRAM", "OrbitX");
         cmd.env("LANG", "en_US.UTF-8");
         cmd.env("LC_ALL", "en_US.UTF-8");
         cmd.env("LC_CTYPE", "en_US.UTF-8");
@@ -139,7 +139,7 @@ impl LocalPane {
             Err(_) => return Ok(()),
         };
 
-        cmd.env("OPENCODEX_SHELL_INTEGRATION", "1");
+        cmd.env("ORBITX_SHELL_INTEGRATION", "1");
 
         match shell_type {
             crate::shell::ShellType::Zsh => {
@@ -149,10 +149,10 @@ impl LocalPane {
                 Self::setup_bash_integration(cmd, &integration_script)?;
             }
             crate::shell::ShellType::Fish => {
-                cmd.env("OPENCODEX_INTEGRATION_SCRIPT", integration_script);
+                cmd.env("ORBITX_INTEGRATION_SCRIPT", integration_script);
             }
             _ => {
-                cmd.env("OPENCODEX_INTEGRATION_SCRIPT", integration_script);
+                cmd.env("ORBITX_INTEGRATION_SCRIPT", integration_script);
             }
         }
 
@@ -165,7 +165,7 @@ impl LocalPane {
 
     /// Setup Zsh Shell Integration
     fn setup_zsh_integration(cmd: &mut CommandBuilder, integration_script: &str) -> PaneResult<()> {
-        let temp_dir = std::env::temp_dir().join(format!("opencodex-{}", process::id()));
+        let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
 
         std::fs::create_dir_all(&temp_dir).map_err(|e| {
             PaneError::Internal(format!("Failed to create temporary directory: {e}"))
@@ -180,12 +180,12 @@ impl LocalPane {
         write_shell_init_line(&mut file, "")?;
         write_shell_init_line(
             &mut file,
-            "# OpenCodex Shell Integration (after user env loaded)",
+            "# OrbitX Shell Integration (after user env loaded)",
         )?;
         write_shell_init_line(&mut file, integration_script)?;
 
         if let Some(original_zdotdir) = std::env::var_os("ZDOTDIR") {
-            cmd.env("OPENCODEX_ORIGINAL_ZDOTDIR", original_zdotdir);
+            cmd.env("ORBITX_ORIGINAL_ZDOTDIR", original_zdotdir);
         }
         cmd.env("ZDOTDIR", &temp_dir);
 
@@ -197,7 +197,7 @@ impl LocalPane {
         cmd: &mut CommandBuilder,
         integration_script: &str,
     ) -> PaneResult<()> {
-        let temp_dir = std::env::temp_dir().join(format!("opencodex-{}", process::id()));
+        let temp_dir = std::env::temp_dir().join(format!("orbitx-{}", process::id()));
 
         std::fs::create_dir_all(&temp_dir).map_err(|e| {
             PaneError::Internal(format!("Failed to create temporary directory: {e}"))
@@ -212,7 +212,7 @@ impl LocalPane {
         write_shell_init_line(&mut file, "")?;
         write_shell_init_line(
             &mut file,
-            "# OpenCodex Shell Integration (after user env loaded)",
+            "# OrbitX Shell Integration (after user env loaded)",
         )?;
         write_shell_init_line(&mut file, integration_script)?;
 

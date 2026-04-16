@@ -1,8 +1,8 @@
 {
-  "name": "opencodex",
+  "name": "orbitx",
   "private": true,
   "version": "0.1.0",
-  "description": "OpenCodex - The open source AI coding agent with a beautiful desktop interface",
+  "description": "OrbitX - The open source AI coding agent with a beautiful desktop interface",
   "type": "module",
   "engines": {
     "node": ">=20.0.0",
@@ -12,12 +12,12 @@
   "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Skywang16/OpenCodex.git"
+    "url": "https://github.com/Skywang16/OrbitX.git"
   },
   "bugs": {
-    "url": "https://github.com/Skywang16/OpenCodex/issues"
+    "url": "https://github.com/Skywang16/OrbitX/issues"
   },
-  "homepage": "https://github.com/Skywang16/OpenCodex#readme",
+  "homepage": "https://github.com/Skywang16/OrbitX#readme",
   "keywords": [
     "terminal",
     "tauri",
@@ -29,7 +29,7 @@
   "scripts": {
     "dev": "vite",
     "dev:vite": "vite --port 1421",
-    "tauri:dev:self": "OPENCODEX_DATA_DIR=$HOME/Library/Application\\ Support/OpenCodex-Dev npm run tauri -- dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev:self": "ORBITX_DATA_DIR=$HOME/Library/Application\\ Support/OrbitX-Dev npm run tauri -- dev --config src-tauri/tauri.dev.conf.json",
     "build": "vue-tsc --noEmit && vite build",
     "build:analyze": "vue-tsc --noEmit && ANALYZE=true vite build",
     "preview": "vite preview",
@@ -46,7 +46,7 @@
     "@tauri-apps/plugin-autostart": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.4.1",
-    "@tauri-apps/plugin-http": "^2.5.1",
+    "@tauri-apps/plugin-http": "^2.5.2",
     "@tauri-apps/plugin-opener": "^2.5.0",
     "@tauri-apps/plugin-process": "^2.3.0",
     "@tauri-apps/plugin-window-state": "^2.4.0",

@@ -84,11 +84,106 @@ CREATE TABLE IF NOT EXISTS ai_model_usage_stats (
 CREATE TABLE IF NOT EXISTS workspaces (
     path TEXT PRIMARY KEY,
     display_name TEXT,
-    active_session_id INTEGER,
+    active_thread_id INTEGER,
     selected_run_action_id TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     last_accessed_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_path TEXT NOT NULL REFERENCES workspaces(path) ON DELETE CASCADE,
+    parent_thread_id INTEGER REFERENCES threads(id) ON DELETE CASCADE,
+    spawned_by_tool_call_id TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    display_name TEXT,
+    agent_type TEXT NOT NULL DEFAULT 'coder',
+    model_id TEXT,
+    provider_id TEXT,
+    rollout_path TEXT NOT NULL,
+    worktree_path TEXT,
+    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'completed', 'error', 'cancelled')),
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_event_at INTEGER,
+    first_user_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS subagents (
+    id TEXT PRIMARY KEY,
+    parent_thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    child_thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    parent_message_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    task_title TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'cancelled', 'error')),
+    latest_activity TEXT,
+    final_summary TEXT,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    UNIQUE(parent_thread_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS thread_dynamic_tools (
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    input_schema_json TEXT NOT NULL,
+    PRIMARY KEY (thread_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS thread_memories (
+    thread_id INTEGER PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
+    source_updated_at INTEGER NOT NULL,
+    raw_memory TEXT NOT NULL,
+    rollout_summary TEXT NOT NULL,
+    generated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_jobs (
+    id TEXT PRIMARY KEY,
+    thread_id INTEGER REFERENCES threads(id) ON DELETE SET NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    result_json TEXT,
+    last_error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    started_at INTEGER,
+    finished_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS agent_job_items (
+    job_id TEXT NOT NULL REFERENCES agent_jobs(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    row_index INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    assigned_thread_id INTEGER REFERENCES threads(id) ON DELETE SET NULL,
+    result_json TEXT,
+    last_error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    PRIMARY KEY (job_id, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER REFERENCES threads(id) ON DELETE CASCADE,
+    ts INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    target TEXT NOT NULL,
+    message TEXT,
+    fields_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS run_actions (
@@ -97,107 +192,6 @@ CREATE TABLE IF NOT EXISTS run_actions (
     name TEXT NOT NULL,
     command TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0
-);
-
--- ===========================
--- Agent system
--- ===========================
--- This schema is intentionally NOT backward-compatible.
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_path TEXT NOT NULL REFERENCES workspaces(path) ON DELETE CASCADE,
-
-    parent_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
-    agent_type TEXT NOT NULL DEFAULT 'coder',
-    spawned_by_tool_call TEXT,
-
-    title TEXT,
-    model_id TEXT,
-    provider_id TEXT,
-
-    worktree_path TEXT,
-
-    status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'completed', 'error', 'cancelled')),
-    is_archived INTEGER NOT NULL DEFAULT 0,
-
-    total_messages INTEGER NOT NULL DEFAULT 0,
-    total_tokens INTEGER NOT NULL DEFAULT 0,
-    total_cost REAL NOT NULL DEFAULT 0,
-
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    last_message_at INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-
-    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    agent_type TEXT NOT NULL DEFAULT 'coder',
-    parent_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
-
-    blocks TEXT NOT NULL DEFAULT '[]',
-
-    status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('streaming', 'completed', 'error', 'cancelled')),
-    is_summary INTEGER NOT NULL DEFAULT 0,
-    is_internal INTEGER NOT NULL DEFAULT 0,
-
-    model_id TEXT,
-    provider_id TEXT,
-
-    input_tokens INTEGER,
-    output_tokens INTEGER,
-    cache_read_tokens INTEGER,
-    cache_write_tokens INTEGER,
-
-    created_at INTEGER NOT NULL,
-    finished_at INTEGER,
-    duration_ms INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS tool_executions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-
-    call_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'error', 'cancelled')),
-
-    started_at INTEGER NOT NULL,
-    finished_at INTEGER,
-    duration_ms INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    trigger_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
-    root_node_id INTEGER REFERENCES agent_nodes(id) ON DELETE SET NULL,
-    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'error', 'cancelled')),
-    summary TEXT,
-    created_at INTEGER NOT NULL,
-    started_at INTEGER,
-    finished_at INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS agent_nodes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-    parent_node_id INTEGER REFERENCES agent_nodes(id) ON DELETE CASCADE,
-    backing_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
-    trigger_tool_call_id TEXT,
-    role TEXT NOT NULL CHECK (role IN ('root', 'fork', 'branch')),
-    profile TEXT NOT NULL,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'error', 'cancelled')),
-    worktree_path TEXT,
-    model_id TEXT,
-    created_at INTEGER NOT NULL,
-    started_at INTEGER,
-    finished_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS checkpoint_blobs (
@@ -211,8 +205,8 @@ CREATE TABLE IF NOT EXISTS checkpoint_blobs (
 CREATE TABLE IF NOT EXISTS checkpoints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_path TEXT NOT NULL REFERENCES workspaces(path) ON DELETE CASCADE,
-    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    message_id INTEGER NOT NULL,
     parent_id INTEGER REFERENCES checkpoints(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL
 );

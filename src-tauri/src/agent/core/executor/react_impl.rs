@@ -1,5 +1,5 @@
 /*!
- * ReactHandler implementation - TaskExecutor as ReAct handler
+ * ReactHandler implementation - AgentRunExecutor as ReAct handler
  *
  */
 
@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 use crate::agent::agents::{visible_task_profiles, AgentConfigLoader};
 use crate::agent::context::ContextBuilder;
-use crate::agent::core::context::{AgentToolCallResult, TaskContext};
-use crate::agent::core::executor::{ReactHandler, TaskExecutor};
+use crate::agent::core::context::{AgentRunContext, AgentToolCallResult};
+use crate::agent::core::executor::{AgentRunExecutor, ReactHandler};
 use crate::agent::core::utils::should_render_tool_block;
-use crate::agent::error::TaskExecutorResult;
+use crate::agent::error::AgentRunResult;
 use crate::agent::tools::{
     self, ToolDescriptionContext, ToolRegistry, ToolResultContent, ToolResultStatus,
 };
@@ -24,23 +24,23 @@ const TOOL_OUTPUT_PREVIEW_MAX_CHARS: usize = 8000;
 const DEFAULT_MAX_TOKENS: u32 = 32_768;
 
 #[async_trait::async_trait]
-impl ReactHandler for TaskExecutor {
+impl ReactHandler for AgentRunExecutor {
     #[inline]
     async fn build_llm_request(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         model_id: &str,
         tool_registry: &ToolRegistry,
         cwd: &str,
         messages: Option<Vec<crate::llm::anthropic_types::MessageParam>>,
-    ) -> TaskExecutorResult<CreateMessageRequest> {
+    ) -> AgentRunResult<CreateMessageRequest> {
         use crate::storage::repositories::AIModels;
 
         let model_config = AIModels::new(&self.inner.database)
             .find_by_id(model_id)
             .await?
             .ok_or_else(|| {
-                crate::agent::error::TaskExecutorError::ConfigurationError(format!(
+                crate::agent::error::AgentRunError::ConfigurationError(format!(
                     "Model not found: {model_id}"
                 ))
             })?;
@@ -90,7 +90,7 @@ impl ReactHandler for TaskExecutor {
         let tool_schemas = tool_registry.get_tool_schemas_with_context(&ToolDescriptionContext {
             cwd: cwd.to_string(),
             agent_type: Some(context.agent_type.to_string()),
-            allowed_task_profiles: load_allowed_task_profiles(cwd, context.agent_type.as_ref())
+            allowed_subagent_types: load_allowed_task_profiles(cwd, context.agent_type.as_ref())
                 .await,
         });
 
@@ -131,10 +131,10 @@ impl ReactHandler for TaskExecutor {
     #[inline]
     async fn execute_tools(
         &self,
-        context: &TaskContext,
+        context: &AgentRunContext,
         _iteration: u32,
         tool_calls: Vec<(String, String, Value)>,
-    ) -> TaskExecutorResult<Vec<AgentToolCallResult>> {
+    ) -> AgentRunResult<Vec<AgentToolCallResult>> {
         let mut tool_started_at: HashMap<String, chrono::DateTime<chrono::Utc>> = HashMap::new();
         let mut tool_inputs: HashMap<String, Value> = HashMap::new();
         let mut rendered_tool_blocks: HashMap<String, bool> = HashMap::new();
@@ -260,7 +260,7 @@ impl ReactHandler for TaskExecutor {
     }
 
     #[inline]
-    async fn get_context_builder(&self, context: &TaskContext) -> Arc<ContextBuilder> {
+    async fn get_context_builder(&self, context: &AgentRunContext) -> Arc<ContextBuilder> {
         let file_tracker = context.file_tracker();
         Arc::new(ContextBuilder::new(file_tracker))
     }

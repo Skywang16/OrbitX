@@ -31,6 +31,13 @@ fn create_test_context_state() -> TerminalContextState {
     TerminalContextState::new(registry, context_service)
 }
 
+fn expected_fallback_cwd() -> String {
+    dirs::home_dir()
+        .or_else(|| std::env::current_dir().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "~".to_string())
+}
+
 #[tokio::test]
 async fn test_terminal_context_state_creation() {
     let state = create_test_context_state();
@@ -95,7 +102,10 @@ async fn test_terminal_context_service_integration() {
     assert!(result.is_ok(), "回退逻辑应该返回默认上下文");
 
     let context = result.unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
     assert!(matches!(
         context.shell_type,
         Some(terminal_lib::terminal::ShellType::Bash)
@@ -120,7 +130,10 @@ async fn test_terminal_context_service_integration() {
     assert!(result.is_ok(), "回退逻辑应该成功");
 
     let context = result.unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
 }
 
 #[tokio::test]
@@ -240,7 +253,10 @@ async fn test_error_handling_and_recovery() {
     assert!(result.is_ok(), "回退逻辑应该能处理不存在的面板");
 
     let context = result.unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
     assert!(matches!(
         context.shell_type,
         Some(terminal_lib::terminal::ShellType::Bash)
@@ -275,7 +291,10 @@ async fn test_complete_workflow_integration() {
         .get_context_with_fallback(Some(pane_id))
         .await
         .unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
 
     // 4. 缓存操作
     state
@@ -299,7 +318,10 @@ async fn test_complete_workflow_integration() {
         .get_context_with_fallback(None)
         .await
         .unwrap();
-    assert_eq!(context.current_working_directory, Some("~".to_string()));
+    assert_eq!(
+        context.current_working_directory,
+        Some(expected_fallback_cwd())
+    );
 }
 
 #[tokio::test]

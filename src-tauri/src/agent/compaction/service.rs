@@ -6,15 +6,15 @@ use crate::agent::common::llm_text::extract_text_from_llm_message;
 use crate::agent::error::AgentResult;
 use crate::agent::persistence::AgentPersistence;
 use crate::agent::prompt::BuiltinPrompts;
-use crate::agent::utils::count_message_param_tokens;
 use crate::agent::types::{Block, Message, MessageRole, MessageStatus, TextBlock};
+use crate::agent::utils::count_message_param_tokens;
 use crate::llm::anthropic_types::{
     CreateMessageRequest, MessageContent, MessageParam, SystemPrompt,
 };
 use crate::llm::service::LLMService;
 use crate::storage::DatabaseManager;
 
-use super::{CompactionConfig, SessionMessageLoader};
+use super::{CompactionConfig, ThreadMessageLoader};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CompactionTrigger {
@@ -59,7 +59,7 @@ impl CompactionService {
 
     pub async fn prepare_compaction(
         &self,
-        session_id: i64,
+        thread_id: i64,
         context_window: u32,
         _trigger: CompactionTrigger,
     ) -> AgentResult<PreparedCompaction> {
@@ -71,8 +71,8 @@ impl CompactionService {
             return Ok(PreparedCompaction { summary_job: None });
         }
 
-        let loader = SessionMessageLoader::new(Arc::clone(&self.persistence));
-        let llm_messages = loader.load_for_llm(session_id).await?;
+        let loader = ThreadMessageLoader::new(Arc::clone(&self.persistence));
+        let llm_messages = loader.load_for_llm(thread_id).await?;
         let tokens_used: usize = llm_messages.iter().map(count_message_param_tokens).sum();
         let context_usage_ratio = tokens_used as f32 / context_window as f32;
         if context_usage_ratio < self.config.min_context_usage_ratio {
@@ -82,7 +82,7 @@ impl CompactionService {
         let messages = self
             .persistence
             .messages()
-            .list_by_session(session_id)
+            .list_by_thread(thread_id)
             .await?;
 
         let last_summary_idx = messages
@@ -110,14 +110,14 @@ impl CompactionService {
             .filter(|agent_type| !agent_type.trim().is_empty())
             .ok_or_else(|| {
                 crate::agent::error::AgentError::Internal(format!(
-                    "Cannot create compaction summary for session {session_id} without a source agent_type"
+                    "Cannot create compaction summary for session {thread_id} without a source agent_type"
                 ))
             })?;
 
         let summary_message = self
             .persistence
             .messages()
-            .create_summary_message(session_id, agent_type, summary_created_at)
+            .create_summary_message(thread_id, agent_type, summary_created_at)
             .await?;
 
         Ok(PreparedCompaction {
@@ -231,13 +231,6 @@ fn extract_message_text(message: &Message) -> String {
                     Block::Text(b) => {
                         if !b.content.trim().is_empty() {
                             parts.push(b.content.trim().to_string());
-                        }
-                    }
-                    Block::Subtask(b) => {
-                        if let Some(summary) = &b.summary {
-                            if !summary.trim().is_empty() {
-                                parts.push(summary.trim().to_string());
-                            }
                         }
                     }
                     _ => {}

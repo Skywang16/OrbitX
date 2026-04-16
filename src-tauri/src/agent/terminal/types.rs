@@ -38,7 +38,7 @@ pub struct AgentTerminal {
     pub pane_id: u32,
     pub mode: TerminalExecutionMode,
     pub status: TerminalStatus,
-    pub session_id: i64,
+    pub thread_id: i64,
     pub created_at_ms: i64,
     pub completed_at_ms: Option<i64>,
     pub label: Option<String>,

@@ -1,5 +1,5 @@
 /*!
- * TaskExecutor type definitions
+ * Agent executor type definitions
  */
 
 use serde::{Deserialize, Serialize};
@@ -14,14 +14,14 @@ pub struct ImageAttachment {
     pub mime_type: String,
 }
 
-/// Task execution parameters
+/// Agent run execution parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExecuteTaskParams {
+pub struct ExecuteRunParams {
     /// Belongs to workspace (absolute path/normalized)
     pub workspace_path: String,
-    /// Session ID (session under workspace)
-    pub session_id: i64,
+    /// Thread ID under the workspace.
+    pub thread_id: i64,
     pub user_prompt: String,
     pub model_id: String,
     /// Optional per-request agent type override (does not persist to session).
@@ -38,12 +38,12 @@ pub struct ExecuteTaskParams {
     pub system_reminders: Vec<String>,
 }
 
-/// Task summary information
+/// Agent run summary information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskSummary {
-    pub task_id: String,
-    pub session_id: i64,
+pub struct AgentRunSummary {
+    pub run_id: String,
+    pub thread_id: i64,
     pub status: String,
     pub current_iteration: i32,
     pub error_count: i32,

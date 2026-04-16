@@ -162,6 +162,18 @@
     word-wrap: break-word;
     word-break: break-word;
     white-space: pre-wrap;
+    animation: bubble-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes bubble-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   .user-message-text {

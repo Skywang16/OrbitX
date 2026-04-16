@@ -57,7 +57,7 @@
     await ensureTerminalSelection()
   }
 
-  const getKindLabel = (kind: 'workspace' | 'task') => (kind === 'task' ? 'Task' : 'Shell')
+  const getKindLabel = (kind: 'workspace' | 'agent') => (kind === 'agent' ? 'Agent' : 'Shell')
 
   const getStatusLabel = (status: string | null) => {
     if (!status) return null
@@ -91,12 +91,12 @@
               <span class="terminal-badge">{{ getKindLabel(terminal.kind) }}</span>
             </div>
             <div class="terminal-tab__subline">
-              <span v-if="terminal.sourceLabel && terminal.kind === 'task'" class="terminal-source">
+              <span v-if="terminal.sourceLabel && terminal.kind === 'agent'" class="terminal-source">
                 {{ terminal.sourceLabel }}
               </span>
               <span v-else class="terminal-source">{{ terminal.cwd }}</span>
-              <span v-if="getStatusLabel(terminal.taskStatus)" class="terminal-status">
-                {{ getStatusLabel(terminal.taskStatus) }}
+              <span v-if="getStatusLabel(terminal.agentStatus)" class="terminal-status">
+                {{ getStatusLabel(terminal.agentStatus) }}
               </span>
             </div>
           </div>
@@ -190,9 +190,9 @@
   }
 
   .terminal-tab--active {
-    background: var(--bg-100);
+    background: var(--color-primary-alpha, color-mix(in srgb, var(--color-primary) 10%, transparent));
     border-color: color-mix(in srgb, var(--color-primary) 55%, var(--border-200));
-    color: var(--text-100);
+    color: var(--color-primary);
   }
 
   .terminal-tab__body {
@@ -274,8 +274,8 @@
 
   .terminal-tab__close:hover,
   .terminal-new:hover {
-    background: var(--bg-500);
-    color: var(--text-100);
+    background: var(--color-hover);
+    color: var(--color-primary);
   }
 
   .terminal-content {

@@ -14,4 +14,4 @@ The skill should include:
 3. Example usage scenarios
 4. Input/output specifications
 
-Format the skill as a markdown file following the OpenCodex skill specification.
+Format the skill as a markdown file following the OrbitX skill specification.

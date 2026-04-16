@@ -9,6 +9,8 @@
     "add": "Add",
     "edit": "Edit",
     "delete": "Delete",
+    "expand": "Expand",
+    "collapse": "Collapse",
     "select_placeholder": "Please select",
     "no_data": "No data",
     "search_options": "Search options",
@@ -25,7 +27,7 @@
       "config_open_folder": "Open Config Folder",
       "startup_title": "Startup",
       "autostart_title": "Launch at Login",
-      "autostart_description": "Automatically start OpenCodex when you log in",
+      "autostart_description": "Automatically start OrbitX when you log in",
       "autostart_enabled": "Auto start enabled",
       "autostart_disabled": "Auto start disabled",
       "about": "About",
@@ -53,10 +55,10 @@
     }
   },
   "chat": {
-    "new_session": "New Session",
-    "new_session_placeholder": "New Session",
-    "session_select": "Select Session",
-    "input_placeholder": "Ask OpenCodex anything, / for commands",
+    "new_session": "New Thread",
+    "new_session_placeholder": "New Thread",
+    "session_select": "Select Thread",
+    "input_placeholder": "Ask OrbitX anything, / for commands",
     "upload_image": "Upload image",
     "max_images_reached": "Maximum 5 images allowed",
     "model_not_support_images": "Current model does not support image input",
@@ -435,12 +437,12 @@
     "delete_workspace": "Delete Workspace",
     "delete_workspace_confirm": "Are you sure you want to delete this workspace?",
     "delete_session": "Delete Thread",
-    "delete_session_confirm": "Are you sure you want to delete this session?",
+    "delete_session_confirm": "Are you sure you want to delete this thread?",
     "just_now": "just now"
   },
   "skills_page": {
     "title": "Skills",
-    "description": "Give OpenCodex superpowers with custom skills.",
+    "description": "Give OrbitX superpowers with custom skills.",
     "learn_more": "Learn more",
     "installed": "Installed",
     "discover": "Discover",
@@ -498,7 +500,7 @@
     }
   },
   "run_actions": {
-    "title": "OpenCodex Actions",
+    "title": "OrbitX Actions",
     "run": "Run",
     "add_action": "Add action",
     "edit_action": "Edit action",
@@ -516,7 +518,7 @@
     "toggle_terminal": "Toggle Terminal Panel"
   },
   "welcome": {
-    "title": "Welcome to OpenCodex",
+    "title": "Welcome to OrbitX",
     "description": "Open a workspace folder from the sidebar to get started."
   },
   "mcp_dialog": {

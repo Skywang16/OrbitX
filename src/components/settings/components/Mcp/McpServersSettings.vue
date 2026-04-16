@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { mcpApi, settingsApi } from '@/api'
+  import type { McpToolInfo } from '@/api/mcp/types'
   import type { McpServerConfig } from '@/api/settings/types'
   import type { McpServerStatus } from '@/api/mcp/types'
   import { useWorkspaceStore } from '@/stores/workspace'
@@ -50,6 +51,7 @@
   const showAddModal = ref(false)
   const showEditModal = ref(false)
   const editingServerName = ref<string | null>(null)
+  const expandedServers = ref<Record<string, boolean>>({})
 
   const newServerName = ref('')
   const newServerType = ref<'stdio' | 'sse' | 'streamable_http'>('stdio')
@@ -219,6 +221,45 @@
     return serverStatuses.value.find(s => s.name === name)?.status || 'disconnected'
   }
 
+  const getDisabledTools = (config: McpServerConfig): string[] => {
+    return config.disabledTools || []
+  }
+
+  const withDisabledTools = (config: McpServerConfig, disabledTools: string[]): McpServerConfig => {
+    const nextDisabledTools = Array.from(new Set(disabledTools))
+
+    if (config.type === 'stdio') {
+      return {
+        ...config,
+        disabledTools: nextDisabledTools.length > 0 ? nextDisabledTools : undefined,
+      }
+    }
+
+    return {
+      ...config,
+      disabledTools: nextDisabledTools.length > 0 ? nextDisabledTools : undefined,
+    }
+  }
+
+  const getServerTools = (name: string): McpToolInfo[] => {
+    return serverStatuses.value.find(s => s.name === name)?.tools || []
+  }
+
+  const isToolEnabled = (config: McpServerConfig, toolName: string) => {
+    return !getDisabledTools(config).includes(toolName)
+  }
+
+  const isServerExpanded = (name: string) => {
+    return !!expandedServers.value[name]
+  }
+
+  const toggleServerExpanded = (name: string) => {
+    expandedServers.value = {
+      ...expandedServers.value,
+      [name]: !expandedServers.value[name],
+    }
+  }
+
   // 获取服务器状态文本（翻译后）
   const getServerStatusText = (name: string) => {
     const status = getServerRawStatus(name)
@@ -262,8 +303,14 @@
       createMessage.success(t('mcp_settings.config_saved'))
       await loadServers()
       await reloadMcpRegistry()
+      isJsonMode.value = false
     } catch (e) {
-      jsonError.value = t('mcp_settings.invalid_json')
+      jsonError.value =
+        e instanceof SyntaxError
+          ? t('mcp_settings.invalid_json')
+          : e instanceof Error
+            ? e.message
+            : t('mcp_settings.invalid_json')
     }
   }
 
@@ -277,6 +324,21 @@
       createMessage.success(enabled ? t('mcp_settings.server_enabled') : t('mcp_settings.server_disabled'))
       await reloadMcpRegistry()
     }
+  }
+
+  const toggleServerTool = async (serverName: string, toolName: string, enabled: boolean) => {
+    const config = mcpServers.value[serverName]
+    if (!config) return
+
+    const disabledTools = getDisabledTools(config)
+    const nextDisabledTools = enabled ? disabledTools.filter(name => name !== toolName) : [...disabledTools, toolName]
+
+    mcpServers.value[serverName] = withDisabledTools(config, nextDisabledTools)
+    const settings = await settingsApi.getGlobal()
+    settings.mcpServers = mcpServers.value
+    await settingsApi.updateGlobal(settings)
+    await reloadMcpRegistry()
+    await loadServers()
   }
 
   const resetForm = () => {
@@ -345,6 +407,9 @@
     if (!validateEditForm()) return
     if (!editingServerName.value) return
 
+    const existingConfig = mcpServers.value[editingServerName.value]
+    const existingDisabledTools = existingConfig ? getDisabledTools(existingConfig) : []
+
     let config: McpServerConfig
     if (newServerType.value === 'stdio') {
       config = {
@@ -352,11 +417,13 @@
         command: newServerCommand.value.trim(),
         args: newServerArgs.value.trim() ? newServerArgs.value.trim().split('\n').filter(Boolean) : undefined,
         env: newServerEnv.value.trim() ? JSON.parse(newServerEnv.value) : undefined,
+        disabledTools: existingDisabledTools.length > 0 ? existingDisabledTools : undefined,
       }
     } else {
       config = {
         type: newServerType.value,
         url: newServerUrl.value.trim(),
+        disabledTools: existingDisabledTools.length > 0 ? existingDisabledTools : undefined,
       }
     }
 
@@ -466,22 +533,63 @@
           <span>{{ t('mcp_settings.no_servers') }}</span>
         </div>
 
-        <div v-for="(config, name) in mcpServers" :key="name" class="server-row custom">
-          <div class="server-info">
-            <span class="server-name">{{ name }}</span>
-            <span class="server-status" :style="{ color: getStatusColor(getServerRawStatus(name as string)) }">
-              {{ getServerStatusText(name as string) }}
-            </span>
+        <div v-for="(config, name) in mcpServers" :key="name" class="server-item">
+          <div class="server-row custom">
+            <div class="server-info">
+              <button
+                v-if="getServerTools(name as string).length > 0"
+                class="expand-btn"
+                type="button"
+                :title="isServerExpanded(name as string) ? t('common.collapse') : t('common.expand')"
+                @click="toggleServerExpanded(name as string)"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  :class="{ expanded: isServerExpanded(name as string) }"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+              <span class="server-name">{{ name }}</span>
+              <span class="server-status" :style="{ color: getStatusColor(getServerRawStatus(name as string)) }">
+                {{ getServerStatusText(name as string) }}
+              </span>
+              <span v-if="getServerTools(name as string).length > 0" class="server-tools-count">
+                {{ t('mcp_dialog.tools_count', { count: getServerTools(name as string).length }) }}
+              </span>
+            </div>
+            <div class="server-actions">
+              <button class="icon-btn" :title="t('common.edit')" @click="openEditModal(name as string)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
+              <XSwitch :model-value="!config.disabled" @update:model-value="toggleServer(name as string, $event)" />
+            </div>
           </div>
-          <div class="server-actions">
-            <button class="icon-btn" :title="t('common.edit')" @click="openEditModal(name as string)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-                <circle cx="19" cy="12" r="1.5" fill="currentColor" />
-                <circle cx="5" cy="12" r="1.5" fill="currentColor" />
-              </svg>
-            </button>
-            <XSwitch :model-value="!config.disabled" @update:model-value="toggleServer(name as string, $event)" />
+
+          <div
+            v-if="getServerTools(name as string).length > 0 && isServerExpanded(name as string)"
+            class="server-tools"
+          >
+            <div v-for="tool in getServerTools(name as string)" :key="`${name}-${tool.name}`" class="tool-row">
+              <div class="tool-info">
+                <span class="tool-name">{{ tool.name }}</span>
+                <span v-if="tool.description" class="tool-description">{{ tool.description }}</span>
+              </div>
+              <div class="tool-switch">
+                <XSwitch
+                  :model-value="isToolEnabled(config, tool.name)"
+                  :disabled="!!config.disabled"
+                  @update:model-value="toggleServerTool(name as string, tool.name, $event)"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -805,6 +913,10 @@
     font-size: 13px;
   }
 
+  .server-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-100);
+  }
+
   .server-row.custom {
     display: flex;
     align-items: center;
@@ -813,15 +925,41 @@
     min-height: 60px;
   }
 
-  .server-row.custom:not(:last-child) {
-    border-bottom: 1px solid var(--border-100);
-  }
-
   .server-row.custom .server-info {
     display: flex;
     align-items: center;
+    gap: 8px;
     flex: 1;
     min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .expand-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-500);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: 0 0 20px;
+  }
+
+  .expand-btn:hover {
+    color: var(--text-200);
+  }
+
+  .expand-btn svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.15s ease;
+  }
+
+  .expand-btn svg.expanded {
+    transform: rotate(90deg);
   }
 
   .server-row.custom .server-name {
@@ -832,7 +970,11 @@
 
   .server-row.custom .server-status {
     font-size: 12px;
-    margin-left: 8px;
+  }
+
+  .server-tools-count {
+    font-size: 12px;
+    color: var(--text-500);
   }
 
   .server-row.custom .server-actions {
@@ -840,6 +982,58 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  .server-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 20px 12px 52px;
+  }
+
+  .tool-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 0;
+  }
+
+  .tool-row:not(:last-child) {
+    border-bottom: 1px solid var(--border-100);
+  }
+
+  .tool-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tool-name {
+    font-size: 13px;
+    color: var(--text-200);
+    word-break: break-word;
+  }
+
+  .tool-description {
+    font-size: 12px;
+    color: var(--text-500);
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+  }
+
+  .tool-switch {
+    flex: 0 0 44px;
+    width: 44px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
   }
 
   .registry-link {

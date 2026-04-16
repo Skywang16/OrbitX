@@ -40,6 +40,14 @@ pub fn init_mux_with_shell_integration(
 fn init_mux_internal(
     shell_integration: Option<std::sync::Arc<crate::shell::ShellIntegrationManager>>,
 ) -> Arc<TerminalMux> {
+    // Ensure the mux config manager is initialized before any mux component tries to
+    // read it.  ConfigManager::init() is idempotent-safe: it only fails if called a
+    // second time, which cannot happen here because init_mux_internal is only ever
+    // executed once (inside OnceLock::set / get_or_init).
+    if let Err(err) = crate::mux::ConfigManager::init() {
+        tracing::warn!("Terminal mux config manager init failed: {}", err);
+    }
+
     if let Some(integration) = shell_integration {
         TerminalMux::new_shared_with_shell_integration(integration)
     } else {
